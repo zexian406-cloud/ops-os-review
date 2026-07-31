@@ -105,6 +105,13 @@ export default function PromoCostPage() {
     return map;
   }, [snapshots]);
 
+  // ── Shop name ↔ id map ──
+  const shopNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    shops.forEach((s) => { map.set(s.name, s.id); map.set(s.id, s.name); });
+    return map;
+  }, [shops]);
+
   // ── Filters ──
   const filtered = useMemo(() => {
     let list = promos;
@@ -119,12 +126,6 @@ export default function PromoCostPage() {
     }
     return list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [promos, typeFilter, skuFilter, shopFilter, shopNameMap, skuMap]);
-
-  const shopNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    shops.forEach((s) => { map.set(s.name, s.id); map.set(s.id, s.name); });
-    return map;
-  }, [shops]);
 
   // ── Stats ──
   const stats = useMemo(() => {
