@@ -1,0 +1,39 @@
+请找到 src/pages/import/page.tsx 中的 handleClear 函数，用以下代码完全替换（不要做任何修改，不要加任何逻辑）：
+
+  const handleClear = async () => {
+    setClearing(true);
+    setClearMsg(null);
+    try {
+      await clearAllData();
+      db.close();
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const req = indexedDB.deleteDatabase('amazon-ops-os');
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(new Error(req.error?.message ?? '删除失败'));
+          req.onblocked = () => setTimeout(() => reject(new Error('blocked')), 300);
+        });
+      } catch {
+        // deleteDatabase 被阻塞不影响，数据已被 clearAllData 清空
+      }
+      setClearMsg('已清空全部数据，即将刷新...');
+      setTimeout(() => window.location.reload(), 500);
+    } catch (err) {
+      try {
+        db.close();
+        await new Promise<void>((resolve, reject) => {
+          const req = indexedDB.deleteDatabase('amazon-ops-os');
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(new Error(req.error?.message ?? '删除失败'));
+          req.onblocked = () => setTimeout(() => reject(new Error('blocked')), 300);
+        });
+        setClearMsg('已清空全部数据，即将刷新...');
+        setTimeout(() => window.location.reload(), 500);
+      } catch (e) {
+        setClearMsg('清空失败: ' + (e instanceof Error ? e.message : String(e)));
+        setClearing(false);
+      }
+    }
+  };
+
+替换完成后构建并部署。

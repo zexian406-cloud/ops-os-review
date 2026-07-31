@@ -587,7 +587,9 @@ export default function ImportPage() {
     try {
       // 1. 先清空所有表数据（事务内，失败则全部回滚）
       await clearAllData();
-      // 2. 关闭 Dexie 连接
+      // 2. 设置种子数据标记，防止刷新后自动填充演示数据
+      await db.config.put({ key: "seeded_v9", value: true });
+      // 3. 关闭 Dexie 连接
       db.close();
       // 3. 尝试删除数据库（可能被其他标签页阻塞，但不影响结果）
       try {
