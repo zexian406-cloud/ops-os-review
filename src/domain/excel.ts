@@ -98,8 +98,10 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
     for (const row of rows) {
       const sku = str(row["SKU"]);
       if (!sku) continue;
-      const daily7d = num(row["近7天日均"] ?? row["日销（近七天）"] ?? row["dailySales7d"]);
-      const monthly = num(row["近30天销量"] ?? row["月销"] ?? row["monthlySales"]);
+      const sales7d = num(row["7天销量"] ?? row["近7天日均"] ?? row["日销（近七天）"] ?? row["dailySales7d"]);
+      const sales30d = num(row["30天销量"] ?? row["近30天销量"] ?? row["月销"] ?? row["monthlySales"]);
+      const daily7d = sales7d > 7 ? Math.round(sales7d / 7 * 100) / 100 : sales7d;
+      const monthly = sales30d;
       dailySnapshot.push({
         date: today,
         sku,

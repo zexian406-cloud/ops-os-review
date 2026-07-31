@@ -51,14 +51,14 @@ const tmplShipping = () => downloadTemplate("头程更新", ["SKU", "头程费",
 const tmplBundle = () => {
   const wb = XLSX.utils.book_new();
 
-  // Sheet 1: 周销量导入
-  const s1 = XLSX.utils.aoa_to_sheet([["SKU", "近7天日均", "近30天销量"], ["BFRS258", 3.42, 102]]);
-  s1["!cols"] = autoCols(["SKU", "近7天日均", "近30天销量"]);
-  XLSX.utils.book_append_sheet(wb, s1, "周销量导入");
+  // Sheet 1: 销量导入
+  const s1 = XLSX.utils.aoa_to_sheet([["ASIN", "SKU", "店铺", "7天销量", "30天销量"], ["B0GC3HFWHP", "BFRS258", "BIFULISAN Store", 24, 102]]);
+  s1["!cols"] = autoCols(["ASIN", "SKU", "店铺", "7天销量", "30天销量"]);
+  XLSX.utils.book_append_sheet(wb, s1, "销量导入");
 
   // Sheet 2: FBA库存明细
-  const s2 = XLSX.utils.aoa_to_sheet([["SKU", "FBA在库"], ["BFRS258", 186]]);
-  s2["!cols"] = autoCols(["SKU", "FBA在库"]);
+  const s2 = XLSX.utils.aoa_to_sheet([["ASIN", "SKU", "FBA库存"], ["B0GC3HFWHP", "BFRS258", 186]]);
+  s2["!cols"] = autoCols(["ASIN", "SKU", "FBA库存"]);
   XLSX.utils.book_append_sheet(wb, s2, "FBA库存明细");
 
   // Sheet 3: 仓库明细(FBM)
@@ -110,8 +110,8 @@ const tmplIdentifiers = () =>
 /* ────────── 标签页配置 ────────── */
 const tabDefs = [
   { key: "bundle", label: "综合运营表", icon: "ri-file-excel-2-line", freq: "首次", desc: "一键下载全部 8 个 Sheet · 周销量 / FBA / 仓库 / 在途 / 工厂 / 成本 / 头程 / SKU", tmpl: tmplBundle },
-  { key: "sales", label: "周销量", icon: "ri-bar-chart-line", freq: "每周", desc: "SKU · 近7天日均 · 近30天销量", tmpl: tmplSales },
-  { key: "fba", label: "FBA 库存明细", icon: "ri-archive-line", freq: "每周", desc: "SKU · FBA 在库数量", tmpl: tmplFba },
+  { key: "sales", label: "周销量", icon: "ri-bar-chart-line", freq: "每周", desc: "ASIN · SKU · 店铺 · 7天销量 · 30天销量（自动算日均）", tmpl: tmplSales },
+  { key: "fba", label: "FBA 库存明细", icon: "ri-archive-line", freq: "每周", desc: "ASIN · SKU · FBA库存", tmpl: tmplFba },
   { key: "warehouse", label: "仓库明细(FBM)", icon: "ri-store-2-line", freq: "每周", desc: "SKU · 仓库 · 库存（各海外仓拆分）", tmpl: tmplWarehouse },
   { key: "transit_detail", label: "在途明细", icon: "ri-ship-line", freq: "每周", desc: "SKU · 承运商 · 目的仓 · 件数 · 预计到仓", tmpl: tmplTransitDetail },
   { key: "factory", label: "工厂明细", icon: "ri-factory-line", freq: "按需", desc: "SKU · 工厂名 · 件数 · 交期", tmpl: tmplFactory },
