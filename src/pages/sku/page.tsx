@@ -354,6 +354,8 @@ export default function SkuList() {
     return map;
   }, [shops]);
 
+  const [mskuOrder, setMskuOrder] = useState<Record<string, string[]>>(loadMskuOrder);
+  const [parentOrder, setParentOrder] = useState<string[]>(loadParentOrder);
   const filteredGroups = useMemo((): SkuGroup[] => {
     const storeId = shopMap.get(store) ?? store;
     return groups
@@ -432,9 +434,6 @@ export default function SkuList() {
       return next;
     });
   };
-
-  const [mskuOrder, setMskuOrder] = useState<Record<string, string[]>>(loadMskuOrder);
-  const [parentOrder, setParentOrder] = useState<string[]>(loadParentOrder);
 
   const moveChild = useCallback((groupSku: string, childSku: string, direction: "up" | "down") => {
     setMskuOrder((prev) => {
