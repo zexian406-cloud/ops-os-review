@@ -92,8 +92,8 @@ const tmplBundle = () => {
   XLSX.utils.book_append_sheet(wb, s8, "头程更新");
 
   // Sheet 9: SKU标识符(一次性迁移)
-  const s9 = XLSX.utils.aoa_to_sheet([["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", 39.99, 28.5]]);
-  s9["!cols"] = autoCols(["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB"]);
+  const s9 = XLSX.utils.aoa_to_sheet([["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB", "广告费", "退货费", "仓租", "发货方式"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", 39.99, 28.5, 2, 0.5, 0.8, "FBA"]]);
+  s9["!cols"] = autoCols(["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB", "广告费", "退货费", "仓租", "发货方式"]);
   XLSX.utils.book_append_sheet(wb, s9, "SKU标识符");
 
   XLSX.writeFile(wb, "【模板】综合运营表.xlsx");
@@ -112,7 +112,7 @@ const tmplBundleCsv = () => {
 const tmplSalesRating = () => downloadTemplate("运营数据导入", ["ASIN", "店铺", "品名", "SKU", "MSKU", "退款率", "评分", "评论数", "退货率", "ACoAS"], ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", "BFRS258-GM", 0.05, 4.2, 156, 0.08, 0.12]);
 
 const tmplIdentifiers = () =>
-  downloadTemplate("SKU标识符(一次性迁移)", ["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", 39.99, 28.5]);
+  downloadTemplate("SKU标识符(一次性迁移)", ["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB", "广告费", "退货费", "仓租", "发货方式"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", 39.99, 28.5, 2, 0.5, 0.8, "FBA"]);
 
 /* ────────── 标签页配置 ────────── */
 const tabDefs = [
@@ -125,7 +125,7 @@ const tabDefs = [
   { key: "factory", label: "工厂明细", icon: "ri-factory-line", freq: "按需", desc: "SKU · 工厂名 · 件数 · 交期", tmpl: tmplFactory },
   { key: "cost", label: "产品成本", icon: "ri-price-tag-3-line", freq: "每月/手动", desc: "更新各 SKU 的 FOB 产品成本", tmpl: tmplProductCost },
   { key: "shipping", label: "头程更新", icon: "ri-ship-2-line", freq: "每月/手动", desc: "更新头程费 + 配送费", tmpl: tmplShipping },
-  { key: "identifiers", label: "SKU 标识符", icon: "ri-barcode-line", freq: "一次性迁移", desc: "店铺 · SKU · 品名 · MSKU · ASIN · 售价 · FOB", tmpl: tmplIdentifiers },
+  { key: "identifiers", label: "SKU 标识符", icon: "ri-barcode-line", freq: "一次性迁移", desc: "店铺 · SKU · 品名 · MSKU · ASIN · 售价 · FOB · 广告费 · 退货费 · 仓租 · 发货方式", tmpl: tmplIdentifiers },
 ] as const;
 
 type TabKey = (typeof tabDefs)[number]["key"];
@@ -663,6 +663,10 @@ export default function ImportPage() {
         const asin = str(row["ASIN"]);
         const price = num(row["售价（总价）"] ?? row["售价"]);
         const costFob = num(row["FOB"]);
+        const costAd = num(row["广告费"]);
+        const costReturn = num(row["退货费"]);
+        const costStorage = num(row["仓租"]);
+        const fulfillment = str(row["发货方式"]) || "FBA";
 
         if (!seenSku.has(sku)) {
           // 首次出现 → 父SKU
@@ -676,6 +680,10 @@ export default function ImportPage() {
             if (asin) updates.asin = asin;
             if (price > 0) updates.price = price;
             if (costFob > 0) updates.costFob = costFob;
+            if (costAd > 0) updates.costAd = costAd;
+            if (costReturn > 0) updates.costReturn = costReturn;
+            if (costStorage > 0) updates.costStorage = costStorage;
+            if (["FBA", "FBM", "mixed"].includes(fulfillment)) updates.fulfillment = fulfillment as "FBA" | "FBM" | "mixed";
             if (Object.keys(updates).length > 0) {
               await db.skuMaster.put({ ...existing, ...updates });
               updated++;
@@ -687,10 +695,13 @@ export default function ImportPage() {
               store,
               price: price || 0,
               saleStatus: "active",
-              fulfillment: "FBA",
+              fulfillment: ["FBA", "FBM", "mixed"].includes(fulfillment) ? fulfillment as "FBA" | "FBM" | "mixed" : "FBA",
               msku: msku || undefined,
               asin: asin || undefined,
               costFob: costFob > 0 ? costFob : undefined,
+              costAd: costAd > 0 ? costAd : undefined,
+              costReturn: costReturn > 0 ? costReturn : undefined,
+              costStorage: costStorage > 0 ? costStorage : undefined,
               marketplace: "US",
             };
             await db.skuMaster.put(master);

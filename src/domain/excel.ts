@@ -84,6 +84,10 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       const asin = str(row["ASIN"]) || undefined;
       const price = num(row["售价（总价）"] ?? row["售价"]);
       const costFob = num(row["FOB"]) > 0 ? num(row["FOB"]) : undefined;
+      const costAd = num(row["广告费"]) > 0 ? num(row["广告费"]) : undefined;
+      const costReturn = num(row["退货费"]) > 0 ? num(row["退货费"]) : undefined;
+      const costStorage = num(row["仓租"]) > 0 ? num(row["仓租"]) : undefined;
+      const fulfillment = (["FBA", "FBM", "mixed"].includes(str(row["发货方式"])) ? str(row["发货方式"]) : "FBA") as "FBA" | "FBM" | "mixed";
 
       if (!seenSku.has(sku)) {
         // 首次出现 → 父SKU
@@ -96,8 +100,11 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
           asin,
           msku,
           costFob,
+          costAd,
+          costReturn,
+          costStorage,
+          fulfillment,
           saleStatus: "active",
-          fulfillment: "FBA",
         });
       } else {
         // 再次出现 → 子MSKU，用品名作为子SKU标识（唯一化）
