@@ -40,8 +40,8 @@ const downloadTemplate = (name: string, headers: string[], exampleRow: (string |
 
 /* ────────── 略 ────────── */
 
-const tmplSales = () => downloadTemplate("周销量导入", ["SKU", "近7天日均", "近30天销量"], ["BFRS258", 3.42, 102]);
-const tmplFba = () => downloadTemplate("FBA库存明细", ["SKU", "FBA在库"], ["BFRS258", 186]);
+const tmplSales = () => downloadTemplate("周销量导入", ["ASIN", "SKU", "店铺", "7天销量", "30天销量"], ["B0GC3HFWHP", "BFRS258", "BIFULISAN Store", 24, 102]);
+const tmplFba = () => downloadTemplate("FBA库存明细", ["ASIN", "SKU", "FBA库存"], ["B0GC3HFWHP", "BFRS258", 186]);
 const tmplWarehouse = () => downloadTemplate("仓库明细(FBM)", ["SKU", "仓库", "库存"], ["BFRS258", "美西", 180]);
 const tmplTransitDetail = () => downloadTemplate("在途明细", ["SKU", "承运商", "目的仓", "件数", "预计到仓"], ["BFRS258", "乐歌", "美西", 80, "2026-08-05"]);
 const tmplFactory = () => downloadTemplate("工厂明细", ["SKU", "工厂名", "件数", "交期", "状态"], ["BFRS258", "东莞美联", 120, "2026-08-25", "producing"]);
@@ -263,22 +263,37 @@ export default function ImportPage() {
         const existing = await db.skuMaster.get(sku);
         const prevSnapshot = existing ? await db.dailySnapshot.where({ sku }).reverse().first() : undefined;
 
+        // 支持"7天销量"(周期总量)自动算日均，也兼容"近7天日均"(直接日均值)
+        const sales7dRaw = num(row["7天销量"] ?? row["近7天日均"] ?? row["日销（近七天）"] ?? row["dailySales7d"]);
+        const isWeeklyTotal = row["7天销量"] != null;
+        const dailySales7d = isWeeklyTotal ? Math.round(sales7dRaw / 7 * 100) / 100 : sales7dRaw;
+        const monthlySales = num(row["30天销量"] ?? row["近30天销量"] ?? row["月销"] ?? row["monthlySales"]);
+
+        // 可选字段：评分、评论数、广告费比、退货率、退款率
+        const rating = num(row["评分"] ?? row["rating"]);
+        const reviewCount = num(row["评论数"] ?? row["reviewCount"] ?? row["review_count"]);
+        const adRatio = num(row["广告费比"] ?? row["adRatio"]);
+        const returnRate = num(row["退货率"] ?? row["returnRate"]);
+        const refundRate = num(row["退款率"] ?? row["refundRate"]);
+
         const snap: Omit<DailySnapshot, "id"> = {
           date: today,
           sku,
-          dailySales7d: num(row["近7天日均"] ?? row["日销（近七天）"] ?? row["dailySales7d"]),
-          monthlySales: num(row["近30天销量"] ?? row["月销"] ?? row["monthlySales"]),
+          dailySales7d,
+          monthlySales,
           stockOnHand: prevSnapshot?.stockOnHand ?? 0,
           stockInTransit: prevSnapshot?.stockInTransit ?? 0,
           daysOfCoverOnHand: 0,
           daysOfCoverWithTransit: 0,
           adSpend: prevSnapshot?.adSpend ?? 0,
-          adRatio: prevSnapshot?.adRatio ?? 0,
+          adRatio: adRatio || (prevSnapshot?.adRatio ?? 0),
           profit: prevSnapshot?.profit ?? 0,
           profitMargin: prevSnapshot?.profitMargin ?? 0,
           totalCost: prevSnapshot?.totalCost ?? 0,
-          rating: prevSnapshot?.rating ?? 0,
-          returnRate: prevSnapshot?.returnRate ?? 0,
+          rating: rating || (prevSnapshot?.rating ?? 0),
+          reviewCount: reviewCount > 0 ? reviewCount : prevSnapshot?.reviewCount,
+          returnRate: returnRate || (prevSnapshot?.returnRate ?? 0),
+          refundRate: refundRate > 0 ? refundRate : prevSnapshot?.refundRate,
         };
         snap.daysOfCoverOnHand = snap.dailySales7d > 0 ? Number((snap.stockOnHand / snap.dailySales7d).toFixed(1)) : 999;
         snap.daysOfCoverWithTransit = snap.dailySales7d > 0 ? Number(((snap.stockOnHand + snap.stockInTransit) / snap.dailySales7d).toFixed(1)) : 999;
@@ -309,7 +324,7 @@ export default function ImportPage() {
         const existing = await db.inventoryLayer.where({ sku, date: today }).first();
         layers.push({
           date: today, sku,
-          fbaStock: num(row["FBA在库"] ?? row["库存"] ?? row["fbaStock"]),
+          fbaStock: num(row["FBA库存"] ?? row["FBA在库"] ?? row["库存"] ?? row["fbaStock"]),
           fbmStock: existing?.fbmStock ?? 0,
           factoryStock: existing?.factoryStock ?? 0,
           eastTransit: existing?.eastTransit ?? 0,
@@ -541,6 +556,7 @@ export default function ImportPage() {
       const rows = await parseExcelFile(file);
       let created = 0;
       let updated = 0;
+      const seenSku = new Set<string>(); // 追踪已出现的父SKU
       for (const row of rows) {
         const sku = str(row["SKU"]);
         if (!sku) continue;
@@ -551,23 +567,53 @@ export default function ImportPage() {
         const price = num(row["售价（总价）"] ?? row["售价"]);
         const costFob = num(row["FOB"]);
 
-        const existing = await db.skuMaster.get(sku);
-        if (existing) {
-          const updates: Partial<SkuMaster> = {};
-          if (store) updates.store = store;
-          if (name && name !== sku) updates.name = name;
-          if (msku) updates.msku = msku;
-          if (asin) updates.asin = asin;
-          if (price > 0) updates.price = price;
-          if (costFob > 0) updates.costFob = costFob;
-          if (Object.keys(updates).length > 0) {
-            await db.skuMaster.put({ ...existing, ...updates });
-            updated++;
+        if (!seenSku.has(sku)) {
+          // 首次出现 → 父SKU
+          seenSku.add(sku);
+          const existing = await db.skuMaster.get(sku);
+          if (existing) {
+            const updates: Partial<SkuMaster> = {};
+            if (store) updates.store = store;
+            if (name && name !== sku) updates.name = name;
+            if (msku) updates.msku = msku;
+            if (asin) updates.asin = asin;
+            if (price > 0) updates.price = price;
+            if (costFob > 0) updates.costFob = costFob;
+            if (Object.keys(updates).length > 0) {
+              await db.skuMaster.put({ ...existing, ...updates });
+              updated++;
+            }
+          } else {
+            const master: SkuMaster = {
+              sku,
+              name: name || sku,
+              store,
+              price: price || 0,
+              saleStatus: "active",
+              fulfillment: "FBA",
+              msku: msku || undefined,
+              asin: asin || undefined,
+              costFob: costFob > 0 ? costFob : undefined,
+              marketplace: "US",
+            };
+            await db.skuMaster.put(master);
+            created++;
           }
         } else {
-          // Create new SKU master
-          const master: SkuMaster = {
-            sku,
+          // 再次出现 → 子MSKU
+          // 用品名作为子SKU标识，唯一化
+          let childSku = name;
+          if (childSku === sku) {
+            childSku = asin ? `${sku}__${asin}` : `${sku}__${Date.now()}`;
+          }
+          let finalChildSku = childSku;
+          let suffix = 1;
+          while (await db.skuMaster.get(finalChildSku)) {
+            suffix++;
+            finalChildSku = `${childSku}_${suffix}`;
+          }
+          const child: SkuMaster = {
+            sku: finalChildSku,
             name: name || sku,
             store,
             price: price || 0,
@@ -576,9 +622,10 @@ export default function ImportPage() {
             msku: msku || undefined,
             asin: asin || undefined,
             costFob: costFob > 0 ? costFob : undefined,
+            groupSku: sku,
             marketplace: "US",
           };
-          await db.skuMaster.put(master);
+          await db.skuMaster.put(child);
           created++;
         }
       }

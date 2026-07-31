@@ -22,7 +22,7 @@ const mapTransitStatus = (v: string): TransitBatch["status"] => {
 const mapFactoryStatus = (v: string): FactoryBatch["status"] => {
   const lower = String(v).toLowerCase();
   if (lower.includes("ship") || lower.includes("出货") || lower.includes("发货")) return "shipped";
-  if (lower.includes("ready") || lower.includes("完成") || lower.includes("备齐")) return "ready";
+  if (lower.includes("ready") || lower.includes("完成") || lower.includes("备齐") || lower.includes("已备料")) return "ready";
   return "producing";
 };
 
@@ -69,24 +69,63 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
   const today = new Date().toISOString().slice(0, 10);
 
   // ── Step 1: Parse SKU标识符 → skuMaster ──
+  // 支持多MSKU：同一SKU出现多次时，首次为父SKU，后续为子MSKU（设groupSku）
   const skuMaster: SkuMaster[] = [];
   const idSheet = findSheet(wb, ["SKU标识符", "SKU标识符(一次性迁移)"]);
   if (idSheet) {
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(idSheet, { defval: "" });
+    const seenSku = new Set<string>();
     for (const row of rows) {
       const sku = str(row["SKU"]);
       if (!sku) continue;
-      skuMaster.push({
-        sku,
-        name: str(row["品名"]) || sku,
-        store: str(row["店铺"]) || "-",
-        price: num(row["售价（总价）"] ?? row["售价"]),
-        asin: str(row["ASIN"]) || undefined,
-        msku: str(row["MSKU"]) || undefined,
-        costFob: num(row["FOB"]) > 0 ? num(row["FOB"]) : undefined,
-        saleStatus: "active",
-        fulfillment: "FBA",
-      });
+      const name = str(row["品名"]) || sku;
+      const msku = str(row["MSKU"]) || undefined;
+      const store = str(row["店铺"]) || "-";
+      const asin = str(row["ASIN"]) || undefined;
+      const price = num(row["售价（总价）"] ?? row["售价"]);
+      const costFob = num(row["FOB"]) > 0 ? num(row["FOB"]) : undefined;
+
+      if (!seenSku.has(sku)) {
+        // 首次出现 → 父SKU
+        seenSku.add(sku);
+        skuMaster.push({
+          sku,
+          name,
+          store,
+          price,
+          asin,
+          msku,
+          costFob,
+          saleStatus: "active",
+          fulfillment: "FBA",
+        });
+      } else {
+        // 再次出现 → 子MSKU，用品名作为子SKU标识（唯一化）
+        // 如果品名与父SKU相同，拼接ASIN后缀确保唯一
+        let childSku = name;
+        if (childSku === sku) {
+          childSku = asin ? `${sku}__${asin}` : `${sku}__${Date.now()}`;
+        }
+        // 确保不重复
+        let finalChildSku = childSku;
+        let suffix = 1;
+        while (skuMaster.some(s => s.sku === finalChildSku)) {
+          suffix++;
+          finalChildSku = `${childSku}_${suffix}`;
+        }
+        skuMaster.push({
+          sku: finalChildSku,
+          name,
+          store,
+          price,
+          asin,
+          msku,
+          costFob,
+          groupSku: sku,       // 关联父SKU
+          saleStatus: "active",
+          fulfillment: "FBA",
+        });
+      }
     }
   }
 
@@ -98,10 +137,17 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
     for (const row of rows) {
       const sku = str(row["SKU"]);
       if (!sku) continue;
-      const sales7d = num(row["7天销量"] ?? row["近7天日均"] ?? row["日销（近七天）"] ?? row["dailySales7d"]);
-      const sales30d = num(row["30天销量"] ?? row["近30天销量"] ?? row["月销"] ?? row["monthlySales"]);
-      const daily7d = sales7d > 7 ? Math.round(sales7d / 7 * 100) / 100 : sales7d;
-      const monthly = sales30d;
+      // 支持"7天销量"(周期总量)自动算日均，也兼容"近7天日均"(直接日均值)
+      const sales7dRaw = num(row["7天销量"] ?? row["近7天日均"] ?? row["日销（近七天）"] ?? row["dailySales7d"]);
+      const isWeeklyTotal = row["7天销量"] != null; // 如果是"7天销量"列，则除以7算日均
+      const daily7d = isWeeklyTotal ? Math.round(sales7dRaw / 7 * 100) / 100 : sales7dRaw;
+      const monthly = num(row["30天销量"] ?? row["近30天销量"] ?? row["月销"] ?? row["monthlySales"]);
+      // 可选字段：评分、评论数、广告费比、退货率、退款率
+      const rating = num(row["评分"] ?? row["rating"]);
+      const reviewCount = num(row["评论数"] ?? row["reviewCount"] ?? row["review_count"]);
+      const adRatio = num(row["广告费比"] ?? row["adRatio"]);
+      const returnRate = num(row["退货率"] ?? row["returnRate"]);
+      const refundRate = num(row["退款率"] ?? row["refundRate"]);
       dailySnapshot.push({
         date: today,
         sku,
@@ -112,12 +158,14 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
         daysOfCoverOnHand: daily7d > 0 ? Number((0 / daily7d).toFixed(1)) : 999,
         daysOfCoverWithTransit: daily7d > 0 ? Number((0 / daily7d).toFixed(1)) : 999,
         adSpend: 0,
-        adRatio: 0,
+        adRatio: adRatio || 0,
         profit: 0,
         profitMargin: 0,
         totalCost: 0,
-        rating: 0,
-        returnRate: 0,
+        rating: rating || 0,
+        reviewCount: reviewCount > 0 ? reviewCount : undefined,
+        returnRate: returnRate || 0,
+        refundRate: refundRate > 0 ? refundRate : undefined,
       });
     }
   }
@@ -130,7 +178,7 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
     for (const row of rows) {
       const sku = str(row["SKU"]);
       if (!sku) continue;
-      fbaMap.set(sku, num(row["FBA在库"] ?? row["库存"] ?? row["fbaStock"]));
+      fbaMap.set(sku, num(row["FBA库存"] ?? row["FBA在库"] ?? row["库存"] ?? row["fbaStock"]));
     }
   }
 
@@ -167,7 +215,7 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
         qty: num(row["件数"]),
         etaDate: str(row["预计到仓"]),
         shipDate: str(row["出港日期"]) || undefined,
-        statusText: str(row["状态文字"]) || undefined,
+        statusText: str(row["在途情况"] ?? row["状态文字"]) || undefined,
         shipMethod: "sea",
         status: mapTransitStatus(str(row["状态文字"])),
       };
