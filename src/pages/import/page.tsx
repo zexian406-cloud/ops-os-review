@@ -334,12 +334,12 @@ export default function ImportPage() {
       for (const row of rows) {
         const sku = str(row["SKU"]);
         if (!sku) continue;
-        const store = str(row["店铺"]) || selectedShopId || "-";
+        const existing = await db.skuMaster.get(sku);
+        const store = str(row["店铺"]) || existing?.store || selectedShopId || "-";
         const name = str(row["品名"]) || sku;
         const asin = str(row["ASIN"]);
 
         // 更新/创建 SkuMaster
-        const existing = await db.skuMaster.get(sku);
         if (existing) {
           const updates: Partial<SkuMaster> = {};
           if (store) updates.store = store;

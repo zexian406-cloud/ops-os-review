@@ -179,7 +179,7 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
     for (const row of rows) {
       const sku = str(row["SKU"]);
       if (!sku) continue;
-      const store = str(row["店铺"]) || "-";
+      const store = str(row["店铺"]) || (skuMaster.find(s => s.sku === sku)?.store) || "-";
       const name = str(row["品名"]) || sku;
       const asin = str(row["ASIN"]);
       const rating = num(row["评分"]);
