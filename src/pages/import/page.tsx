@@ -585,8 +585,28 @@ export default function ImportPage() {
     setClearing(true);
     setClearMsg(null);
     try {
-      // 1. 先清空所有表数据（事务内，失败则全部回滚）
-      await clearAllData();
+      // 1. 先清空所有表数据（inline 方式，不依赖 clearAllData 函数）
+      await db.transaction("rw",
+        db.skuMaster, db.dailySnapshot, db.inventoryLayer,
+        db.campaigns, db.promotions, db.manualPromotions,
+        db.alerts, db.config, db.warehouseProviders,
+        db.estimates, db.todos, db.calculationRecords, db.shops,
+        async () => {
+          await db.skuMaster.clear();
+          await db.dailySnapshot.clear();
+          await db.inventoryLayer.clear();
+          await db.campaigns.clear();
+          await db.promotions.clear();
+          await db.manualPromotions.clear();
+          await db.alerts.clear();
+          await db.config.clear();
+          await db.warehouseProviders.clear();
+          await db.estimates.clear();
+          await db.todos.clear();
+          await db.calculationRecords.clear();
+          await db.shops.clear();
+        }
+      );
       // 2. 设置种子数据标记，防止刷新后自动填充演示数据
       await db.config.put({ key: "seeded_v9", value: true });
       // 3. 关闭 Dexie 连接
