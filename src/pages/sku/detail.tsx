@@ -225,6 +225,21 @@ export default function SkuDetail() {
     />
   );
 
+  // 兜底：calc 不应为 null，但万一出错时防止白屏
+  if (!calc) {
+    console.error("[SkuDetail] calc is null unexpectedly", { sku, editSku, curSnap, inv });
+    return (
+      <EmptyState
+        icon="ri-error-warning-line"
+        title="数据计算异常"
+        desc="该 SKU 数据有误，无法计算利润。请尝试重新导入数据或检查控制台日志。"
+        action={
+          <Link to="/sku" className="rounded-md bg-primary-500 px-3 py-1.5 text-[12px] font-medium text-background-50 hover:bg-primary-600 cursor-pointer whitespace-nowrap">返回 SKU 列表</Link>
+        }
+      />
+    );
+  }
+
   // 兼容旧变量名
   const {
     totalCost, grossProfit, grossMargin, isAdInferred, isReturnInferred, isCommissionInferred,
