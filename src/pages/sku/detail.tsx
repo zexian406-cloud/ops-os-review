@@ -374,7 +374,7 @@ export default function SkuDetail() {
             </div>
           )}
 
-          {visibleKeys.includes("coreKpi") && (
+          {visibleKeys.includes("kpiCards") && (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {coreKpiCardOrder.map((key) => {
               switch (key) {
@@ -390,7 +390,7 @@ export default function SkuDetail() {
           </div>
           )}
 
-          {visibleKeys.includes("coverageKpi") && (
+          {visibleKeys.includes("kpiCards") && (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {coverageKpiCardOrder.map((key) => {
               switch (key) {
@@ -404,7 +404,7 @@ export default function SkuDetail() {
           </div>
           )}
 
-          {visibleKeys.includes("qualityKpi") && (
+          {visibleKeys.includes("kpiCards") && (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
             {qualityKpiCardOrder.map((key) => {
               switch (key) {

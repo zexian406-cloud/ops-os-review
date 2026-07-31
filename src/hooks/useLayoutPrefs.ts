@@ -397,16 +397,44 @@ export function useSkuDetailLayout() {
   const visibleKeys = prefs.skuDetail.visible;
   const orderedKeys = prefs.skuDetail.order.filter((k) => visibleKeys.includes(k));
 
+  // 从统一数组拆分为3个独立数组（兼容SkuLayoutCustomizer接口）
+  const allCards = prefs.skuDetail.kpiCardOrder;
+  const coreKpiCardOrder = allCards.filter((k): k is CoreKpiCardKey =>
+    ["dailySales7d", "monthlySales", "inStock", "inTransit", "totalStock", "stockSalesRatio"].includes(k)
+  );
+  const coverageKpiCardOrder = allCards.filter((k): k is CoverageKpiCardKey =>
+    ["coverDays", "coverOnHand", "coverWithTransit", "leadTime"].includes(k)
+  );
+  const qualityKpiCardOrder = allCards.filter((k): k is QualityKpiCardKey =>
+    ["rating", "reviewCount", "returnRate", "adRatio", "refundFee"].includes(k)
+  );
+
+  const moveCoreKpiCard = useCallback((key: CoreKpiCardKey, direction: "left" | "right") => {
+    moveKpiCard(key, direction);
+  }, [moveKpiCard]);
+  const moveCoverageKpiCard = useCallback((key: CoverageKpiCardKey, direction: "left" | "right") => {
+    moveKpiCard(key, direction);
+  }, [moveKpiCard]);
+  const moveQualityKpiCard = useCallback((key: QualityKpiCardKey, direction: "left" | "right") => {
+    moveKpiCard(key, direction);
+  }, [moveKpiCard]);
+
   return {
     customizing,
     setCustomizing,
     toggleSection,
     moveSection,
     moveKpiCard,
+    moveCoreKpiCard,
+    moveCoverageKpiCard,
+    moveQualityKpiCard,
     reset,
     visibleKeys,
     orderedKeys,
-    kpiCardOrder: prefs.skuDetail.kpiCardOrder,
+    kpiCardOrder: allCards,
+    coreKpiCardOrder,
+    coverageKpiCardOrder,
+    qualityKpiCardOrder,
     allKeys: DEFAULT_SKU_ORDER,
   };
 }
