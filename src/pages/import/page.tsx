@@ -9,6 +9,7 @@ import {
   getCloudConfig,
   getAllShops,
   setCloudConfig,
+  upsertSkuMaster,
   upsertInventoryLayers,
   upsertSnapshots,
 } from "@/domain/db";
@@ -228,6 +229,15 @@ export default function ImportPage() {
         }
       }
 
+      // 保存 SKU 主档
+      if (parsed.skuMaster.length > 0) {
+        await upsertSkuMaster(parsed.skuMaster);
+      }
+      // 保存销量快照
+      if (parsed.dailySnapshot.length > 0) {
+        await upsertSnapshots(parsed.dailySnapshot);
+      }
+      // 保存分仓库存
       await upsertInventoryLayers(mergedLayers);
       setResult(parsed);
     } catch (err) {

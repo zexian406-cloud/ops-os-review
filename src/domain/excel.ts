@@ -26,6 +26,21 @@ const mapFactoryStatus = (v: string): FactoryBatch["status"] => {
   return "producing";
 };
 
+/** 按前缀匹配 Sheet 名，返回第一个匹配的 Sheet */
+function findSheet(wb: XLSX.WorkBook, names: string[]): XLSX.WorkSheet | undefined {
+  for (const name of names) {
+    const exact = wb.Sheets[name];
+    if (exact) return exact;
+  }
+  // 前缀匹配
+  for (const sheetName of wb.SheetNames) {
+    for (const prefix of names) {
+      if (sheetName.startsWith(prefix)) return wb.Sheets[sheetName];
+    }
+  }
+  return undefined;
+}
+
 export interface ImportResult {
   skuMaster: SkuMaster[];
   dailySnapshot: DailySnapshot[];
@@ -39,54 +54,104 @@ export interface ImportResult {
 
 /**
  * Parse the Bundle（综合运营表）Excel.
- * Now contains 3 sheets only:
- *   Sheet 1: 仓库明细 — SKU · 仓库 · 库存
- *   Sheet 2: 在途明细 — SKU · 承运商 · 目的仓 · 件数 · 预计到仓
- *   Sheet 3: 工厂明细 — SKU · 工厂名 · 件数 · 交期 · 状态
+ * 8 sheets:
+ *   SKU标识符 → SkuMaster
+ *   销量导入/周销量导入 → DailySnapshot
+ *   FBA库存明细 → InventoryLayer.fbaStock
+ *   仓库明细(FBM)/仓库明细 → InventoryLayer.fbmStock + warehouseBreakdown
+ *   在途明细 → TransitBatch
+ *   工厂明细 → FactoryBatch
+ *   产品成本更新 → SkuMaster.costFob
+ *   头程更新 → SkuMaster.costShipping / costDelivery
  */
 export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
   const wb = XLSX.read(buffer, { type: "array" });
   const today = new Date().toISOString().slice(0, 10);
 
-  // ── Sheet 1: 仓库明细 — SKU · 仓库 · 库存 ──
-  const warehouseSheet = wb.Sheets["仓库明细"];
-  const inventoryLayer: InventoryLayer[] = [];
+  // ── Step 1: Parse SKU标识符 → skuMaster ──
+  const skuMaster: SkuMaster[] = [];
+  const idSheet = findSheet(wb, ["SKU标识符", "SKU标识符(一次性迁移)"]);
+  if (idSheet) {
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(idSheet, { defval: "" });
+    for (const row of rows) {
+      const sku = str(row["SKU"]);
+      if (!sku) continue;
+      skuMaster.push({
+        sku,
+        name: str(row["品名"]) || sku,
+        store: str(row["店铺"]) || "-",
+        price: num(row["售价（总价）"] ?? row["售价"]),
+        asin: str(row["ASIN"]) || undefined,
+        msku: str(row["MSKU"]) || undefined,
+        costFob: num(row["FOB"]) > 0 ? num(row["FOB"]) : undefined,
+        saleStatus: "active",
+        fulfillment: "FBA",
+      });
+    }
+  }
+
+  // ── Step 2: Parse 销量导入 → dailySnapshot ──
+  const dailySnapshot: DailySnapshot[] = [];
+  const salesSheet = findSheet(wb, ["销量导入", "周销量导入"]);
+  if (salesSheet) {
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(salesSheet, { defval: "" });
+    for (const row of rows) {
+      const sku = str(row["SKU"]);
+      if (!sku) continue;
+      const daily7d = num(row["近7天日均"] ?? row["日销（近七天）"] ?? row["dailySales7d"]);
+      const monthly = num(row["近30天销量"] ?? row["月销"] ?? row["monthlySales"]);
+      dailySnapshot.push({
+        date: today,
+        sku,
+        dailySales7d: daily7d,
+        monthlySales: monthly,
+        stockOnHand: 0,
+        stockInTransit: 0,
+        daysOfCoverOnHand: daily7d > 0 ? Number((0 / daily7d).toFixed(1)) : 999,
+        daysOfCoverWithTransit: daily7d > 0 ? Number((0 / daily7d).toFixed(1)) : 999,
+        adSpend: 0,
+        adRatio: 0,
+        profit: 0,
+        profitMargin: 0,
+        totalCost: 0,
+        rating: 0,
+        returnRate: 0,
+      });
+    }
+  }
+
+  // ── Step 3: Parse FBA库存明细 → fbaStock map ──
+  const fbaMap = new Map<string, number>();
+  const fbaSheet = findSheet(wb, ["FBA库存明细", "FBA库存"]);
+  if (fbaSheet) {
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(fbaSheet, { defval: "" });
+    for (const row of rows) {
+      const sku = str(row["SKU"]);
+      if (!sku) continue;
+      fbaMap.set(sku, num(row["FBA在库"] ?? row["库存"] ?? row["fbaStock"]));
+    }
+  }
+
+  // ── Step 4: Parse 仓库明细(FBM) → warehouse breakdown ──
+  const warehouseMap = new Map<string, { warehouse: string; qty: number }[]>();
+  const warehouseSheet = findSheet(wb, ["仓库明细(FBM)", "仓库明细"]);
   if (warehouseSheet) {
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(warehouseSheet, { defval: "" });
-    const skuWarehouses = new Map<string, { warehouse: string; qty: number }[]>();
     for (const row of rows) {
       const sku = str(row["SKU"]);
       if (!sku) continue;
       const warehouse = str(row["仓库"]);
       const qty = num(row["库存"]);
       if (!warehouse) continue;
-      const list = skuWarehouses.get(sku) ?? [];
+      const list = warehouseMap.get(sku) ?? [];
       list.push({ warehouse, qty });
-      skuWarehouses.set(sku, list);
-    }
-    for (const [sku, warehouses] of skuWarehouses) {
-      inventoryLayer.push({
-        date: today,
-        sku,
-        fbaStock: 0,
-        fbmStock: warehouses.reduce((s, w) => s + w.qty, 0),
-        factoryStock: 0,
-        eastTransit: 0,
-        westTransit: 0,
-        southeast: 0,
-        southcentral: 0,
-        warehouseBreakdown: warehouses.map((w) => ({
-          warehouse: w.warehouse,
-          qty: w.qty,
-          daysOfCover: 0,
-        })),
-      });
+      warehouseMap.set(sku, list);
     }
   }
 
-  // ── Sheet 2: 在途明细 — SKU · 承运商 · 目的仓 · 件数 · 预计到仓 ──
-  const transitSheet = wb.Sheets["在途明细"];
+  // ── Step 5: Parse 在途明细 → transitBatches ──
   const transitBatches = new Map<string, TransitBatch[]>();
+  const transitSheet = findSheet(wb, ["在途明细"]);
   if (transitSheet) {
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(transitSheet, { defval: "" });
     for (const row of rows) {
@@ -110,9 +175,9 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
     }
   }
 
-  // ── Sheet 3: 工厂明细 — SKU · 工厂名 · 件数 · 交期 · 状态 ──
-  const factorySheet = wb.Sheets["工厂明细"];
+  // ── Step 6: Parse 工厂明细 → factoryBatches ──
   const factoryBatches = new Map<string, FactoryBatch[]>();
+  const factorySheet = findSheet(wb, ["工厂明细"]);
   if (factorySheet) {
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(factorySheet, { defval: "" });
     for (const row of rows) {
@@ -131,40 +196,88 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
     }
   }
 
-  // Merge batches into inventoryLayer
-  for (const layer of inventoryLayer) {
-    const tb = transitBatches.get(layer.sku);
-    if (tb && tb.length > 0) layer.transitBatches = tb;
-    const fb = factoryBatches.get(layer.sku);
-    if (fb && fb.length > 0) layer.factoryBatches = fb;
-  }
-
-  // Create inventoryLayer entries for SKUs that only have transit/factory batches
-  const coveredSkus = new Set(inventoryLayer.map((l) => l.sku));
-  const allBatchSkus = new Set([...transitBatches.keys(), ...factoryBatches.keys()]);
-  for (const sku of allBatchSkus) {
-    if (!coveredSkus.has(sku)) {
-      const tb = transitBatches.get(sku);
-      const fb = factoryBatches.get(sku);
-      inventoryLayer.push({
-        date: today,
-        sku,
-        fbaStock: 0,
-        fbmStock: 0,
-        factoryStock: fb ? fb.reduce((s, b) => s + b.qty, 0) : 0,
-        eastTransit: 0,
-        westTransit: 0,
-        southeast: 0,
-        southcentral: 0,
-        ...(tb && tb.length > 0 ? { transitBatches: tb } : {}),
-        ...(fb && fb.length > 0 ? { factoryBatches: fb } : {}),
-      });
+  // ── Step 7: Parse 产品成本更新 → costFob update map ──
+  const costFobMap = new Map<string, number>();
+  const costSheet = findSheet(wb, ["产品成本更新", "产品成本"]);
+  if (costSheet) {
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(costSheet, { defval: "" });
+    for (const row of rows) {
+      const sku = str(row["SKU"]);
+      if (!sku) continue;
+      const fob = num(row["FOB"] ?? row["产品成本"] ?? row["costFob"]);
+      if (fob > 0) costFobMap.set(sku, fob);
     }
   }
 
+  // ── Step 8: Parse 头程更新 → costShipping / costDelivery map ──
+  const shippingMap = new Map<string, { shipping: number; delivery: number }>();
+  const shipSheet = findSheet(wb, ["头程更新", "头程"]);
+  if (shipSheet) {
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(shipSheet, { defval: "" });
+    for (const row of rows) {
+      const sku = str(row["SKU"]);
+      if (!sku) continue;
+      const shipping = num(row["头程费"] ?? row["头程"] ?? row["costShipping"]);
+      const delivery = num(row["配送费"] ?? row["costDelivery"]);
+      if (shipping > 0 || delivery > 0) {
+        shippingMap.set(sku, { shipping, delivery });
+      }
+    }
+  }
+
+  // ── Merge costFob and shipping into skuMaster ──
+  for (const master of skuMaster) {
+    const fob = costFobMap.get(master.sku);
+    if (fob != null) master.costFob = fob;
+    const ship = shippingMap.get(master.sku);
+    if (ship) {
+      if (ship.shipping > 0) master.costShipping = ship.shipping;
+      if (ship.delivery > 0) master.costDelivery = ship.delivery;
+    }
+  }
+
+  // ── Step 9: Build inventoryLayer by merging FBA + FBM + transit + factory ──
+  const allSkus = new Set<string>();
+  for (const sku of fbaMap.keys()) allSkus.add(sku);
+  for (const sku of warehouseMap.keys()) allSkus.add(sku);
+  for (const sku of transitBatches.keys()) allSkus.add(sku);
+  for (const sku of factoryBatches.keys()) allSkus.add(sku);
+
+  const inventoryLayer: InventoryLayer[] = [];
+  for (const sku of allSkus) {
+    const fba = fbaMap.get(sku) ?? 0;
+    const warehouses = warehouseMap.get(sku);
+    const fbm = warehouses ? warehouses.reduce((s, w) => s + w.qty, 0) : 0;
+    const tb = transitBatches.get(sku);
+    const fb = factoryBatches.get(sku);
+    const factoryQty = fb ? fb.reduce((s, b) => s + b.qty, 0) : 0;
+
+    const layer: InventoryLayer = {
+      date: today,
+      sku,
+      fbaStock: fba,
+      fbmStock: fbm,
+      factoryStock: factoryQty,
+      eastTransit: 0,
+      westTransit: 0,
+      southeast: 0,
+      southcentral: 0,
+    };
+    if (warehouses && warehouses.length > 0) {
+      layer.warehouseBreakdown = warehouses.map((w) => ({
+        warehouse: w.warehouse,
+        qty: w.qty,
+        daysOfCover: 0,
+      }));
+    }
+    if (tb && tb.length > 0) layer.transitBatches = tb;
+    if (fb && fb.length > 0) layer.factoryBatches = fb;
+    inventoryLayer.push(layer);
+  }
+
   return {
-    skuMaster: [],
-    dailySnapshot: [],
+    skuMaster,
+    dailySnapshot,
     inventoryLayer,
     transitBatches,
     factoryBatches,
