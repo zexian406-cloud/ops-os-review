@@ -375,8 +375,17 @@ export default function SkuList() {
         if (filteredChildren.length === 0) return null;
         return { ...group, children: filteredChildren };
       })
-      .filter((g): g is SkuGroup => g !== null);
-  }, [groups, store, status, keyword]);
+      .filter((g): g is SkuGroup => g !== null)
+      // 按自定义顺序排序
+      .sort((a, b) => {
+        const ai = parentOrder.indexOf(a.parent.sku);
+        const bi = parentOrder.indexOf(b.parent.sku);
+        if (ai >= 0 && bi >= 0) return ai - bi;
+        if (ai >= 0) return -1;
+        if (bi >= 0) return 1;
+        return 0;
+      });
+  }, [groups, store, status, keyword, parentOrder]);
 
   const stores = useMemo(() => {
     // Build a map of shopId -> shopName
@@ -425,6 +434,7 @@ export default function SkuList() {
   };
 
   const [mskuOrder, setMskuOrder] = useState<Record<string, string[]>>(loadMskuOrder);
+  const [parentOrder, setParentOrder] = useState<string[]>(loadParentOrder);
 
   const moveChild = useCallback((groupSku: string, childSku: string, direction: "up" | "down") => {
     setMskuOrder((prev) => {
@@ -441,6 +451,27 @@ export default function SkuList() {
       return next;
     });
   }, []);
+
+  const moveGroup = useCallback((groupSku: string, direction: "up" | "down") => {
+    setParentOrder((prev) => {
+      let order = prev.length > 0 ? [...prev] : filteredGroups.map((g) => g.parent.sku);
+      const idx = order.indexOf(groupSku);
+      if (idx === -1) {
+        // 不在列表中，追加并移动
+        order = [...order, groupSku];
+        const newIdx = direction === "up" ? Math.max(0, order.length - 2) : order.length - 1;
+        const [removed] = order.splice(order.length - 1, 1);
+        order.splice(newIdx, 0, removed);
+      } else {
+        const newIdx = direction === "up" ? Math.max(0, idx - 1) : Math.min(order.length - 1, idx + 1);
+        if (newIdx === idx) return prev;
+        const [removed] = order.splice(idx, 1);
+        order.splice(newIdx, 0, removed);
+      }
+      saveParentOrder(order);
+      return order;
+    });
+  }, [filteredGroups]);
 
   if (loading)
     return <div className="text-sm text-foreground-500">加载中...</div>;
@@ -491,6 +522,8 @@ export default function SkuList() {
                     const all = new Set<string>();
                     filteredGroups.forEach((g) => g.children.forEach((c) => all.add(c.sku)));
                     setSelectedSkus(all);
+                    // 全选时自动展开所有组，让框框可见
+                    setExpanded(new Set(filteredGroups.map((g) => g.parent.sku)));
                   }
                 }}
                 className="h-3.5 w-3.5 rounded border-background-300 cursor-pointer accent-primary-500"
@@ -586,6 +619,8 @@ export default function SkuList() {
                 promotions={promotions}
                 onDeleteGroup={(sku, name) => setDeleteConfirm({ open: true, type: "group", sku, name })}
                 onDeleteMsku={(sku, name, parentSku) => setDeleteConfirm({ open: true, type: "msku", sku, name, parentSku })}
+                onMoveGroupUp={moveGroup}
+                onMoveGroupDown={moveGroup}
                 mskuOrder={mskuOrder[group.parent.sku] || []}
                 onMoveChild={moveChild}
                 getShopName={getShopName}
@@ -926,6 +961,8 @@ function SkuGroupCard({
   promotions,
   onDeleteGroup,
   onDeleteMsku,
+  onMoveGroupUp,
+  onMoveGroupDown,
   mskuOrder,
   onMoveChild,
   getShopName,
@@ -943,6 +980,8 @@ function SkuGroupCard({
   promotions: Promotion[];
   onDeleteGroup?: (sku: string, name: string) => void;
   onDeleteMsku?: (sku: string, name: string, parentSku?: string) => void;
+  onMoveGroupUp?: (sku: string) => void;
+  onMoveGroupDown?: (sku: string) => void;
   mskuOrder?: string[];
   onMoveChild?: (groupSku: string, childSku: string, direction: "up" | "down") => void;
   getShopName: (storeId: string) => string;
@@ -1011,6 +1050,15 @@ function SkuGroupCard({
         }`}
       >
         <div className="flex items-center gap-3 min-w-0">
+          {isMultiChild && (
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={allSelected ? onDeselectAll : onSelectAll}
+              className="h-3.5 w-3.5 rounded border-background-300 cursor-pointer accent-primary-500 shrink-0"
+              title="全选本组MSKU"
+            />
+          )}
           {isMultiChild ? (
             <button
               type="button"
@@ -1097,14 +1145,32 @@ function SkuGroupCard({
             </span>
           )}
           {onDeleteGroup && (
-            <button
-              type="button"
-              onClick={() => onDeleteGroup(parent.sku, parent.name)}
-              className="flex h-6 w-6 items-center justify-center rounded hover:bg-red-50 text-foreground-400 hover:text-red-500 cursor-pointer shrink-0"
-              title="删除分组"
-            >
-              <i className="ri-delete-bin-line text-[14px]" aria-hidden />
-            </button>
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => onMoveGroupUp?.(parent.sku)}
+                className="flex h-6 w-6 items-center justify-center rounded hover:bg-background-200 text-foreground-400 hover:text-foreground-700 cursor-pointer shrink-0"
+                title="上移"
+              >
+                <i className="ri-arrow-up-s-line text-[14px]" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => onMoveGroupDown?.(parent.sku)}
+                className="flex h-6 w-6 items-center justify-center rounded hover:bg-background-200 text-foreground-400 hover:text-foreground-700 cursor-pointer shrink-0"
+                title="下移"
+              >
+                <i className="ri-arrow-down-s-line text-[14px]" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => onDeleteGroup(parent.sku, parent.name)}
+                className="flex h-6 w-6 items-center justify-center rounded hover:bg-red-50 text-foreground-400 hover:text-red-500 cursor-pointer shrink-0"
+                title="删除分组"
+              >
+                <i className="ri-delete-bin-line text-[14px]" aria-hidden />
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -1349,4 +1415,15 @@ function ChildRow({
       </td>
     </tr>
   );
+}
+const STORAGE_PARENT_ORDER_KEY = "aos-parent-order-v1";
+function loadParentOrder(): string[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_PARENT_ORDER_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return [];
+}
+function saveParentOrder(order: string[]) {
+  try { localStorage.setItem(STORAGE_PARENT_ORDER_KEY, JSON.stringify(order)); } catch { /* ignore */ }
 }

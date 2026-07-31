@@ -85,7 +85,7 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       const price = num(row["售价（总价）"] ?? row["售价"]);
       const costFob = num(row["FOB"]) > 0 ? num(row["FOB"]) : undefined;
       const costStorage = num(row["仓租"]) > 0 ? num(row["仓租"]) : undefined;
-      const fulfillment = (["FBA", "FBM", "mixed"].includes(str(row["发货方式"])) ? str(row["发货方式"]) : "FBA") as "FBA" | "FBM" | "mixed";
+      const fulfillment = normalizeFulfillment(row["发货方式"]);
 
       if (!seenSku.has(sku)) {
         // 首次出现 → 父SKU
@@ -126,7 +126,7 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
           costFob,
           groupSku: sku,       // 关联父SKU
           saleStatus: "active",
-          fulfillment: "FBA",
+          fulfillment,
         });
       }
     }
@@ -201,7 +201,7 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       } else {
         skuMaster.push({
           sku, name, store, price: 0,
-          saleStatus: "active", fulfillment: "FBA",
+          saleStatus: "active", fulfillment: "FBM",
           asin: asin || undefined,
         });
       }
@@ -399,3 +399,11 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
     addedFields: [],
   };
 }
+/** 统一发货方式：支持中文"混发"→"mixed"，默认FBM */
+const normalizeFulfillment = (v: unknown): "FBA" | "FBM" | "mixed" => {
+  const val = str(v);
+  if (val === "FBA") return "FBA";
+  if (val === "FBM") return "FBM";
+  if (val === "mixed" || val === "混发" || val === "混卖") return "mixed";
+  return "FBM"; // 用户主要做FBM
+};

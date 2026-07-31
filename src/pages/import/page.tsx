@@ -30,8 +30,9 @@ const str = (v: unknown, fallback = ""): string =>
 /* ────────── 模板生成 ────────── */
 const autoCols = (headers: string[]) => headers.map((h) => ({ wch: Math.max(10, Math.min(28, h.length * 2.2 + 2)) }));
 
-const downloadTemplate = (name: string, headers: string[], exampleRow: (string | number)[]) => {
+const downloadTemplate = (name: string, headers: string[], exampleRow: (string | number)[], dataValidations?: Record<string, unknown>[]) => {
   const sheet = XLSX.utils.aoa_to_sheet([headers, exampleRow]);
+  if (dataValidations) sheet["!dataValidations"] = dataValidations;
   sheet["!cols"] = autoCols(headers);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, sheet, "Sheet1");
@@ -93,6 +94,7 @@ const tmplBundle = () => {
 
   // Sheet 9: SKU标识符(一次性迁移)
   const s9 = XLSX.utils.aoa_to_sheet([["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB", "仓租", "发货方式"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", 39.99, 28.5, 0.8, "FBA"]]);
+  s9["!dataValidations"] = [{ type: "list", formula1: '"FBA,FBM,混发"', sqref: "I2:I101" }];
   s9["!cols"] = autoCols(["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB", "仓租", "发货方式"]);
   XLSX.utils.book_append_sheet(wb, s9, "SKU标识符");
 
@@ -112,7 +114,9 @@ const tmplBundleCsv = () => {
 const tmplSalesRating = () => downloadTemplate("运营数据导入", ["ASIN", "店铺", "品名", "SKU", "退款率", "评分", "评论数", "退货率", "ACoAS"], ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", 0.05, 4.2, 156, 0.08, 0.12]);
 
 const tmplIdentifiers = () =>
-  downloadTemplate("SKU标识符(一次性迁移)", ["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB", "仓租", "发货方式"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", 39.99, 28.5, 0.8, "FBA"]);
+  downloadTemplate("SKU标识符(一次性迁移)", ["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB", "仓租", "发货方式"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", 39.99, 28.5, 0.8, "FBA"], [
+    { type: "list", formula1: '"FBA,FBM,混发"', sqref: "I2:I101" },
+  ]);
 
 /* ────────── 标签页配置 ────────── */
 const tabDefs = [
@@ -356,7 +360,7 @@ export default function ImportPage() {
             store,
             price: 0,
             saleStatus: "active",
-            fulfillment: "FBA",
+            fulfillment: "FBM",
             asin: asin || undefined,
           };
           await db.skuMaster.put(master);
@@ -664,7 +668,13 @@ export default function ImportPage() {
         const price = num(row["售价（总价）"] ?? row["售价"]);
         const costFob = num(row["FOB"]);
         const costStorage = num(row["仓租"]);
-        const fulfillment = str(row["发货方式"]) || "FBA";
+        const fulfillment = (() => {
+            const v = str(row["发货方式"]);
+            if (v === "FBA") return "FBA" as const;
+            if (v === "FBM") return "FBM" as const;
+            if (v === "mixed" || v === "混发" || v === "混卖") return "mixed" as const;
+            return "FBM" as const;
+          })();
 
         if (!seenSku.has(sku)) {
           // 首次出现 → 父SKU
@@ -691,7 +701,7 @@ export default function ImportPage() {
               store,
               price: price || 0,
               saleStatus: "active",
-              fulfillment: ["FBA", "FBM", "mixed"].includes(fulfillment) ? fulfillment as "FBA" | "FBM" | "mixed" : "FBA",
+              fulfillment: ["FBA", "FBM", "mixed"].includes(fulfillment) ? fulfillment as "FBA" | "FBM" | "mixed" : "FBM",
               msku: msku || undefined,
               asin: asin || undefined,
               costFob: costFob > 0 ? costFob : undefined,
@@ -720,7 +730,7 @@ export default function ImportPage() {
             store,
             price: price || 0,
             saleStatus: "active",
-            fulfillment: "FBA",
+            fulfillment,
             msku: msku || undefined,
             asin: asin || undefined,
             costFob: costFob > 0 ? costFob : undefined,
