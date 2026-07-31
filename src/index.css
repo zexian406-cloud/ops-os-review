@@ -1,0 +1,325 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;450;500;550;600;650;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════ Linear + Stripe 风格 — 深色侧边栏 · 浅色内容区 ═══════════════ */
+:root {
+  --font-heading: 'Inter', ui-sans-serif, system-ui, -apple-system;
+  --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system;
+
+  /* ── 背景：冷调灰白，干净利落 ── */
+  --background-50:  0.985 0.002 247;
+  --background-100: 0.972 0.005 248;
+  --background-200: 0.942 0.008 250;
+  --background-300: 0.880 0.010 252;
+  --background-400: 0.760 0.015 254;
+  --background-500: 0.620 0.020 254;
+  --background-600: 0.460 0.025 254;
+  --background-700: 0.340 0.030 255;
+  --background-800: 0.240 0.035 257;
+  --background-900: 0.165 0.040 260;
+  --background-950: 0.110 0.040 265;
+
+  /* ── 前景文字：深灰蓝，清晰锐利 ── */
+  --foreground-50:  0.985 0.002 247;
+  --foreground-100: 0.960 0.005 250;
+  --foreground-200: 0.900 0.008 252;
+  --foreground-300: 0.800 0.010 254;
+  --foreground-400: 0.650 0.015 256;
+  --foreground-500: 0.520 0.020 256;
+  --foreground-600: 0.400 0.025 258;
+  --foreground-700: 0.300 0.030 260;
+  --foreground-800: 0.220 0.035 262;
+  --foreground-900: 0.155 0.040 265;
+  --foreground-950: 0.100 0.040 268;
+
+  /* ── Primary：Indigo 靛蓝，专业信任 ── */
+  --primary-50:  0.962 0.028 272;
+  --primary-100: 0.930 0.050 270;
+  --primary-200: 0.870 0.075 268;
+  --primary-300: 0.780 0.100 266;
+  --primary-400: 0.660 0.120 264;
+  --primary-500: 0.480 0.130 275;
+  --primary-600: 0.380 0.120 275;
+  --primary-700: 0.290 0.100 275;
+  --primary-800: 0.215 0.080 275;
+  --primary-900: 0.155 0.055 275;
+  --primary-950: 0.110 0.035 275;
+
+  /* ── Accent：Sky 天蓝，明亮点缀 ── */
+  --accent-50:  0.970 0.025 225;
+  --accent-100: 0.940 0.050 222;
+  --accent-200: 0.885 0.080 220;
+  --accent-300: 0.800 0.110 218;
+  --accent-400: 0.700 0.135 216;
+  --accent-500: 0.620 0.150 220;
+  --accent-600: 0.500 0.140 220;
+  --accent-700: 0.400 0.110 220;
+  --accent-800: 0.310 0.080 220;
+  --accent-900: 0.220 0.050 220;
+  --accent-950: 0.150 0.030 220;
+
+  /* ── Secondary：冷灰辅助 ── */
+  --secondary-50:  0.985 0.002 247;
+  --secondary-100: 0.970 0.005 248;
+  --secondary-200: 0.940 0.008 250;
+  --secondary-300: 0.880 0.010 252;
+  --secondary-400: 0.760 0.015 254;
+  --secondary-500: 0.620 0.020 254;
+  --secondary-600: 0.460 0.025 254;
+  --secondary-700: 0.340 0.030 255;
+  --secondary-800: 0.240 0.035 257;
+  --secondary-900: 0.165 0.040 260;
+  --secondary-950: 0.110 0.040 265;
+
+  /* ── Sidebar：浅灰，干净清晰 ── */
+  --sidebar:       0.920 0.008 255;
+  --sidebar-fg:    0.220 0.025 260;
+  --sidebar-border:0.850 0.006 252;
+  --sidebar-accent:0.850 0.010 258;
+  --sidebar-accent-fg: 0.480 0.130 275;
+  --sidebar-ring:  0.450 0.100 275;
+}
+
+/* ═══════════════ Dark Mode ── 深空 ═══════════════ */
+.dark {
+  --background-50:  0.110 0.040 265;
+  --background-100: 0.130 0.035 268;
+  --background-200: 0.160 0.030 270;
+  --background-300: 0.200 0.025 270;
+  --background-400: 0.260 0.020 268;
+  --background-500: 0.340 0.015 266;
+  --background-600: 0.420 0.012 264;
+  --background-700: 0.520 0.010 262;
+  --background-800: 0.640 0.008 260;
+  --background-900: 0.780 0.005 258;
+  --background-950: 0.920 0.003 256;
+
+  --foreground-50:  0.110 0.040 265;
+  --foreground-100: 0.130 0.035 268;
+  --foreground-200: 0.160 0.030 270;
+  --foreground-300: 0.200 0.025 270;
+  --foreground-400: 0.260 0.020 268;
+  --foreground-500: 0.340 0.015 266;
+  --foreground-600: 0.450 0.012 264;
+  --foreground-700: 0.600 0.010 262;
+  --foreground-800: 0.750 0.008 260;
+  --foreground-900: 0.880 0.005 258;
+  --foreground-950: 0.960 0.003 256;
+
+  --primary-50:  0.962 0.028 272;
+  --primary-100: 0.930 0.050 270;
+  --primary-200: 0.870 0.075 268;
+  --primary-300: 0.780 0.100 266;
+  --primary-400: 0.660 0.120 264;
+  --primary-500: 0.480 0.130 275;
+  --primary-600: 0.620 0.120 275;
+  --primary-700: 0.740 0.100 275;
+  --primary-800: 0.840 0.080 275;
+  --primary-900: 0.920 0.055 275;
+  --primary-950: 0.960 0.035 275;
+
+  --accent-50:  0.150 0.030 220;
+  --accent-100: 0.170 0.050 222;
+  --accent-200: 0.200 0.080 220;
+  --accent-300: 0.240 0.110 218;
+  --accent-400: 0.300 0.135 216;
+  --accent-500: 0.400 0.150 220;
+  --accent-600: 0.520 0.140 220;
+  --accent-700: 0.650 0.110 220;
+  --accent-800: 0.780 0.080 220;
+  --accent-900: 0.880 0.050 220;
+  --accent-950: 0.950 0.030 220;
+
+  --secondary-50:  0.110 0.040 265;
+  --secondary-100: 0.130 0.035 268;
+  --secondary-200: 0.160 0.030 270;
+  --secondary-300: 0.200 0.025 270;
+  --secondary-400: 0.260 0.020 268;
+  --secondary-500: 0.340 0.015 266;
+  --secondary-600: 0.420 0.012 264;
+  --secondary-700: 0.520 0.010 262;
+  --secondary-800: 0.640 0.008 260;
+  --secondary-900: 0.780 0.005 258;
+  --secondary-950: 0.920 0.003 256;
+
+  --sidebar:       0.220 0.025 270;
+  --sidebar-fg:    0.750 0.010 268;
+  --sidebar-border:0.260 0.020 268;
+  --sidebar-accent:0.260 0.030 270;
+  --sidebar-accent-fg: 0.850 0.015 268;
+  --sidebar-ring:  0.350 0.100 275;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background: oklch(var(--background-50));
+  color: oklch(var(--foreground-900));
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  letter-spacing: -0.015em;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  letter-spacing: -0.025em;
+}
+
+/* ═══════════════ Card System ── 干净白卡 ═══════════════ */
+@layer utilities {
+  .glass-card {
+    background: oklch(1 0 0 / 0.75);
+    backdrop-filter: blur(24px) saturate(1.1);
+    -webkit-backdrop-filter: blur(24px) saturate(1.1);
+    border: 1px solid oklch(var(--background-200) / 0.6);
+    border-radius: 14px;
+    box-shadow: 0 1px 2px oklch(0 0 0 / 0.04),
+                0 4px 12px oklch(0 0 0 / 0.05);
+  }
+
+  .dark .glass-card {
+    background: oklch(var(--background-100) / 0.6);
+    border: 1px solid oklch(var(--background-300) / 0.3);
+    box-shadow: 0 1px 2px oklch(0 0 0 / 0.15),
+                0 4px 16px oklch(0 0 0 / 0.2);
+  }
+
+  .glass-card-hover {
+    transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1),
+                box-shadow 0.25s cubic-bezier(0.25, 0.8, 0.25, 1),
+                border-color 0.2s ease;
+  }
+  .glass-card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 4px oklch(0 0 0 / 0.05),
+                0 8px 24px oklch(0 0 0 / 0.08);
+  }
+
+  .dark .glass-card-hover:hover {
+    box-shadow: 0 2px 4px oklch(0 0 0 / 0.2),
+                0 8px 24px oklch(0 0 0 / 0.25);
+  }
+
+  /* ── 主按钮 ── */
+  .apple-btn {
+    background: oklch(var(--primary-500));
+    color: #ffffff;
+    border-radius: 9px;
+    font-weight: 500;
+    font-size: 13px;
+    letter-spacing: -0.01em;
+    transition: all 0.18s cubic-bezier(0.25, 0.8, 0.25, 1);
+    cursor: pointer;
+  }
+  .apple-btn:hover {
+    background: oklch(var(--primary-600));
+    transform: scale(1.015);
+    box-shadow: 0 2px 12px oklch(var(--primary-500) / 0.15);
+  }
+  .apple-btn:active {
+    transform: scale(0.985);
+  }
+
+  /* ── 次级按钮 ── */
+  .apple-btn-ghost {
+    background: oklch(1 0 0 / 0.55);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid oklch(var(--background-300) / 0.5);
+    color: oklch(var(--foreground-600));
+    border-radius: 9px;
+    font-weight: 450;
+    font-size: 13px;
+    letter-spacing: -0.01em;
+    transition: all 0.18s cubic-bezier(0.25, 0.8, 0.25, 1);
+    cursor: pointer;
+  }
+  .apple-btn-ghost:hover {
+    background: oklch(1 0 0 / 0.75);
+    border-color: oklch(var(--background-400) / 0.5);
+    color: oklch(var(--foreground-800));
+  }
+  .apple-btn-ghost:active {
+    transform: scale(0.985);
+  }
+
+  .dark .apple-btn-ghost {
+    background: oklch(var(--background-200) / 0.5);
+    border-color: oklch(var(--background-300) / 0.3);
+    color: oklch(var(--foreground-600));
+  }
+  .dark .apple-btn-ghost:hover {
+    background: oklch(var(--background-200) / 0.7);
+    border-color: oklch(var(--background-300) / 0.5);
+    color: oklch(var(--foreground-800));
+  }
+
+  /* ── 标签 ── */
+  .glass-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 450;
+    letter-spacing: -0.005em;
+    background: oklch(1 0 0 / 0.55);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid oklch(var(--background-300) / 0.5);
+  }
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: oklch(0 0 0 / 0.08);
+  border-radius: 100px;
+}
+::-webkit-scrollbar-thumb:hover { background: oklch(0 0 0 / 0.15); }
+
+.dark ::-webkit-scrollbar-thumb {
+  background: oklch(1 0 0 / 0.12);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: oklch(1 0 0 / 0.2);
+}
+
+/* ── Number tabular ── */
+.mono-num {
+  font-feature-settings: "tnum", "cv02";
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Honeypot ── */
+.hp-shield {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* ── Layout customizer transitions ── */
+.layout-section-enter {
+  animation: fade-up 0.32s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Selection ── */
+::selection {
+  background: oklch(var(--accent-200) / 0.50);
+  color: oklch(var(--foreground-900));
+}
