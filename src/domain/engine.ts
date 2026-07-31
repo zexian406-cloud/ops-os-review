@@ -532,12 +532,31 @@ export function buildSnapshotMap(
   for (const s of snapshots) {
     const existing = map.get(s.sku);
     if (!existing || existing.date < s.date) {
-      // Normalize: adRatio must always be positive
+      // Newer date: replace
       const normalized: DailySnapshot = {
         ...s,
         adRatio: Math.abs(s.adRatio),
       };
       map.set(s.sku, normalized);
+    } else if (existing.date === s.date) {
+      // Same date: merge (fill gaps in existing with new data)
+      const merged: DailySnapshot = {
+        ...existing,
+        dailySales7d: s.dailySales7d || existing.dailySales7d,
+        monthlySales: s.monthlySales || existing.monthlySales,
+        adRatio: s.adRatio || existing.adRatio,
+        rating: s.rating || existing.rating,
+        reviewCount: s.reviewCount ?? existing.reviewCount,
+        returnRate: s.returnRate || existing.returnRate,
+        refundRate: s.refundRate ?? existing.refundRate,
+        adSpend: s.adSpend || existing.adSpend,
+        stockOnHand: s.stockOnHand || existing.stockOnHand,
+        stockInTransit: s.stockInTransit || existing.stockInTransit,
+        profit: s.profit || existing.profit,
+        profitMargin: s.profitMargin || existing.profitMargin,
+        totalCost: s.totalCost || existing.totalCost,
+      };
+      map.set(s.sku, merged);
     }
   }
   return map;

@@ -249,12 +249,41 @@ export async function upsertSnapshots(rows: DailySnapshot[]): Promise<void> {
     .equals(normalized[0].date)
     .toArray();
   const toDelete = existing.filter((e) => keys.has(`${e.sku}__${e.date}`));
+
+  // Merge: for existing entries with same SKU+date, keep non-zero values from both sides
+  const merged: DailySnapshot[] = [];
+  const existingMap = new Map(toDelete.map((e) => [`${e.sku}__${e.date}`, e]));
+  for (const row of normalized) {
+    const key = `${row.sku}__${row.date}`;
+    const old = existingMap.get(key);
+    if (old) {
+      merged.push({
+        ...old,
+        // New data fills gaps: only overwrite if old is 0/empty and new has value
+        dailySales7d: row.dailySales7d || old.dailySales7d,
+        monthlySales: row.monthlySales || old.monthlySales,
+        adRatio: row.adRatio || old.adRatio,
+        rating: row.rating || old.rating,
+        reviewCount: row.reviewCount ?? old.reviewCount,
+        returnRate: row.returnRate || old.returnRate,
+        refundRate: row.refundRate ?? old.refundRate,
+        adSpend: row.adSpend || old.adSpend,
+        stockOnHand: row.stockOnHand || old.stockOnHand,
+        stockInTransit: row.stockInTransit || old.stockInTransit,
+        profit: row.profit || old.profit,
+        profitMargin: row.profitMargin || old.profitMargin,
+        totalCost: row.totalCost || old.totalCost,
+      });
+    } else {
+      merged.push(row);
+    }
+  }
   if (toDelete.length > 0) {
     await db.dailySnapshot.bulkDelete(
       toDelete.map((e) => e.id as number).filter((id) => id != null)
     );
   }
-  await db.dailySnapshot.bulkAdd(normalized);
+  await db.dailySnapshot.bulkAdd(merged);
 }
 
 export async function upsertInventoryLayers(rows: InventoryLayer[]): Promise<void> {

@@ -111,12 +111,16 @@ export function computeTotalCost(
     isAdInferred = true;
   }
 
-  // 退货费：有值保留，空则从退货率×售价反推
+  // 退货费：有值保留，空则从退款率/退货率×售价反推
+  //   FBM优先用退款率（含部分退款），FBA优先用退货率
   let ret = n(sku.costReturn);
   let isReturnInferred = false;
-  if (ret === 0 && snap && snap.returnRate > 0 && price > 0) {
-    ret = (snap.returnRate / 100) * price;
-    isReturnInferred = true;
+  if (ret === 0 && snap && price > 0) {
+    const rate = snap.refundRate && snap.refundRate > 0 ? snap.refundRate : snap.returnRate;
+    if (rate > 0) {
+      ret = (rate / 100) * price;
+      isReturnInferred = true;
+    }
   }
 
   const total = fob + shipping + delivery + commission + storage + ad + ret + promoCost;
@@ -192,14 +196,19 @@ export function computeDiscountTotalCost(
     ad = nd.ad;
   }
 
-  // 退货费：折扣退货费为空 → 退货率×折扣价 或 按比例缩放
+  // 退货费：折扣退货费为空 → 退款率/退货率×折扣价 或 按比例缩放
   let ret: number;
   let isReturnInferred = false;
   if (sku.discountReturn != null) {
     ret = n(sku.discountReturn);
-  } else if (snap && snap.returnRate > 0) {
-    ret = (snap.returnRate / 100) * dp;
-    isReturnInferred = true;
+  } else if (snap && (snap.refundRate || snap.returnRate)) {
+    const rate = snap.refundRate && snap.refundRate > 0 ? snap.refundRate : snap.returnRate;
+    if (rate > 0) {
+      ret = (rate / 100) * dp;
+      isReturnInferred = true;
+    } else {
+      ret = nd.ret;
+    }
   } else if (sku.price > 0 && nd.ret > 0 && dp !== sku.price) {
     ret = nd.ret * (dp / sku.price);
     isReturnInferred = true;

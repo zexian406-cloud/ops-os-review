@@ -206,20 +206,30 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
         });
       }
 
-      // Add dailySnapshot
-      dailySnapshot.push({
-        date: today, sku,
-        dailySales7d: 0, monthlySales: 0,
-        stockOnHand: 0, stockInTransit: 0,
-        daysOfCoverOnHand: 999,
-        daysOfCoverWithTransit: 999,
-        adSpend: 0, adRatio: adRatio || 0,
-        profit: 0, profitMargin: 0, totalCost: 0,
-        rating: rating || 0,
-        reviewCount: reviewCount > 0 ? reviewCount : undefined,
-        returnRate: returnRate || 0,
-        refundRate: refundRate > 0 ? refundRate : undefined,
-      });
+      // Merge into existing snapshot (from Step 2 销量导入) if same SKU+date
+      const existingIdx_snap = dailySnapshot.findIndex(s => s.sku === sku && s.date === today);
+      if (existingIdx_snap >= 0) {
+        const existing = dailySnapshot[existingIdx_snap];
+        if (adRatio) existing.adRatio = adRatio;
+        if (rating) existing.rating = rating;
+        if (reviewCount > 0) existing.reviewCount = reviewCount;
+        if (returnRate) existing.returnRate = returnRate;
+        if (refundRate > 0) existing.refundRate = refundRate;
+      } else {
+        dailySnapshot.push({
+          date: today, sku,
+          dailySales7d: 0, monthlySales: 0,
+          stockOnHand: 0, stockInTransit: 0,
+          daysOfCoverOnHand: 999,
+          daysOfCoverWithTransit: 999,
+          adSpend: 0, adRatio: adRatio || 0,
+          profit: 0, profitMargin: 0, totalCost: 0,
+          rating: rating || 0,
+          reviewCount: reviewCount > 0 ? reviewCount : undefined,
+          returnRate: returnRate || 0,
+          refundRate: refundRate > 0 ? refundRate : undefined,
+        });
+      }
     }
   }
 
