@@ -123,11 +123,62 @@ export default function SkuList() {
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     open: boolean;
-    type: "group" | "msku";
+    type: "group" | "msku" | "batch";
     sku: string;
     name: string;
     parentSku?: string;
+    count?: number;
   } | null>(null);
+
+  /* ── 批量删除 ── */
+  const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (sku: string) => {
+    setSelectedSkus((prev) => {
+      const next = new Set(prev);
+      if (next.has(sku)) next.delete(sku);
+      else next.add(sku);
+      return next;
+    });
+  };
+
+  const selectAllInGroup = (groupSku: string, childSkus: string[]) => {
+    setSelectedSkus((prev) => {
+      const next = new Set(prev);
+      for (const s of childSkus) next.add(s);
+      return next;
+    });
+  };
+
+  const deselectAllInGroup = (childSkus: string[]) => {
+    setSelectedSkus((prev) => {
+      const next = new Set(prev);
+      for (const s of childSkus) next.delete(s);
+      return next;
+    });
+  };
+
+  const allSelectedInGroup = (childSkus: string[]): boolean => {
+    return childSkus.length > 0 && childSkus.every((s) => selectedSkus.has(s));
+  };
+
+  const handleBatchDelete = async () => {
+    const skus = Array.from(selectedSkus);
+    if (skus.length === 0) return;
+    setDeleteConfirm({ open: true, type: "batch", sku: "", name: "", count: skus.length });
+  };
+
+  const executeBatchDelete = async () => {
+    const skus = Array.from(selectedSkus);
+    try {
+      await db.skuMaster.bulkDelete(skus);
+      setSelectedSkus(new Set());
+      setDeleteConfirm(null);
+      reload();
+    } catch (err) {
+      alert(`批量删除失败: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
 
   const openCreate = () => {
     setCreateForm(emptySkuForm());
@@ -248,6 +299,9 @@ export default function SkuList() {
         // 删除父 SKU 及所有子 SKU
         const children = skuMaster.filter((s) => s.groupSku === deleteConfirm.sku).map((s) => s.sku);
         await db.skuMaster.bulkDelete([deleteConfirm.sku, ...children]);
+      } else if (deleteConfirm.type === "batch") {
+        await executeBatchDelete();
+        return;
       } else {
         await db.skuMaster.delete(deleteConfirm.sku);
       }
@@ -463,6 +517,27 @@ export default function SkuList() {
               <option value="paused">暂停</option>
               <option value="discontinued">停售</option>
             </select>
+            {selectedSkus.size > 0 && (
+              <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-1.5 border border-red-200">
+                <span className="text-[12px] font-medium text-red-700">
+                  已选 {selectedSkus.size} 个
+                </span>
+                <button
+                  type="button"
+                  onClick={handleBatchDelete}
+                  className="rounded-md bg-red-500 px-3 py-1 text-[12px] font-semibold text-white hover:bg-red-600 cursor-pointer transition-colors"
+                >
+                  批量删除
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSkus(new Set())}
+                  className="text-[12px] text-red-500 hover:text-red-700 cursor-pointer"
+                >
+                  取消选择
+                </button>
+              </div>
+            )}
           </div>
         }
       >
@@ -488,6 +563,11 @@ export default function SkuList() {
                 mskuOrder={mskuOrder[group.parent.sku] || []}
                 onMoveChild={moveChild}
                 getShopName={getShopName}
+                selectedSkus={selectedSkus}
+                onToggleSelect={toggleSelect}
+                onSelectAll={() => selectAllInGroup(group.parent.sku, group.children.map((c) => c.sku))}
+                onDeselectAll={() => deselectAllInGroup(group.children.map((c) => c.sku))}
+                allSelected={allSelectedInGroup(group.children.map((c) => c.sku))}
               />
             ))}
           </div>
@@ -772,10 +852,14 @@ export default function SkuList() {
             </div>
             <div className="mt-4 text-center">
               <h3 className="text-[16px] font-bold text-foreground-950">
-                {deleteConfirm.type === "group" ? "删除整个产品组" : "删除 MSKU"}
+                {deleteConfirm.type === "group" ? "删除整个产品组" : deleteConfirm.type === "batch" ? "批量删除 MSKU" : "删除 MSKU"}
               </h3>
               <p className="mt-2 text-[13px] text-foreground-600">
-                确定要删除 <strong className="text-foreground-950">{deleteConfirm.name}</strong> 吗？
+                {deleteConfirm.type === "batch" ? (
+                  <>确定要批量删除选中的 <strong className="text-foreground-950">{deleteConfirm.count}</strong> 个 MSKU 吗？</>
+                ) : (
+                  <>确定要删除 <strong className="text-foreground-950">{deleteConfirm.name}</strong> 吗？</>
+                )}
                 {deleteConfirm.type === "group" && (
                   <span className="block mt-1 text-[12px] text-red-600">这将同时删除该产品组下的所有 MSKU 及关联数据。</span>
                 )}
@@ -819,6 +903,11 @@ function SkuGroupCard({
   mskuOrder,
   onMoveChild,
   getShopName,
+  selectedSkus,
+  onToggleSelect,
+  onSelectAll,
+  onDeselectAll,
+  allSelected,
 }: {
   group: SkuGroup;
   expanded: boolean;
@@ -831,6 +920,11 @@ function SkuGroupCard({
   mskuOrder?: string[];
   onMoveChild?: (groupSku: string, childSku: string, direction: "up" | "down") => void;
   getShopName: (storeId: string) => string;
+  selectedSkus: Set<string>;
+  onToggleSelect: (sku: string) => void;
+  onSelectAll: () => void;
+  onDeselectAll: () => void;
+  allSelected: boolean;
 }) {
   const { parent, children: rawChildren, totalChildren } = group;
 
@@ -996,6 +1090,14 @@ function SkuGroupCard({
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-foreground-500 border-b border-background-200/70">
+                  <th className="px-2 py-2 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={allSelected ? onDeselectAll : onSelectAll}
+                      className="h-3.5 w-3.5 rounded border-background-300 cursor-pointer accent-primary-500"
+                    />
+                  </th>
                   <th className="px-3 py-2 whitespace-nowrap">在售</th>
                   <th className="px-3 py-2 whitespace-nowrap">MSKU</th>
                   <th className="px-3 py-2 whitespace-nowrap">店铺</th>
@@ -1024,6 +1126,8 @@ function SkuGroupCard({
                     onMoveDown={() => onMoveChild?.(parent.sku, child.sku, "down")}
                     canMove={totalChildren > 1}
                     getShopName={getShopName}
+                    selected={selectedSkus.has(child.sku)}
+                    onToggleSelect={() => onToggleSelect(child.sku)}
                   />
                 ))}
               </tbody>
@@ -1049,6 +1153,8 @@ function ChildRow({
   onMoveDown,
   canMove,
   getShopName,
+  selected,
+  onToggleSelect,
 }: {
   child: SkuMaster;
   snap: DailySnapshot | undefined;
@@ -1061,6 +1167,8 @@ function ChildRow({
   onMoveDown?: () => void;
   canMove?: boolean;
   getShopName: (storeId: string) => string;
+  selected: boolean;
+  onToggleSelect: () => void;
 }) {
   const { profit, margin, adRatio, returnRate, refundRate } = computeMskuProfit(child, snap, inv);
   const childPromos = promotions.filter((p) => p.sku === child.sku);
@@ -1069,7 +1177,15 @@ function ChildRow({
   );
 
   return (
-    <tr className="hover:bg-background-100/50">
+    <tr className={`hover:bg-background-100/50 ${selected ? 'bg-primary-50/50' : ''}`}>
+      <td className="px-2 py-2 border-b border-background-200/40 w-8">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          className="h-3.5 w-3.5 rounded border-background-300 cursor-pointer accent-primary-500"
+        />
+      </td>
       <td className="px-3 py-2 border-b border-background-200/40">
         <Badge
           tone={
