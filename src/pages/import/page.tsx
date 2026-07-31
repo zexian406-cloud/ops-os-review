@@ -57,8 +57,8 @@ const tmplBundle = () => {
   XLSX.utils.book_append_sheet(wb, s1, "销量导入");
 
   // Sheet 2: 运营数据导入
-  const s2 = XLSX.utils.aoa_to_sheet([["ASIN", "店铺", "品名", "SKU", "MSKU", "退款率", "评分", "评论数", "退货率", "ACoAS"], ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", "BFRS258-GM", 0.05, 4.2, 156, 0.08, 0.12]]);
-  s2["!cols"] = autoCols(["ASIN", "店铺", "品名", "SKU", "MSKU", "退款率", "评分", "评论数", "退货率", "ACoAS"]);
+  const s2 = XLSX.utils.aoa_to_sheet([["ASIN", "店铺", "品名", "SKU", "退款率", "评分", "评论数", "退货率", "ACoAS"], ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", 0.05, 4.2, 156, 0.08, 0.12]]);
+  s2["!cols"] = autoCols(["ASIN", "店铺", "品名", "SKU", "退款率", "评分", "评论数", "退货率", "ACoAS"]);
   XLSX.utils.book_append_sheet(wb, s2, "运营数据导入");
 
   // Sheet 3: FBA库存明细
@@ -109,7 +109,7 @@ const tmplBundleCsv = () => {
   XLSX.writeFile(wb, "【模板】综合运营表.csv", { bookType: "csv" });
 };
 
-const tmplSalesRating = () => downloadTemplate("运营数据导入", ["ASIN", "店铺", "品名", "SKU", "MSKU", "退款率", "评分", "评论数", "退货率", "ACoAS"], ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", "BFRS258-GM", 0.05, 4.2, 156, 0.08, 0.12]);
+const tmplSalesRating = () => downloadTemplate("运营数据导入", ["ASIN", "店铺", "品名", "SKU", "退款率", "评分", "评论数", "退货率", "ACoAS"], ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", 0.05, 4.2, 156, 0.08, 0.12]);
 
 const tmplIdentifiers = () =>
   downloadTemplate("SKU标识符(一次性迁移)", ["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB", "仓租", "发货方式"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", 39.99, 28.5, 0.8, "FBA"]);
@@ -118,7 +118,7 @@ const tmplIdentifiers = () =>
 const tabDefs = [
   { key: "bundle", label: "综合运营表", icon: "ri-file-excel-2-line", freq: "首次", desc: "一键下载全部 9 个 Sheet · 运营数据 / 周销量 / FBA / 仓库 / 在途 / 工厂 / 成本 / 头程 / SKU", tmpl: tmplBundle },
   { key: "sales", label: "周销量", icon: "ri-bar-chart-line", freq: "每周", desc: "ASIN · SKU · 店铺 · 7天销量 · 30天销量（自动算日均）", tmpl: tmplSales },
-  { key: "operation_data", label: "运营数据", icon: "ri-database-2-line", freq: "每周", desc: "ASIN · 店铺 · 品名 · SKU · MSKU · 退款率 · 评分 · 评论数 · 退货率 · ACoAS", tmpl: tmplSalesRating },
+  { key: "operation_data", label: "运营数据", icon: "ri-database-2-line", freq: "每周", desc: "ASIN · 店铺 · 品名 · SKU · 退款率 · 评分 · 评论数 · 退货率 · ACoAS", tmpl: tmplSalesRating },
   { key: "fba", label: "FBA 库存明细", icon: "ri-archive-line", freq: "每周", desc: "ASIN · SKU · FBA库存", tmpl: tmplFba },
   { key: "warehouse", label: "仓库明细(FBM)", icon: "ri-store-2-line", freq: "每周", desc: "SKU · 仓库 · 库存（各海外仓拆分）", tmpl: tmplWarehouse },
   { key: "transit_detail", label: "在途明细", icon: "ri-ship-line", freq: "每周", desc: "SKU · 承运商 · 目的仓 · 件数 · 预计到仓", tmpl: tmplTransitDetail },
