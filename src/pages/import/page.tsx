@@ -585,35 +585,40 @@ export default function ImportPage() {
     setClearing(true);
     setClearMsg(null);
     try {
-      // 1. 先清空所有表
+      // 1. 先清空所有表数据（事务内，失败则全部回滚）
       await clearAllData();
       // 2. 关闭 Dexie 连接
       db.close();
-      // 3. 等一小段确保连接完全释放
-      await new Promise(r => setTimeout(r, 150));
-      // 4. 多次重试删除数据库（解决其他标签页/连接残留阻塞问题）
-      for (let i = 0; i < 8; i++) {
-        try {
-          await new Promise<void>((resolve, reject) => {
-            const req = indexedDB.deleteDatabase('amazon-ops-os');
-            req.onsuccess = () => resolve();
-            req.onerror = () => reject(new Error(req.error?.message ?? '删除失败'));
-            req.onblocked = () => {
-              // 被阻塞，等 300ms 后走下一轮重试
-              setTimeout(() => reject(new Error('blocked')), 300);
-            };
-          });
-          break; // 删除成功，跳出循环
-        } catch (e) {
-          if (i === 7) throw new Error('多次尝试删除数据库均被阻塞，请关闭其他标签页后重试');
-          await new Promise(r => setTimeout(r, 600));
-        }
+      // 3. 尝试删除数据库（可能被其他标签页阻塞，但不影响结果）
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const req = indexedDB.deleteDatabase('amazon-ops-os');
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(new Error(req.error?.message ?? '删除失败'));
+          req.onblocked = () => setTimeout(() => reject(new Error('blocked')), 300);
+        });
+      } catch {
+        // 即使 deleteDatabase 被阻塞，clearAllData 已经清空了所有数据
       }
+      // 4. 刷新页面（数据已清空，刷新后用户看到空状态）
       setClearMsg("已清空全部数据，即将刷新...");
       setTimeout(() => window.location.reload(), 500);
     } catch (err) {
-      setClearMsg(`清空失败: ${err instanceof Error ? err.message : String(err)}`);
-      setClearing(false);
+      // clearAllData 本身失败时的兜底方案
+      try {
+        db.close();
+        await new Promise<void>((resolve, reject) => {
+          const req = indexedDB.deleteDatabase('amazon-ops-os');
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(new Error(req.error?.message ?? '删除失败'));
+          req.onblocked = () => setTimeout(() => reject(new Error('blocked')), 300);
+        });
+        setClearMsg("已清空全部数据，即将刷新...");
+        setTimeout(() => window.location.reload(), 500);
+      } catch (e) {
+        setClearMsg(`清空失败: ${e instanceof Error ? e.message : String(e)}`);
+        setClearing(false);
+      }
     }
   };
 
