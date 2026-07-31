@@ -477,7 +477,33 @@ export default function SkuList() {
 
       <Section
         title="SKU 列表"
-        subtitle={`共 ${filteredGroups.length} 个产品组，${totalMskus} 个 MSKU`}
+        subtitle={
+          <span className="flex items-center gap-3">
+            <span>共 {filteredGroups.length} 个产品组，{totalMskus} 个 MSKU</span>
+            <label className="flex items-center gap-1.5 text-[12px] text-foreground-500 cursor-pointer select-none hover:text-foreground-700">
+              <input
+                type="checkbox"
+                checked={selectedSkus.size > 0 && selectedSkus.size === totalMskus}
+                onChange={() => {
+                  if (selectedSkus.size === totalMskus) {
+                    setSelectedSkus(new Set());
+                  } else {
+                    const all = new Set<string>();
+                    filteredGroups.forEach((g) => g.children.forEach((c) => all.add(c.sku)));
+                    setSelectedSkus(all);
+                  }
+                }}
+                className="h-3.5 w-3.5 rounded border-background-300 cursor-pointer accent-primary-500"
+              />
+              全选
+            </label>
+            {selectedSkus.size > 0 && (
+              <span className="text-[12px] font-medium text-red-600">
+                已选 {selectedSkus.size} 个
+              </span>
+            )}
+          </span>
+        }
         icon="ri-price-tag-3-line"
         action={
           <div className="flex flex-wrap items-center gap-2">
