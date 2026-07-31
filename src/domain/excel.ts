@@ -7,6 +7,13 @@ const num = (v: unknown, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+/** 读取百分比值：Excel 百分比格式存为小数（7.23%→0.0723），自动转成整数（7.23） */
+const pct = (v: unknown, fallback = 0): number => {
+  const n = num(v, fallback);
+  if (n > 0 && n < 1) return Math.round(n * 10000) / 100;
+  return n;
+};
+
 const str = (v: unknown, fallback = ""): string => {
   if (v == null) return fallback;
   return String(v).trim();
@@ -86,6 +93,14 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       const costFob = num(row["FOB"]) > 0 ? num(row["FOB"]) : undefined;
       const costStorage = num(row["仓租"]) > 0 ? num(row["仓租"]) : undefined;
       const fulfillment = normalizeFulfillment(row["发货方式"]);
+      const upc = str(row["UPC"]) || undefined;
+      const category = str(row["品类"]) || undefined;
+      const launchDate = str(row["上架日期"]) || undefined;
+      const packageLength = num(row["包裹长cm"]) > 0 ? num(row["包裹长cm"]) : undefined;
+      const packageWidth = num(row["包裹宽cm"]) > 0 ? num(row["包裹宽cm"]) : undefined;
+      const packageHeight = num(row["包裹高cm"]) > 0 ? num(row["包裹高cm"]) : undefined;
+      const packageWeight = num(row["包裹重kg"]) > 0 ? num(row["包裹重kg"]) : undefined;
+      const unitsPerBox = num(row["单箱数"]) > 0 ? num(row["单箱数"]) : undefined;
 
       if (!seenSku.has(sku)) {
         // 首次出现 → 父SKU
@@ -97,6 +112,14 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
           price,
           asin,
           msku,
+          upc,
+          category,
+          launchDate,
+          packageLength,
+          packageWidth,
+          packageHeight,
+          packageWeight,
+          unitsPerBox,
           costFob,
           costStorage,
           fulfillment,
@@ -123,6 +146,14 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
           price,
           asin,
           msku,
+          upc,
+          category,
+          launchDate,
+          packageLength,
+          packageWidth,
+          packageHeight,
+          packageWeight,
+          unitsPerBox,
           costFob,
           groupSku: sku,       // 关联父SKU
           saleStatus: "active",
@@ -150,9 +181,9 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       // 可选字段：评分、评论数、广告费比、退货率、退款率
       const rating = num(row["评分"] ?? row["rating"]);
       const reviewCount = num(row["评论数"] ?? row["reviewCount"] ?? row["review_count"]);
-      const adRatio = num(row["广告费比"] ?? row["adRatio"]);
-      const returnRate = num(row["退货率"] ?? row["returnRate"]);
-      const refundRate = num(row["退款率"] ?? row["refundRate"]);
+      const adRatio = pct(row["广告费比"] ?? row["adRatio"]);
+      const returnRate = pct(row["退货率"] ?? row["returnRate"]);
+      const refundRate = pct(row["退款率"] ?? row["refundRate"]);
       dailySnapshot.push({
         date: today,
         sku,
@@ -187,9 +218,9 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       const asin = str(row["ASIN"]);
       const rating = num(row["评分"]);
       const reviewCount = num(row["评论数"]);
-      const adRatio = num(row["ACoAS"] ?? row["广告费比"]);
-      const returnRate = num(row["退货率"]);
-      const refundRate = num(row["退款率"]);
+      const adRatio = pct(row["ACoAS"] ?? row["广告费比"]);
+      const returnRate = pct(row["退货率"]);
+      const refundRate = pct(row["退款率"]);
 
       // Update or create SkuMaster
       const existingIdx = skuMaster.findIndex(s => s.sku === sku);
@@ -273,10 +304,19 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       const provider = str(row["承运商"]);
       const dest = str(row["目的仓"]);
       const warehouse = provider && dest ? `${provider}-${dest}` : provider || dest || "在途";
+      const etaRaw = row["预计到仓"];
+      // Excel 日期序列号（如 46233）转 YYYY-MM-DD
+      let etaDate: string;
+      if (typeof etaRaw === "number" && etaRaw > 0) {
+        const d = new Date(Date.UTC(1899, 11, 30 + Math.floor(etaRaw)));
+        etaDate = d.toISOString().slice(0, 10);
+      } else {
+        etaDate = str(etaRaw);
+      }
       const batch: TransitBatch = {
         warehouse,
         qty: num(row["件数"]),
-        etaDate: str(row["预计到仓"]),
+        etaDate,
         shipDate: str(row["出港日期"]) || undefined,
         statusText: str(row["在途情况"] ?? row["状态文字"]) || undefined,
         shipMethod: "sea",

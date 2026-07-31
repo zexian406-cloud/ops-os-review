@@ -93,9 +93,9 @@ const tmplBundle = () => {
   XLSX.utils.book_append_sheet(wb, s8, "头程更新");
 
   // Sheet 9: SKU标识符(一次性迁移)
-  const s9 = XLSX.utils.aoa_to_sheet([["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB", "仓租", "发货方式"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", 39.99, 28.5, 0.8, "FBA"]]);
-  s9["!dataValidations"] = [{ type: "list", formula1: '"FBA,FBM,混发"', sqref: "I2:I101" }];
-  s9["!cols"] = autoCols(["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB", "仓租", "发货方式"]);
+  const s9 = XLSX.utils.aoa_to_sheet([["店铺", "SKU", "品名", "MSKU", "ASIN", "UPC", "品类", "上架日期", "售价（总价）", "FOB", "仓租", "发货方式", "包裹长cm", "包裹宽cm", "包裹高cm", "包裹重kg", "单箱数"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", "4901234567890", "户外炉具", "2026-01-15", 39.99, 28.5, 0.8, "FBA", 30, 25, 20, 1.2, 10]]);
+  s9["!dataValidations"] = [{ type: "list", formula1: '"FBA,FBM,混发"', sqref: "L2:L101" }];
+  s9["!cols"] = autoCols(["店铺", "SKU", "品名", "MSKU", "ASIN", "UPC", "品类", "上架日期", "售价（总价）", "FOB", "仓租", "发货方式", "包裹长cm", "包裹宽cm", "包裹高cm", "包裹重kg", "单箱数"]);
   XLSX.utils.book_append_sheet(wb, s9, "SKU标识符");
 
   XLSX.writeFile(wb, "【模板】综合运营表.xlsx");
@@ -114,8 +114,8 @@ const tmplBundleCsv = () => {
 const tmplSalesRating = () => downloadTemplate("运营数据导入", ["ASIN", "店铺", "品名", "SKU", "退款率", "评分", "评论数", "退货率", "ACoAS"], ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", 0.05, 4.2, 156, 0.08, 0.12]);
 
 const tmplIdentifiers = () =>
-  downloadTemplate("SKU标识符(一次性迁移)", ["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB", "仓租", "发货方式"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", 39.99, 28.5, 0.8, "FBA"], [
-    { type: "list", formula1: '"FBA,FBM,混发"', sqref: "I2:I101" },
+  downloadTemplate("SKU标识符(一次性迁移)", ["店铺", "SKU", "品名", "MSKU", "ASIN", "UPC", "品类", "上架日期", "售价（总价）", "FOB", "仓租", "发货方式", "包裹长cm", "包裹宽cm", "包裹高cm", "包裹重kg", "单箱数"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", "4901234567890", "户外炉具", "2026-01-15", 39.99, 28.5, 0.8, "FBA", 30, 25, 20, 1.2, 10], [
+    { type: "list", formula1: '"FBA,FBM,混发"', sqref: "L2:L101" },
   ]);
 
 /* ────────── 标签页配置 ────────── */

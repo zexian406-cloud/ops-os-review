@@ -308,10 +308,16 @@ export function computeWarehouseTotals(inv?: InventoryLayer): {
 
   const inTransit = eT + wT + seT + scT;
 
+  // 兜底：四仓在途为0但有在途批次时，取在途批次汇总
+  const batchTransitTotal = inv?.transitBatches
+    ? inv.transitBatches.reduce((s, b) => s + n(b.qty), 0)
+    : 0;
+  const finalInTransit = inTransit > 0 ? inTransit : batchTransitTotal;
+
   return {
     inStock,
-    inTransit,
-    total: inStock + inTransit,
+    inTransit: finalInTransit,
+    total: inStock + finalInTransit,
     eastStock: eS,
     westStock: wS,
     southeastStock: seS,

@@ -248,7 +248,7 @@ export default function SkuDetail() {
     discountCostCommission, discountCostAd, discountCostReturn,
     discountAdEstimated, discountReturnFeeEstimated,
     costFob, costShipping, costDelivery, costCommission, costStorage, costAd, costReturn, costCoupon, costPromo,
-    returnFee30d, adRatio: calcAdRatio, returnRate: calcReturnRate,
+    returnFee30d, adRatio: calcAdRatio, returnRate: calcReturnRate, refundRate: calcRefundRate,
     inStockTotal, inTransitTotal, totalStock,
     daysOfCoverOnHand, daysOfCoverWithTransit,
     fbaReplenish, fbmReplenish,
@@ -728,6 +728,7 @@ export default function SkuDetail() {
               <div className="my-1.5 h-px bg-background-200/50" />
               <ProfitRow label="广告费比" value={`${latest ? latest.adRatio.toFixed(1) : "0"}%`} />
               <ProfitRow label="退货率" value={`${calcReturnRate.toFixed(1)}%`} />
+              <ProfitRow label="退款率" value={`${calcRefundRate.toFixed(1)}%`} />
             </div>
           </div>
 

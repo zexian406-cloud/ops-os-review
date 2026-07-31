@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
 import { db, getAllShops } from "@/domain/db";
@@ -356,6 +356,44 @@ export default function SkuList() {
 
   const [mskuOrder, setMskuOrder] = useState<Record<string, string[]>>(loadMskuOrder);
   const [parentOrder, setParentOrder] = useState<string[]>(loadParentOrder);
+  const [dragOverSku, setDragOverSku] = useState<string | null>(null);
+  const dragSkuRef = useRef<string | null>(null);
+
+  const handleDragStart = useCallback((sku: string) => {
+    dragSkuRef.current = sku;
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, sku: string) => {
+    e.preventDefault();
+    setDragOverSku(sku);
+  }, []);
+
+  const handleDrop = useCallback(() => {
+    const from = dragSkuRef.current;
+    const to = dragOverSku;
+    if (!from || !to || from === to) {
+      setDragOverSku(null);
+      return;
+    }
+    setParentOrder((prev) => {
+      let order = prev.length > 0 ? [...prev] : filteredGroups.map((g) => g.parent.sku);
+      const fromIdx = order.indexOf(from);
+      const toIdx = order.indexOf(to);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const [removed] = order.splice(fromIdx, 1);
+      order.splice(toIdx, 0, removed);
+      saveParentOrder(order);
+      return order;
+    });
+    setDragOverSku(null);
+    dragSkuRef.current = null;
+  }, [dragOverSku, filteredGroups]);
+
+  const handleDragEnd = useCallback(() => {
+    dragSkuRef.current = null;
+    setDragOverSku(null);
+  }, []);
+
   const filteredGroups = useMemo((): SkuGroup[] => {
     const storeId = shopMap.get(store) ?? store;
     return groups
