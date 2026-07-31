@@ -267,7 +267,9 @@ export default function ImportPage() {
         const sales7dRaw = num(row["7天销量"] ?? row["近7天日均"] ?? row["日销（近七天）"] ?? row["dailySales7d"]);
         const isWeeklyTotal = row["7天销量"] != null;
         const dailySales7d = isWeeklyTotal ? Math.round(sales7dRaw / 7 * 100) / 100 : sales7dRaw;
-        const monthlySales = num(row["30天销量"] ?? row["近30天销量"] ?? row["月销"] ?? row["monthlySales"]);
+        const monthlyRaw = num(row["30天销量"] ?? row["近30天销量"] ?? row["月销"] ?? row["monthlySales"]);
+        const isMonthlyTotal = row["30天销量"] != null;
+        const monthlySales = isMonthlyTotal ? Math.round(monthlyRaw / 30 * 100) / 100 : monthlyRaw;
 
         // 可选字段：评分、评论数、广告费比、退货率、退款率
         const rating = num(row["评分"] ?? row["rating"]);
