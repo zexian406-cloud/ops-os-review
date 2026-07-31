@@ -172,6 +172,58 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
     }
   }
 
+  // ── Step 2.5: Parse 运营数据导入 → update skuMaster + dailySnapshot ──
+  const opDataSheet = findSheet(wb, ["运营数据导入"]);
+  if (opDataSheet) {
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(opDataSheet, { defval: "" });
+    for (const row of rows) {
+      const sku = str(row["SKU"]);
+      if (!sku) continue;
+      const store = str(row["店铺"]) || "-";
+      const name = str(row["品名"]) || sku;
+      const msku = str(row["MSKU"]);
+      const asin = str(row["ASIN"]);
+      const salesRaw = num(row["销量"]);
+      const daily7d = salesRaw > 0 ? Math.round(salesRaw / 7 * 100) / 100 : 0;
+      const rating = num(row["评分"]);
+      const reviewCount = num(row["评论数"]);
+      const adRatio = num(row["ACoAS"] ?? row["广告费比"]);
+      const returnRate = num(row["退货率"]);
+      const refundRate = num(row["退款率"]);
+
+      // Update or create SkuMaster
+      const existingIdx = skuMaster.findIndex(s => s.sku === sku);
+      if (existingIdx >= 0) {
+        const m = skuMaster[existingIdx];
+        if (store) m.store = store;
+        if (name && name !== sku) m.name = name;
+        if (msku) m.msku = msku;
+        if (asin) m.asin = asin;
+      } else {
+        skuMaster.push({
+          sku, name, store, price: 0,
+          saleStatus: "active", fulfillment: "FBA",
+          msku: msku || undefined, asin: asin || undefined,
+        });
+      }
+
+      // Add dailySnapshot
+      dailySnapshot.push({
+        date: today, sku,
+        dailySales7d: daily7d, monthlySales: 0,
+        stockOnHand: 0, stockInTransit: 0,
+        daysOfCoverOnHand: daily7d > 0 ? 0 : 999,
+        daysOfCoverWithTransit: daily7d > 0 ? 0 : 999,
+        adSpend: 0, adRatio: adRatio || 0,
+        profit: 0, profitMargin: 0, totalCost: 0,
+        rating: rating || 0,
+        reviewCount: reviewCount > 0 ? reviewCount : undefined,
+        returnRate: returnRate || 0,
+        refundRate: refundRate > 0 ? refundRate : undefined,
+      });
+    }
+  }
+
   // ── Step 3: Parse FBA库存明细 → fbaStock map ──
   const fbaMap = new Map<string, number>();
   const fbaSheet = findSheet(wb, ["FBA库存明细", "FBA库存"]);

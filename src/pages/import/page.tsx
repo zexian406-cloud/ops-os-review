@@ -56,40 +56,45 @@ const tmplBundle = () => {
   s1["!cols"] = autoCols(["ASIN", "SKU", "店铺", "7天销量", "30天销量"]);
   XLSX.utils.book_append_sheet(wb, s1, "销量导入");
 
-  // Sheet 2: FBA库存明细
-  const s2 = XLSX.utils.aoa_to_sheet([["ASIN", "SKU", "FBA库存"], ["B0GC3HFWHP", "BFRS258", 186]]);
-  s2["!cols"] = autoCols(["ASIN", "SKU", "FBA库存"]);
-  XLSX.utils.book_append_sheet(wb, s2, "FBA库存明细");
+  // Sheet 2: 运营数据导入
+  const s2 = XLSX.utils.aoa_to_sheet([["ASIN", "店铺", "品名", "SKU", "MSKU", "销量", "退款率", "评分", "评论数", "退货率", "ACoAS"], ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", "BFRS258-GM", 24, 0.05, 4.2, 156, 0.08, 0.12]]);
+  s2["!cols"] = autoCols(["ASIN", "店铺", "品名", "SKU", "MSKU", "销量", "退款率", "评分", "评论数", "退货率", "ACoAS"]);
+  XLSX.utils.book_append_sheet(wb, s2, "运营数据导入");
 
-  // Sheet 3: 仓库明细(FBM)
-  const s3 = XLSX.utils.aoa_to_sheet([["SKU", "仓库", "库存"], ["BFRS258", "美西", 180]]);
-  s3["!cols"] = autoCols(["SKU", "仓库", "库存"]);
-  XLSX.utils.book_append_sheet(wb, s3, "仓库明细(FBM)");
+  // Sheet 3: FBA库存明细
+  const s3 = XLSX.utils.aoa_to_sheet([["ASIN", "SKU", "FBA库存"], ["B0GC3HFWHP", "BFRS258", 186]]);
+  s3["!cols"] = autoCols(["ASIN", "SKU", "FBA库存"]);
+  XLSX.utils.book_append_sheet(wb, s3, "FBA库存明细");
 
-  // Sheet 4: 在途明细
-  const s4 = XLSX.utils.aoa_to_sheet([["SKU", "承运商", "目的仓", "件数", "预计到仓"], ["BFRS258", "乐歌", "美西", 80, "2026-08-05"]]);
-  s4["!cols"] = autoCols(["SKU", "承运商", "目的仓", "件数", "预计到仓"]);
-  XLSX.utils.book_append_sheet(wb, s4, "在途明细");
+  // Sheet 4: 仓库明细(FBM)
+  const s4 = XLSX.utils.aoa_to_sheet([["SKU", "仓库", "库存"], ["BFRS258", "美西", 180]]);
+  s4["!cols"] = autoCols(["SKU", "仓库", "库存"]);
+  XLSX.utils.book_append_sheet(wb, s4, "仓库明细(FBM)");
 
-  // Sheet 5: 工厂明细
-  const s5 = XLSX.utils.aoa_to_sheet([["SKU", "工厂名", "件数", "交期", "状态"], ["BFRS258", "东莞美联", 120, "2026-08-25", "producing"]]);
-  s5["!cols"] = autoCols(["SKU", "工厂名", "件数", "交期", "状态"]);
-  XLSX.utils.book_append_sheet(wb, s5, "工厂明细");
+  // Sheet 5: 在途明细
+  const s5 = XLSX.utils.aoa_to_sheet([["SKU", "承运商", "目的仓", "件数", "预计到仓"], ["BFRS258", "乐歌", "美西", 80, "2026-08-05"]]);
+  s5["!cols"] = autoCols(["SKU", "承运商", "目的仓", "件数", "预计到仓"]);
+  XLSX.utils.book_append_sheet(wb, s5, "在途明细");
 
-  // Sheet 6: 产品成本更新
-  const s6 = XLSX.utils.aoa_to_sheet([["SKU", "FOB"], ["BFRS258", 28.5]]);
-  s6["!cols"] = autoCols(["SKU", "FOB"]);
-  XLSX.utils.book_append_sheet(wb, s6, "产品成本更新");
+  // Sheet 6: 工厂明细
+  const s6 = XLSX.utils.aoa_to_sheet([["SKU", "工厂名", "件数", "交期", "状态"], ["BFRS258", "东莞美联", 120, "2026-08-25", "producing"]]);
+  s6["!cols"] = autoCols(["SKU", "工厂名", "件数", "交期", "状态"]);
+  XLSX.utils.book_append_sheet(wb, s6, "工厂明细");
 
-  // Sheet 7: 头程更新
-  const s7 = XLSX.utils.aoa_to_sheet([["SKU", "头程费", "配送费"], ["BFRS258", 12.3, 4.56]]);
-  s7["!cols"] = autoCols(["SKU", "头程费", "配送费"]);
-  XLSX.utils.book_append_sheet(wb, s7, "头程更新");
+  // Sheet 7: 产品成本更新
+  const s7 = XLSX.utils.aoa_to_sheet([["SKU", "FOB"], ["BFRS258", 28.5]]);
+  s7["!cols"] = autoCols(["SKU", "FOB"]);
+  XLSX.utils.book_append_sheet(wb, s7, "产品成本更新");
 
-  // Sheet 8: SKU标识符(一次性迁移)
-  const s8 = XLSX.utils.aoa_to_sheet([["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", 39.99, 28.5]]);
-  s8["!cols"] = autoCols(["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB"]);
-  XLSX.utils.book_append_sheet(wb, s8, "SKU标识符");
+  // Sheet 8: 头程更新
+  const s8 = XLSX.utils.aoa_to_sheet([["SKU", "头程费", "配送费"], ["BFRS258", 12.3, 4.56]]);
+  s8["!cols"] = autoCols(["SKU", "头程费", "配送费"]);
+  XLSX.utils.book_append_sheet(wb, s8, "头程更新");
+
+  // Sheet 9: SKU标识符(一次性迁移)
+  const s9 = XLSX.utils.aoa_to_sheet([["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", 39.99, 28.5]]);
+  s9["!cols"] = autoCols(["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB"]);
+  XLSX.utils.book_append_sheet(wb, s9, "SKU标识符");
 
   XLSX.writeFile(wb, "【模板】综合运营表.xlsx");
 };
@@ -104,13 +109,16 @@ const tmplBundleCsv = () => {
   XLSX.writeFile(wb, "【模板】综合运营表.csv", { bookType: "csv" });
 };
 
+const tmplSalesRating = () => downloadTemplate("运营数据导入", ["ASIN", "店铺", "品名", "SKU", "MSKU", "销量", "退款率", "评分", "评论数", "退货率", "ACoAS"], ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", "BFRS258-GM", 24, 0.05, 4.2, 156, 0.08, 0.12]);
+
 const tmplIdentifiers = () =>
   downloadTemplate("SKU标识符(一次性迁移)", ["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", 39.99, 28.5]);
 
 /* ────────── 标签页配置 ────────── */
 const tabDefs = [
-  { key: "bundle", label: "综合运营表", icon: "ri-file-excel-2-line", freq: "首次", desc: "一键下载全部 8 个 Sheet · 周销量 / FBA / 仓库 / 在途 / 工厂 / 成本 / 头程 / SKU", tmpl: tmplBundle },
+  { key: "bundle", label: "综合运营表", icon: "ri-file-excel-2-line", freq: "首次", desc: "一键下载全部 9 个 Sheet · 运营数据 / 周销量 / FBA / 仓库 / 在途 / 工厂 / 成本 / 头程 / SKU", tmpl: tmplBundle },
   { key: "sales", label: "周销量", icon: "ri-bar-chart-line", freq: "每周", desc: "ASIN · SKU · 店铺 · 7天销量 · 30天销量（自动算日均）", tmpl: tmplSales },
+  { key: "operation_data", label: "运营数据", icon: "ri-database-2-line", freq: "每周", desc: "ASIN · 店铺 · 品名 · SKU · MSKU · 销量 · 退款率 · 评分 · 评论数 · 退货率 · ACoAS", tmpl: tmplSalesRating },
   { key: "fba", label: "FBA 库存明细", icon: "ri-archive-line", freq: "每周", desc: "ASIN · SKU · FBA库存", tmpl: tmplFba },
   { key: "warehouse", label: "仓库明细(FBM)", icon: "ri-store-2-line", freq: "每周", desc: "SKU · 仓库 · 库存（各海外仓拆分）", tmpl: tmplWarehouse },
   { key: "transit_detail", label: "在途明细", icon: "ri-ship-line", freq: "每周", desc: "SKU · 承运商 · 目的仓 · 件数 · 预计到仓", tmpl: tmplTransitDetail },
@@ -304,6 +312,100 @@ export default function ImportPage() {
 
       await upsertSnapshots(snapshots);
       setImportMsg({ tone: "ok", msg: `导入成功 · ${snapshots.length} 条销量快照（${today}）` });
+      setImportCounts((prev) => ({ ...prev, snapshots: (prev.snapshots ?? 0) + snapshots.length }));
+    } catch (err) {
+      setImportMsg({ tone: "err", msg: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setImporting(null);
+    }
+  };
+
+  /* ────────── 运营数据导入 ────────── */
+  const handleOperationDataImport = async (file: File) => {
+    setImportMsg(null);
+    setImporting("operation_data");
+    try {
+      const rows = await parseExcelFile(file);
+      const today = new Date().toISOString().slice(0, 10);
+      let skuCreated = 0;
+      let skuUpdated = 0;
+      const snapshots: Omit<DailySnapshot, "id">[] = [];
+
+      for (const row of rows) {
+        const sku = str(row["SKU"]);
+        if (!sku) continue;
+        const store = str(row["店铺"]) || selectedShopId || "-";
+        const name = str(row["品名"]) || sku;
+        const msku = str(row["MSKU"]);
+        const asin = str(row["ASIN"]);
+
+        // 更新/创建 SkuMaster
+        const existing = await db.skuMaster.get(sku);
+        if (existing) {
+          const updates: Partial<SkuMaster> = {};
+          if (store) updates.store = store;
+          if (name && name !== sku) updates.name = name;
+          if (msku) updates.msku = msku;
+          if (asin) updates.asin = asin;
+          if (Object.keys(updates).length > 0) {
+            await db.skuMaster.put({ ...existing, ...updates });
+            skuUpdated++;
+          }
+        } else {
+          const master: SkuMaster = {
+            sku,
+            name,
+            store,
+            price: 0,
+            saleStatus: "active",
+            fulfillment: "FBA",
+            msku: msku || undefined,
+            asin: asin || undefined,
+          };
+          await db.skuMaster.put(master);
+          skuCreated++;
+        }
+
+        // 销量 ÷7 → 日均，以及评分/评论数/退款率/退货率/ACoAS
+        const salesRaw = num(row["销量"]);
+        const dailySales7d = salesRaw > 0 ? Math.round(salesRaw / 7 * 100) / 100 : 0;
+        const rating = num(row["评分"]);
+        const reviewCount = num(row["评论数"]);
+        const adRatio = num(row["ACoAS"] ?? row["广告费比"]);
+        const returnRate = num(row["退货率"]);
+        const refundRate = num(row["退款率"]);
+
+        const prevSnapshot = await db.dailySnapshot.where({ sku }).reverse().first();
+        const snap: Omit<DailySnapshot, "id"> = {
+          date: today,
+          sku,
+          dailySales7d,
+          monthlySales: 0,
+          stockOnHand: prevSnapshot?.stockOnHand ?? 0,
+          stockInTransit: prevSnapshot?.stockInTransit ?? 0,
+          daysOfCoverOnHand: dailySales7d > 0 ? 0 : 999,
+          daysOfCoverWithTransit: dailySales7d > 0 ? 0 : 999,
+          adSpend: prevSnapshot?.adSpend ?? 0,
+          adRatio: adRatio || (prevSnapshot?.adRatio ?? 0),
+          profit: prevSnapshot?.profit ?? 0,
+          profitMargin: prevSnapshot?.profitMargin ?? 0,
+          totalCost: prevSnapshot?.totalCost ?? 0,
+          rating: rating || (prevSnapshot?.rating ?? 0),
+          reviewCount: reviewCount > 0 ? reviewCount : prevSnapshot?.reviewCount,
+          returnRate: returnRate || (prevSnapshot?.returnRate ?? 0),
+          refundRate: refundRate > 0 ? refundRate : prevSnapshot?.refundRate,
+        };
+        snap.daysOfCoverOnHand = snap.dailySales7d > 0 ? Number((snap.stockOnHand / snap.dailySales7d).toFixed(1)) : 999;
+        snap.daysOfCoverWithTransit = snap.dailySales7d > 0 ? Number(((snap.stockOnHand + snap.stockInTransit) / snap.dailySales7d).toFixed(1)) : 999;
+        snapshots.push(snap);
+      }
+
+      await upsertSnapshots(snapshots);
+      const parts = [];
+      if (skuCreated > 0) parts.push(`新建SKU ${skuCreated} 个`);
+      if (skuUpdated > 0) parts.push(`更新SKU ${skuUpdated} 个`);
+      parts.push(`快照 ${snapshots.length} 条`);
+      setImportMsg({ tone: "ok", msg: `导入成功 · ${parts.join(" · ")}（${today}）` });
       setImportCounts((prev) => ({ ...prev, snapshots: (prev.snapshots ?? 0) + snapshots.length }));
     } catch (err) {
       setImportMsg({ tone: "err", msg: err instanceof Error ? err.message : String(err) });
@@ -1069,7 +1171,9 @@ export default function ImportPage() {
             activeTab,
             activeTab === "sales"
               ? handleSalesImport
-              : activeTab === "fba"
+              : activeTab === "operation_data"
+                ? handleOperationDataImport
+                : activeTab === "fba"
                 ? handleFbaImport
                 : activeTab === "warehouse"
                   ? handleWarehouseImport
@@ -1085,7 +1189,7 @@ export default function ImportPage() {
             `上传${currentTab.label} Excel`
           )}
 
-          {activeTab === "sales" && (
+          {activeTab === "sales" || activeTab === "operation_data" && (
             <div className="mt-3 rounded-lg bg-background-100/60 p-3 text-[12px] text-foreground-600">
               <i className="ri-information-line mr-1 text-accent-600" aria-hidden />
               每次导入会创建新的日期快照，历史数据不会覆盖。Dashboard 会自动显示本周 vs 上周的环比变化。
