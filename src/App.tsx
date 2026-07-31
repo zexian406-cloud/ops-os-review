@@ -3,7 +3,6 @@ import { AppRoutes } from "./router";
 import { I18nextProvider } from "react-i18next";
 import i18n from "./i18n";
 import { useEffect, useState } from "react";
-import { ensureSeedData } from "./domain/seed";
 
 function App() {
   const [ready, setReady] = useState(false);
@@ -17,9 +16,7 @@ function App() {
       document.documentElement.classList.add("dark");
     }
 
-    ensureSeedData()
-      .catch((err) => console.error("[seed] failed", err))
-      .finally(() => setReady(true));
+    setReady(true);
   }, []);
 
   if (!ready) {
