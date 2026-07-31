@@ -57,8 +57,8 @@ const tmplBundle = () => {
   XLSX.utils.book_append_sheet(wb, s1, "销量导入");
 
   // Sheet 2: 运营数据导入
-  const s2 = XLSX.utils.aoa_to_sheet([["ASIN", "店铺", "品名", "SKU", "MSKU", "销量", "退款率", "评分", "评论数", "退货率", "ACoAS"], ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", "BFRS258-GM", 24, 0.05, 4.2, 156, 0.08, 0.12]]);
-  s2["!cols"] = autoCols(["ASIN", "店铺", "品名", "SKU", "MSKU", "销量", "退款率", "评分", "评论数", "退货率", "ACoAS"]);
+  const s2 = XLSX.utils.aoa_to_sheet([["ASIN", "店铺", "品名", "SKU", "MSKU", "退款率", "评分", "评论数", "退货率", "ACoAS"], ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", "BFRS258-GM", 0.05, 4.2, 156, 0.08, 0.12]]);
+  s2["!cols"] = autoCols(["ASIN", "店铺", "品名", "SKU", "MSKU", "退款率", "评分", "评论数", "退货率", "ACoAS"]);
   XLSX.utils.book_append_sheet(wb, s2, "运营数据导入");
 
   // Sheet 3: FBA库存明细
@@ -109,7 +109,7 @@ const tmplBundleCsv = () => {
   XLSX.writeFile(wb, "【模板】综合运营表.csv", { bookType: "csv" });
 };
 
-const tmplSalesRating = () => downloadTemplate("运营数据导入", ["ASIN", "店铺", "品名", "SKU", "MSKU", "销量", "退款率", "评分", "评论数", "退货率", "ACoAS"], ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", "BFRS258-GM", 24, 0.05, 4.2, 156, 0.08, 0.12]);
+const tmplSalesRating = () => downloadTemplate("运营数据导入", ["ASIN", "店铺", "品名", "SKU", "MSKU", "退款率", "评分", "评论数", "退货率", "ACoAS"], ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", "BFRS258-GM", 0.05, 4.2, 156, 0.08, 0.12]);
 
 const tmplIdentifiers = () =>
   downloadTemplate("SKU标识符(一次性迁移)", ["店铺", "SKU", "品名", "MSKU", "ASIN", "售价（总价）", "FOB"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", 39.99, 28.5]);
@@ -118,7 +118,7 @@ const tmplIdentifiers = () =>
 const tabDefs = [
   { key: "bundle", label: "综合运营表", icon: "ri-file-excel-2-line", freq: "首次", desc: "一键下载全部 9 个 Sheet · 运营数据 / 周销量 / FBA / 仓库 / 在途 / 工厂 / 成本 / 头程 / SKU", tmpl: tmplBundle },
   { key: "sales", label: "周销量", icon: "ri-bar-chart-line", freq: "每周", desc: "ASIN · SKU · 店铺 · 7天销量 · 30天销量（自动算日均）", tmpl: tmplSales },
-  { key: "operation_data", label: "运营数据", icon: "ri-database-2-line", freq: "每周", desc: "ASIN · 店铺 · 品名 · SKU · MSKU · 销量 · 退款率 · 评分 · 评论数 · 退货率 · ACoAS", tmpl: tmplSalesRating },
+  { key: "operation_data", label: "运营数据", icon: "ri-database-2-line", freq: "每周", desc: "ASIN · 店铺 · 品名 · SKU · MSKU · 退款率 · 评分 · 评论数 · 退货率 · ACoAS", tmpl: tmplSalesRating },
   { key: "fba", label: "FBA 库存明细", icon: "ri-archive-line", freq: "每周", desc: "ASIN · SKU · FBA库存", tmpl: tmplFba },
   { key: "warehouse", label: "仓库明细(FBM)", icon: "ri-store-2-line", freq: "每周", desc: "SKU · 仓库 · 库存（各海外仓拆分）", tmpl: tmplWarehouse },
   { key: "transit_detail", label: "在途明细", icon: "ri-ship-line", freq: "每周", desc: "SKU · 承运商 · 目的仓 · 件数 · 预计到仓", tmpl: tmplTransitDetail },
@@ -336,7 +336,6 @@ export default function ImportPage() {
         if (!sku) continue;
         const store = str(row["店铺"]) || selectedShopId || "-";
         const name = str(row["品名"]) || sku;
-        const msku = str(row["MSKU"]);
         const asin = str(row["ASIN"]);
 
         // 更新/创建 SkuMaster
@@ -345,7 +344,6 @@ export default function ImportPage() {
           const updates: Partial<SkuMaster> = {};
           if (store) updates.store = store;
           if (name && name !== sku) updates.name = name;
-          if (msku) updates.msku = msku;
           if (asin) updates.asin = asin;
           if (Object.keys(updates).length > 0) {
             await db.skuMaster.put({ ...existing, ...updates });
@@ -359,16 +357,13 @@ export default function ImportPage() {
             price: 0,
             saleStatus: "active",
             fulfillment: "FBA",
-            msku: msku || undefined,
             asin: asin || undefined,
           };
           await db.skuMaster.put(master);
           skuCreated++;
         }
 
-        // 销量 ÷7 → 日均，以及评分/评论数/退款率/退货率/ACoAS
-        const salesRaw = num(row["销量"]);
-        const dailySales7d = salesRaw > 0 ? Math.round(salesRaw / 7 * 100) / 100 : 0;
+        // 评分/评论数/退款率/退货率/ACoAS
         const rating = num(row["评分"]);
         const reviewCount = num(row["评论数"]);
         const adRatio = num(row["ACoAS"] ?? row["广告费比"]);
@@ -379,12 +374,12 @@ export default function ImportPage() {
         const snap: Omit<DailySnapshot, "id"> = {
           date: today,
           sku,
-          dailySales7d,
+          dailySales7d: 0,
           monthlySales: 0,
           stockOnHand: prevSnapshot?.stockOnHand ?? 0,
           stockInTransit: prevSnapshot?.stockInTransit ?? 0,
-          daysOfCoverOnHand: dailySales7d > 0 ? 0 : 999,
-          daysOfCoverWithTransit: dailySales7d > 0 ? 0 : 999,
+          daysOfCoverOnHand: 999,
+          daysOfCoverWithTransit: 999,
           adSpend: prevSnapshot?.adSpend ?? 0,
           adRatio: adRatio || (prevSnapshot?.adRatio ?? 0),
           profit: prevSnapshot?.profit ?? 0,
@@ -395,8 +390,6 @@ export default function ImportPage() {
           returnRate: returnRate || (prevSnapshot?.returnRate ?? 0),
           refundRate: refundRate > 0 ? refundRate : prevSnapshot?.refundRate,
         };
-        snap.daysOfCoverOnHand = snap.dailySales7d > 0 ? Number((snap.stockOnHand / snap.dailySales7d).toFixed(1)) : 999;
-        snap.daysOfCoverWithTransit = snap.dailySales7d > 0 ? Number(((snap.stockOnHand + snap.stockInTransit) / snap.dailySales7d).toFixed(1)) : 999;
         snapshots.push(snap);
       }
 
