@@ -12,7 +12,9 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "决策",
     items: [
-      { to: "/", label: "总览", sub: "今日待办", icon: "ri-dashboard-3-line" },
+      { to: "/", label: "驾驶舱", sub: "今日第一眼", icon: "ri-dashboard-3-line" },
+      { to: "/diagnosis", label: "异常诊断", sub: "原因拆解", icon: "ri-search-eye-line" },
+      { to: "/data-health", label: "数据健康", sub: "导入质量检查", icon: "ri-heart-pulse-line" },
       { to: "/shipment", label: "发货决策", sub: "自动补货建议", icon: "ri-truck-line" },
       { to: "/risk", label: "风险中心", sub: "全站异常", icon: "ri-error-warning-line" },
     ],
@@ -33,6 +35,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { to: "/todo", label: "我的待办", sub: "轻量任务记录", icon: "ri-list-check-3" },
       { to: "/ops-logs", label: "操作记录", sub: "运营操作日志", icon: "ri-history-line" },
+      { to: "/competitors", label: "竞品记录", sub: "价格/评分跟踪", icon: "ri-spy-line" },
     ],
   },
   {

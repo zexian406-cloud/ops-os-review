@@ -385,14 +385,46 @@ export interface Shop {
   createdAt: string;
 }
 // ═══════ 运营操作记录（SKU操作日志） ═══════
+/** 异常类型（用于"诊断→处理"闭环关联） */
+export type AnomalyType =
+  | "stockout"      // 断货
+  | "low_stock"     // 库存紧张
+  | "overstock"     // 库存积压
+  | "profit"        // 利润异常
+  | "ad"            // 广告异常
+  | "rating"        // 评分下降
+  | "return"        // 退货异常
+  | "listing"       // Listing 待优化
+  | "other";        // 其他
+
 export interface OpsLog {
   id?: string;
   sku: string;             // 所属 SKU（父SKU或MSKU）
   msku?: string;           // 具体 MSKU（选填，关联到具体子SKU）
   skuName?: string;        // 品名（冗余，方便展示）
   date: string;            // 操作日期 YYYY-MM-DD
-  action: string;          // 操作动作，如"降价"、"开广告"、"优化Listing"
-  detail: string;          // 详细说明
+  action: string;          // 处理动作，如"降价"、"开广告"、"优化Listing"
+  detail?: string;         // 详细说明（旧字段，向后兼容）
   impact?: string;         // 销量影响描述，如"销量上涨约30%"
+  // ── 增强字段（贴合"记录处理过程"：日期/异常类型/原因/处理动作/备注）──
+  anomalyType?: AnomalyType; // 关联的异常类型（来自诊断）
+  reason?: string;         // 原因
+  note?: string;           // 备注
   createdAt: string;       // 记录创建时间
+}
+
+// ═══════ 竞品记录（运营手动记录竞品变化） ═══════
+export interface CompetitorRecord {
+  id: string;
+  sku?: string;              // 关联自家 SKU（选填）
+  skuName?: string;          // 自家品名（冗余，方便展示）
+  competitorName: string;    // 竞品名 / 标识
+  competitorAsin?: string;   // 竞品 ASIN（选填）
+  date: string;              // 记录日期 YYYY-MM-DD
+  price?: number;            // 竞品价格
+  rating?: number;           // 竞品评分
+  reviewCount?: number;      // Review 数量
+  coupon?: number;           // Coupon 金额 / 比例
+  note?: string;             // 变化备注
+  createdAt: string;         // 记录创建时间
 }

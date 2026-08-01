@@ -16,6 +16,7 @@ import type {
   CalculationRecord,
   Shop,
   OpsLog,
+  CompetitorRecord,
 } from "./types";
 
 /**
@@ -37,6 +38,7 @@ export class AmzOpsDB extends Dexie {
   todos!: Table<TodoItem, string>;
   shops!: Table<Shop, string>;
   opsLogs!: Table<OpsLog, string>;
+  competitors!: Table<CompetitorRecord, string>;
 
   constructor() {
     super("amazon-ops-os");
@@ -108,6 +110,9 @@ export class AmzOpsDB extends Dexie {
     });
     this.version(8).stores({
       warehouseMappings: "++id, warehouseName, region",
+    });
+    this.version(9).stores({
+      competitors: "id, sku, date, competitorName",
     });
   }
 }
@@ -337,28 +342,31 @@ export async function clearAllData(): Promise<void> {
     db.config,
     db.warehouseProviders,
     db.estimates,
-    db.todos,
-    db.calculationRecords,
-    db.shops,
-    async () => {
-      await db.skuMaster.clear();
-      await db.dailySnapshot.clear();
-      await db.inventoryLayer.clear();
-      await db.campaigns.clear();
-      await db.promotions.clear();
-      await db.manualPromotions.clear();
-      await db.alerts.clear();
-      await db.config.clear();
-      await db.warehouseProviders.clear();
-      await db.estimates.clear();
-      await db.todos.clear();
-      await db.calculationRecords.clear();
-      await db.shops.clear();
-      await db.opsLogs.clear();
-      await db.warehouseMappings.clear();
-    }
-  );
-}
+      db.todos,
+      db.calculationRecords,
+      db.shops,
+      db.opsLogs,
+      db.competitors,
+      async () => {
+        await db.skuMaster.clear();
+        await db.dailySnapshot.clear();
+        await db.inventoryLayer.clear();
+        await db.campaigns.clear();
+        await db.promotions.clear();
+        await db.manualPromotions.clear();
+        await db.alerts.clear();
+        await db.config.clear();
+        await db.warehouseProviders.clear();
+        await db.estimates.clear();
+        await db.todos.clear();
+        await db.calculationRecords.clear();
+        await db.shops.clear();
+        await db.opsLogs.clear();
+        await db.warehouseMappings.clear();
+        await db.competitors.clear();
+      }
+    );
+  }
 
 /** Export the whole database as one JSON blob for cloud sync. */
 export async function exportSnapshot(): Promise<{
@@ -372,9 +380,10 @@ export async function exportSnapshot(): Promise<{
   config: { key: string; value: unknown }[];
   shops: Shop[];
   opsLogs: OpsLog[];
+  competitors: CompetitorRecord[];
   exportedAt: string;
 }> {
-  const [skuMaster, dailySnapshot, inventoryLayer, campaigns, promotions, manualPromotions, alerts, config, shops, opsLogs, warehouseMappings] =
+  const [skuMaster, dailySnapshot, inventoryLayer, campaigns, promotions, manualPromotions, alerts, config, shops, opsLogs, warehouseMappings, competitors] =
     await Promise.all([
       db.skuMaster.toArray(),
       db.dailySnapshot.toArray(),
@@ -387,6 +396,7 @@ export async function exportSnapshot(): Promise<{
       db.shops.toArray(),
       db.opsLogs.toArray(),
       db.warehouseMappings.toArray(),
+      db.competitors.toArray(),
     ]);
   return {
     skuMaster,
@@ -400,6 +410,7 @@ export async function exportSnapshot(): Promise<{
     shops,
     opsLogs,
     warehouseMappings,
+    competitors,
     exportedAt: new Date().toISOString(),
   };
 }
@@ -416,6 +427,7 @@ export async function importSnapshot(payload: {
   config?: { key: string; value: unknown }[];
   shops?: Shop[];
   opsLogs?: OpsLog[];
+  competitors?: CompetitorRecord[];
   warehouseMappings?: WarehouseMapping[];
 }): Promise<void> {
   await db.transaction(
@@ -434,6 +446,7 @@ export async function importSnapshot(payload: {
     db.calculationRecords,
     db.shops,
     db.opsLogs,
+    db.competitors,
     db.warehouseMappings,
     async () => {
       if (payload.skuMaster) {
@@ -478,6 +491,10 @@ export async function importSnapshot(payload: {
         await db.opsLogs.clear();
         await db.opsLogs.bulkPut(payload.opsLogs);
       }
+      if (payload.competitors) {
+        await db.competitors.clear();
+        await db.competitors.bulkPut(payload.competitors);
+      }
       if (payload.warehouseMappings) {
         await db.warehouseMappings.clear();
         await db.warehouseMappings.bulkPut(payload.warehouseMappings);
@@ -499,6 +516,9 @@ export async function addOpsLog(
   impact?: string,
   msku?: string,
   skuName?: string,
+  anomalyType?: string,
+  reason?: string,
+  note?: string,
 ): Promise<string> {
   const id = `opslog_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   await db.opsLogs.put({
@@ -510,6 +530,9 @@ export async function addOpsLog(
     action,
     detail,
     impact,
+    anomalyType,
+    reason,
+    note,
     createdAt: new Date().toISOString(),
   });
   return id;
@@ -519,7 +542,31 @@ export async function deleteOpsLog(id: string): Promise<void> {
   await db.opsLogs.delete(id);
 }
 
-// ==================== Warehouse Mapping helpers ====================
+// ==================== Competitor records (竞品记录) ====================
+export async function getCompetitors(): Promise<CompetitorRecord[]> {
+  const all = await db.competitors.toArray();
+  return all.sort((a, b) => (b.date ?? "").localeCompare(a.date ?? "") || (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+}
+
+export async function addCompetitor(rec: Omit<CompetitorRecord, "id" | "createdAt"> & Partial<Pick<CompetitorRecord, "id" | "createdAt">>): Promise<string> {
+  const id = rec.id ?? `comp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  await db.competitors.put({
+    ...rec,
+    id,
+    createdAt: rec.createdAt ?? new Date().toISOString(),
+  });
+  return id;
+}
+
+export async function updateCompetitor(id: string, patch: Partial<CompetitorRecord>): Promise<void> {
+  await db.competitors.update(id, patch);
+}
+
+export async function deleteCompetitor(id: string): Promise<void> {
+  await db.competitors.delete(id);
+}
+
+// ==================== Warehouse Mapping helpers ======================
 
 /** 智能猜测仓库名对应的区域 */
 export function guessRegion(warehouseName: string): import("./types").WarehouseRegion | null {

@@ -21,6 +21,9 @@ const CalculatorPage = lazy(() => import("@/pages/calculator/page"));
 const TodoPage = lazy(() => import("@/pages/todo/page"));
 const ShopManagementPage = lazy(() => import("@/pages/shop-management/page"));
 const OpsLogsPage = lazy(() => import("@/pages/ops-logs/page"));
+const DiagnosisPage = lazy(() => import("@/pages/diagnosis/page"));
+const DataHealthPage = lazy(() => import("@/pages/data-health/page"));
+const CompetitorsPage = lazy(() => import("@/pages/competitors/page"));
 
 const routes: RouteObject[] = [
   {
@@ -43,6 +46,9 @@ const routes: RouteObject[] = [
       { path: "calculator", element: <CalculatorPage /> },
       { path: "todo", element: <TodoPage /> },
       { path: "ops-logs", element: <OpsLogsPage /> },
+      { path: "diagnosis", element: <DiagnosisPage /> },
+      { path: "data-health", element: <DataHealthPage /> },
+      { path: "competitors", element: <CompetitorsPage /> },
       { path: "shop-management", element: <ShopManagementPage /> },
     ],
   },

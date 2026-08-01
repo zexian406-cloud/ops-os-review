@@ -4,6 +4,7 @@ import { db, deleteOpsLog } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
+import { anomalyLabel } from "@/domain/anomaly";
 import type { OpsLog } from "@/domain/types";
 
 const ACTION_ICONS: Record<string, string> = {
@@ -28,6 +29,18 @@ const ACTION_TONES: Record<string, string> = {
   "报活动": "text-amber-600 bg-amber-50",
   "站外推广": "text-cyan-600 bg-cyan-50",
   "其他": "text-foreground-500 bg-foreground-50",
+};
+
+const ANOMALY_TONES: Record<string, string> = {
+  "stockout": "text-red-700 bg-red-50",
+  "low_stock": "text-orange-700 bg-orange-50",
+  "overstock": "text-amber-700 bg-amber-50",
+  "profit": "text-rose-700 bg-rose-50",
+  "ad": "text-blue-700 bg-blue-50",
+  "rating": "text-purple-700 bg-purple-50",
+  "return": "text-pink-700 bg-pink-50",
+  "listing": "text-cyan-700 bg-cyan-50",
+  "other": "text-foreground-600 bg-foreground-50",
 };
 
 function groupByDate(logs: OpsLog[]): Map<string, OpsLog[]> {
@@ -136,6 +149,15 @@ export default function OpsLogsPage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <Badge tone="secondary">{log.action}</Badge>
+                                {log.anomalyType && (
+                                  <span
+                                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                                      ANOMALY_TONES[log.anomalyType] ?? "text-foreground-600 bg-foreground-50"
+                                    }`}
+                                  >
+                                    {anomalyLabel(log.anomalyType)}
+                                  </span>
+                                )}
                                 {log.msku ? (
                                   <Link
                                     to={`/sku/${encodeURIComponent(log.sku)}`}
@@ -155,7 +177,21 @@ export default function OpsLogsPage() {
                                   <span className="text-[11px] text-foreground-400">{log.skuName}</span>
                                 )}
                               </div>
-                              <div className="mt-1 text-[13px] text-foreground-900">{log.detail}</div>
+                              {log.detail && (
+                                <div className="mt-1 text-[13px] text-foreground-900">{log.detail}</div>
+                              )}
+                              {log.reason && log.reason !== log.detail && (
+                                <div className="mt-1 text-[12px] text-foreground-600">
+                                  <span className="font-medium text-foreground-400">原因：</span>
+                                  {log.reason}
+                                </div>
+                              )}
+                              {log.note && log.note !== log.detail && (
+                                <div className="mt-0.5 text-[12px] text-foreground-500">
+                                  <span className="font-medium text-foreground-400">备注：</span>
+                                  {log.note}
+                                </div>
+                              )}
                               {log.impact && (
                                 <div className="mt-1 flex items-center gap-1 text-[12px] text-accent-700">
                                   <i className="ri-bar-chart-line text-[13px]" aria-hidden />

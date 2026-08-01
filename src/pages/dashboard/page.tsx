@@ -217,11 +217,10 @@ export default function Dashboard() {
     types: AlertType[]; href: string;
   }> = [
     { key: "stock", title: "库存风险", icon: "ri-inbox-2-line", tone: "danger", types: ["stockout", "low_stock", "overstock"], href: "/risk?type=stock" },
-    { key: "profit", title: "利润异常", icon: "ri-money-dollar-circle-line", tone: "warn", types: ["profit"], href: "/operations?tab=profit" },
-    { key: "ad", title: "广告异常", icon: "ri-megaphone-line", tone: "primary", types: ["ad"], href: "/operations?tab=ad" },
-    { key: "rating", title: "评分下降", icon: "ri-star-half-line", tone: "warn", types: ["rating"], href: "/operations?tab=rating" },
-    { key: "return", title: "退货异常", icon: "ri-arrow-go-back-line", tone: "secondary", types: ["return", "review"], href: "/operations?tab=return" },
-    { key: "listing", title: "Listing 待优化", icon: "ri-file-edit-line", tone: "accent", types: ["listing"], href: "/operations?tab=listing" },
+    { key: "profit", title: "利润风险", icon: "ri-money-dollar-circle-line", tone: "warn", types: ["profit"], href: "/operations?tab=profit" },
+    { key: "ad", title: "广告风险", icon: "ri-megaphone-line", tone: "primary", types: ["ad"], href: "/operations?tab=ad" },
+    { key: "rating", title: "评分风险", icon: "ri-star-half-line", tone: "warn", types: ["rating"], href: "/operations?tab=rating" },
+    { key: "return", title: "退货风险", icon: "ri-arrow-go-back-line", tone: "secondary", types: ["return", "review"], href: "/operations?tab=return" },
   ];
 
   // ── Section renderers ──
@@ -567,7 +566,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="font-heading text-[32px] font-bold leading-tight text-foreground-950 tracking-tight">
-              总览
+              今日运营驾驶舱
             </h1>
             <select
               value={shopFilter}
@@ -594,6 +593,41 @@ export default function Dashboard() {
           {filteredShipmentSuggestions.length} 个 SKU 建议发货
           {activePromos.length > 0 && ` · ${activePromos.length} 个促销进行中/待开始`}
         </p>
+      </div>
+
+      {/* ── 驾驶舱：每天打开第一眼知道该处理什么 ── */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <Link to="/risk" className="glass-card glass-card-hover group flex flex-col justify-center p-5 cursor-pointer">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground-400">今日紧急异常</div>
+          <div className={`mono-num mt-2 font-heading text-[44px] font-bold leading-none ${urgentAlertCount > 0 ? "text-red-600" : "text-accent-600"}`}>{urgentAlertCount}</div>
+          <div className="mt-2 text-[12px] text-foreground-500">紧急 {criticalCount} · 关注 {warnCount}</div>
+        </Link>
+        {[
+          { title: "库存风险", icon: "ri-inbox-2-line", tone: "danger", count: groupCount("stockout") + groupCount("low_stock") + groupCount("overstock"), href: "/risk?type=stock" },
+          { title: "利润风险", icon: "ri-money-dollar-circle-line", tone: "warn", count: groupCount("profit"), href: "/operations?tab=profit" },
+          { title: "广告风险", icon: "ri-megaphone-line", tone: "primary", count: groupCount("ad"), href: "/operations?tab=ad" },
+          { title: "评分风险", icon: "ri-star-half-line", tone: "warn", count: groupCount("rating"), href: "/operations?tab=rating" },
+        ].map((c) => {
+          const toneCls = c.tone === "danger"
+            ? "bg-red-50 text-red-500"
+            : c.tone === "warn"
+            ? "bg-secondary-100 text-secondary-700"
+            : "bg-foreground-100 text-foreground-700";
+          return (
+            <Link key={c.title} to={c.href} className="glass-card glass-card-hover group flex flex-col justify-center p-5 cursor-pointer">
+              <div className="flex items-center justify-between">
+                <span className={`flex h-9 w-9 items-center justify-center rounded-[12px] text-[17px] transition-transform group-hover:scale-110 ${toneCls}`}>
+                  <i className={c.icon} aria-hidden />
+                </span>
+                {c.count > 0 && (
+                  <span className={`flex h-6 min-w-[24px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white ${c.tone === "danger" ? "bg-red-500" : c.tone === "warn" ? "bg-secondary-500" : "bg-foreground-800"}`}>{c.count}</span>
+                )}
+              </div>
+              <div className="mt-3 text-[13px] font-semibold text-foreground-800">{c.title}</div>
+              <div className="mt-0.5 text-[11px] text-foreground-400">{c.count > 0 ? "点击查看" : "全部正常"}</div>
+            </Link>
+          );
+        })}
       </div>
 
       {/* Layout Customizer */}
