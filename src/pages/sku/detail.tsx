@@ -64,9 +64,10 @@ export default function SkuDetail() {
     if (parentSkuId) return snapshots.filter((s) => s.sku === parentSkuId).sort((a, b) => a.date.localeCompare(b.date));
     return own;
   }, [snapshots, skuId, parentSkuId]);
-  const latest = history.at(-1);
   const inv = (latestInventory.get(skuId ?? "") ?? (parentSkuId ? latestInventory.get(parentSkuId) : undefined));
   const curSnap = (latestSnapshot.get(skuId ?? "") ?? (parentSkuId ? latestSnapshot.get(parentSkuId) : undefined));
+  // 优先使用 merged 快照（同日多来源导入已合并），避免取到运营导入的 0 值原始记录
+  const latest = curSnap ?? history.at(-1);
   const prevSnap = (previousSnapshot?.get(skuId ?? "") ?? (parentSkuId ? previousSnapshot?.get(parentSkuId) : undefined));
   const skuPromos = useMemo(() => promotions.filter((p) => p.sku === skuId), [promotions, skuId]);
   const skuManualPromos = useMemo(() => manualPromotions.filter((p) => p.sku === skuId), [manualPromotions, skuId]);
