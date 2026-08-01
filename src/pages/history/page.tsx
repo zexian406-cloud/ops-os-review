@@ -26,14 +26,21 @@ function metricLevel(m: MetricView): Level {
 
 function MetricCell({ m }: { m: MetricView }) {
   const level = metricLevel(m);
-  const arrow = m.prev == null || m.cur === m.prev ? "→" : m.cur > m.prev ? "↑" : "↓";
+  const delta = m.prev == null ? null : m.cur - m.prev;
+  const hasPrev = m.prev != null;
+  // 用 RemixIcon 矢量图标表达方向，替代文字箭头（可访问性：加 aria-label）
+  const iconCls = level === "good" ? "ri-arrow-up-line" : level === "bad" ? "ri-arrow-down-line" : "ri-arrow-subtract-line";
   const color = level === "good" ? "text-accent-600" : level === "bad" ? "text-red-500" : "text-foreground-400";
+  const ariaLabel = level === "good" ? "环比上升" : level === "bad" ? "环比下降" : "环比无变化";
   const fmt = (v: number) => (m.digits === 0 ? Math.round(v).toLocaleString() : v.toFixed(m.digits));
   return (
     <div className="flex items-baseline gap-1.5">
       <span className="mono-num text-[13px] font-semibold text-foreground-900">{fmt(m.cur)}{m.unit}</span>
-      {m.prev != null && (
-        <span className={`text-[11px] font-medium ${color}`}>{arrow} {fmt(Math.abs(m.cur - m.prev))}{m.unit}</span>
+      {hasPrev && (
+        <span className={`flex items-center gap-0.5 text-[11px] font-medium ${color}`}>
+          <i className={`${iconCls} text-[13px]`} aria-label={ariaLabel} />
+          {fmt(Math.abs(delta!))}{m.unit}
+        </span>
       )}
     </div>
   );
@@ -124,7 +131,7 @@ export default function HistoryPage() {
         </div>
         <h1 className="font-heading text-[26px] font-bold text-foreground-950">历史对比</h1>
         <p className="text-[13px] text-foreground-500">
-          本周（最新导入）对比上周（上次导入）· 上升↑ 绿 / 下降↓ 红 · ⚠ 表示异常（利润率转负、库存转负）
+          本周（最新导入）对比上周（上次导入）· 上升绿 / 下降红 · ⚠ 表示异常（利润率转负、库存转负）
         </p>
       </div>
 

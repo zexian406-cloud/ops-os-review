@@ -39,8 +39,11 @@ describe("历史对比页集成冒烟", () => {
     expect(await screen.findByText("本周 vs 上周")).toBeInTheDocument();
     // SKU 行出现
     expect(screen.getByRole("link", { name: /SKU-H/ })).toBeInTheDocument();
-    // 至少出现一个「跌」箭头（销量/评分/TACOS 下降）
-    expect(container.textContent).toContain("↓");
+    // 至少出现一个「跌」图标（销量/评分/TACOS 下降 → ri-arrow-down-line）
+    const downIcons = container.querySelectorAll(".ri-arrow-down-line");
+    expect(downIcons.length).toBeGreaterThan(0);
+    // 下跌图标带有可访问性标签
+    expect(downIcons[0]).toHaveAttribute("aria-label", "环比下降");
   });
 
   it("只灌 latest 不灌 previous → 出现「暂无历史数据」空态，不白屏", async () => {

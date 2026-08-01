@@ -73,6 +73,7 @@ function RecordModal({
   const today = new Date().toISOString().slice(0, 10);
   const [sku, setSku] = useState("");
   const [promotionId, setPromotionId] = useState("");
+  const [msku, setMsku] = useState("");
   const [action, setAction] = useState("");
   const [anomalyType, setAnomalyType] = useState<AnomalyType | "">("");
   const [reason, setReason] = useState("");
@@ -87,6 +88,20 @@ function RecordModal({
     [promotions, sku],
   );
 
+  // 该 SKU 关联的子 MSKU 列表（可选、不必选）：
+  // 取 parentSku===sku 或 groupSku===sku 的子行，收集其 msku（无则回退其 sku）；
+  // 若该父 SKU 自身带 msku 也一并纳入。
+  const skuMskus = useMemo(() => {
+    if (!sku) return [];
+    const parent = skuMaster.find((s) => s.sku === sku);
+    const children = skuMaster.filter((s) => s.sku !== sku && (s.parentSku === sku || s.groupSku === sku));
+    const values: string[] = [];
+    const push = (v?: string) => { if (v && !values.includes(v)) values.push(v); };
+    children.forEach((c) => push(c.msku || c.sku));
+    push(parent?.msku);
+    return values;
+  }, [skuMaster, sku]);
+
   const selectedSkuName = skuMaster.find((s) => s.sku === sku)?.name;
 
   const handleSave = async () => {
@@ -99,7 +114,7 @@ function RecordModal({
       action.trim(),
       note.trim() || reason.trim(),
       impact.trim() || undefined,
-      undefined,
+      msku || undefined,
       selectedSkuName,
       anomalyType || undefined,
       reason.trim() || undefined,
@@ -145,6 +160,21 @@ function RecordModal({
             </select>
             {sku && skuPromotions.length === 0 && (
               <div className="mt-1 text-[11px] text-foreground-400">该 SKU 暂无促销活动</div>
+            )}
+          </div>
+
+          <div>
+            <label className={labelCls}>关联 MSKU <span className="text-[11px] font-normal text-foreground-400">（可选）</span></label>
+            <select value={msku} onChange={(e) => setMsku(e.target.value)}
+              disabled={!sku}
+              className={inputCls + (sku ? "" : " opacity-50 cursor-not-allowed")}>
+              <option value="">{sku ? "选择 MSKU（选填）" : "先选择 SKU"}</option>
+              {skuMskus.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            {sku && skuMskus.length === 0 && (
+              <div className="mt-1 text-[11px] text-foreground-400">该 SKU 暂无子 MSKU</div>
             )}
           </div>
 
