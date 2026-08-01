@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import { computeAll, computeWeeklyPromoCost } from "@/domain/calculator";
 import { useOpsData } from "@/domain/store";
-import { upsertSnapshots, db } from "@/domain/db";
+import { upsertSnapshots, db, addOpsLog, deleteOpsLog } from "@/domain/db";
 import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
@@ -19,7 +19,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import SkuLayoutCustomizer from "@/components/layout/SkuLayoutCustomizer";
 import { useSkuDetailLayout } from "@/hooks/useLayoutPrefs";
 import type { WowDelta } from "@/domain/engine";
-import type { DailySnapshot, SkuMaster, InventoryLayer, TodoItem } from "@/domain/types";
+import type { DailySnapshot, SkuMaster, InventoryLayer, TodoItem, OpsLog } from "@/domain/types";
 
 const lifecycleLabel: Record<string, string> = { new: "新品", growth: "成长", mature: "成熟", clearance: "清货", eol: "停售" };
 const saleStatusLabel: Record<string, string> = { active: "在售", clearance: "清货", paused: "暂停", discontinued: "停售" };
@@ -103,6 +103,34 @@ export default function SkuDetail() {
   }, [skuId]);
 
   const todayStr = new Date().toISOString().slice(0, 10);
+
+  // ── 运营操作记录 ──
+  const [opsLogs, setOpsLogs] = useState<OpsLog[]>([]);
+  const [newLogDate, setNewLogDate] = useState(todayStr);
+  const [newLogAction, setNewLogAction] = useState("");
+  const [newLogDetail, setNewLogDetail] = useState("");
+  const [newLogImpact, setNewLogImpact] = useState("");
+  const [newLogMsku, setNewLogMsku] = useState("");
+
+  useEffect(() => {
+    if (!skuId) return;
+    db.opsLogs.where("sku").equals(skuId).reverse().sortBy("createdAt").then(setOpsLogs);
+  }, [skuId]);
+
+  const handleAddLog = async () => {
+    if (!skuId || !newLogAction || !newLogDetail) return;
+    const id = await addOpsLog(skuId, newLogDate, newLogAction, newLogDetail, newLogImpact || undefined, newLogMsku || undefined, sku?.name);
+    setOpsLogs((prev) => [{ id, sku: skuId, msku: newLogMsku || undefined, skuName: sku?.name, date: newLogDate, action: newLogAction, detail: newLogDetail, impact: newLogImpact || undefined, createdAt: new Date().toISOString() }, ...prev]);
+    setNewLogAction("");
+    setNewLogDetail("");
+    setNewLogImpact("");
+    setNewLogMsku("");
+  };
+
+  const handleDeleteLog = async (id: string) => {
+    await deleteOpsLog(id);
+    setOpsLogs((prev) => prev.filter((l) => l.id !== id));
+  };
 
   const toggleTodo = async (todo: TodoItem) => {
     const updated = { ...todo, completed: true, completedAt: new Date().toISOString() };
@@ -1469,6 +1497,123 @@ export default function SkuDetail() {
               })}
             </div>
           )}
+        </Section>
+      )}
+
+      {/* ======= 运营操作记录 ======= */}
+      {(
+        <Section
+          title="运营操作记录"
+          icon="ri-history-line"
+          subtitle={opsLogs.length > 0 ? `${opsLogs.length} 条记录` : "暂无记录"}
+        >
+          <div className="space-y-3">
+            {/* 新增记录表单 */}
+            <div className="rounded-lg border border-background-200/70 bg-background-100/50 p-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                <div>
+                  <label className={labelCls}>操作日期</label>
+                  <input
+                    type="date"
+                    value={newLogDate}
+                    onChange={(e) => setNewLogDate(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>操作类型</label>
+                  <select
+                    value={newLogAction}
+                    onChange={(e) => setNewLogAction(e.target.value)}
+                    className={selectCls}
+                  >
+                    <option value="">选择操作</option>
+                    <option value="降价">降价</option>
+                    <option value="涨价">涨价</option>
+                    <option value="开广告">开广告</option>
+                    <option value="关广告">关广告</option>
+                    <option value="优化Listing">优化Listing</option>
+                    <option value="补货">补货</option>
+                    <option value="报活动">报活动</option>
+                    <option value="站外推广">站外推广</option>
+                    <option value="其他">其他</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>MSKU</label>
+                  <input
+                    type="text"
+                    value={newLogMsku}
+                    onChange={(e) => setNewLogMsku(e.target.value)}
+                    placeholder={sku?.msku ? `默认 ${sku.msku}` : "关联 MSKU"}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>详细说明</label>
+                  <input
+                    type="text"
+                    value={newLogDetail}
+                    onChange={(e) => setNewLogDetail(e.target.value)}
+                    placeholder="如：降低售价至$29.99"
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+              <div className="mt-2 flex items-center gap-3">
+                <input
+                  type="text"
+                  value={newLogImpact}
+                  onChange={(e) => setNewLogImpact(e.target.value)}
+                  placeholder="对销量/数据的影响（选填，如：日均销量上涨约30%）"
+                  className={inputCls + " flex-1"}
+                />
+                <button
+                  type="button"
+                  onClick={handleAddLog}
+                  disabled={!newLogAction || !newLogDetail}
+                  className="shrink-0 rounded-md bg-primary-500 px-4 py-1.5 text-[12px] font-medium text-white hover:bg-primary-600 disabled:opacity-40 cursor-pointer"
+                >
+                  记录
+                </button>
+              </div>
+            </div>
+
+            {/* 记录列表 */}
+            {opsLogs.length === 0 ? (
+              <EmptyState icon="ri-history-line" title="暂无操作记录" desc="记录你对该SKU做过的运营操作，方便后续汇报和复盘" />
+            ) : (
+              <div className="space-y-2">
+                {opsLogs.map((log) => (
+                  <div key={log.id} className="flex items-start gap-3 rounded-lg border border-background-200/70 bg-background-50 px-4 py-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[14px] text-primary-700">
+                      <i className="ri-file-edit-line" aria-hidden />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Badge tone="secondary">{log.action}</Badge>
+                        <span className="text-[11px] text-foreground-400">{log.date}</span>
+                      </div>
+                      <div className="mt-1 text-[13px] text-foreground-900">{log.detail}</div>
+                      {log.impact && (
+                        <div className="mt-0.5 flex items-center gap-1 text-[12px] text-accent-700">
+                          <i className="ri-bar-chart-line text-[13px]" aria-hidden />
+                          {log.impact}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteLog(log.id!)}
+                      className="shrink-0 text-[14px] text-foreground-400 hover:text-red-500 cursor-pointer"
+                    >
+                      <i className="ri-delete-bin-line" aria-hidden />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </Section>
       )}
     </div>

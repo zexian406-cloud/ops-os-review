@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 export type DashboardSectionKey =
   | "kpi"
   | "todo"
+  | "opsLogs"
   | "weekCompare"
   | "promotions"
   | "riskBuckets"
@@ -201,6 +202,7 @@ interface LayoutPrefs {
 const DEFAULT_DASHBOARD_ORDER: DashboardSectionKey[] = [
   "kpi",
   "todo",
+  "opsLogs",
   "weekCompare",
   "promotions",
   "riskBuckets",
@@ -473,6 +475,7 @@ export function useShipmentKpiLayout() {
 export const DASHBOARD_LABELS: Record<DashboardSectionKey, string> = {
   kpi: "核心指标",
   todo: "我的待办",
+  opsLogs: "操作记录",
   weekCompare: "本周 vs 上周",
   promotions: "促销活动",
   riskBuckets: "今日待处理",

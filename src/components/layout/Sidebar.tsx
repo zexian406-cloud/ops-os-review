@@ -32,6 +32,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "工具",
     items: [
       { to: "/todo", label: "我的待办", sub: "轻量任务记录", icon: "ri-list-check-3" },
+      { to: "/ops-logs", label: "操作记录", sub: "运营操作日志", icon: "ri-history-line" },
     ],
   },
   {

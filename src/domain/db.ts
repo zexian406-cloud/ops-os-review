@@ -14,6 +14,7 @@ import type {
   TodoItem,
   CalculationRecord,
   Shop,
+  OpsLog,
 } from "./types";
 
 /**
@@ -33,6 +34,7 @@ export class AmzOpsDB extends Dexie {
   calculationRecords!: Table<CalculationRecord, string>;
   todos!: Table<TodoItem, string>;
   shops!: Table<Shop, string>;
+  opsLogs!: Table<OpsLog, string>;
 
   constructor() {
     super("amazon-ops-os");
@@ -86,6 +88,21 @@ export class AmzOpsDB extends Dexie {
       estimates: "id",
       todos: "id, completed, dueDate",
       shops: "id, name, createdAt",
+    });
+    this.version(7).stores({
+      skuMaster: "sku, store, fulfillment, saleStatus, owner, category, lifecycle",
+      dailySnapshot: "++id, [sku+date], date, sku",
+      inventoryLayer: "++id, [sku+date], date, sku",
+      campaigns: "id, startDate, endDate, active",
+      promotions: "id, sku, store, type, status, startDate, endDate",
+      manualPromotions: "id, sku, type, startDate, endDate",
+      alerts: "id, sku, type, severity, status, date",
+      config: "key",
+      warehouseProviders: "id",
+      estimates: "id",
+      todos: "id, completed, dueDate",
+      shops: "id, name, createdAt",
+      opsLogs: "id, sku, date, action",
     });
   }
 }
@@ -332,6 +349,7 @@ export async function clearAllData(): Promise<void> {
       await db.todos.clear();
       await db.calculationRecords.clear();
       await db.shops.clear();
+      await db.opsLogs.clear();
     }
   );
 }
@@ -347,9 +365,10 @@ export async function exportSnapshot(): Promise<{
   alerts: Alert[];
   config: { key: string; value: unknown }[];
   shops: Shop[];
+  opsLogs: OpsLog[];
   exportedAt: string;
 }> {
-  const [skuMaster, dailySnapshot, inventoryLayer, campaigns, promotions, manualPromotions, alerts, config, shops] =
+  const [skuMaster, dailySnapshot, inventoryLayer, campaigns, promotions, manualPromotions, alerts, config, shops, opsLogs] =
     await Promise.all([
       db.skuMaster.toArray(),
       db.dailySnapshot.toArray(),
@@ -360,6 +379,7 @@ export async function exportSnapshot(): Promise<{
       db.alerts.toArray(),
       db.config.toArray(),
       db.shops.toArray(),
+      db.opsLogs.toArray(),
     ]);
   return {
     skuMaster,
@@ -371,6 +391,7 @@ export async function exportSnapshot(): Promise<{
     alerts,
     config,
     shops,
+    opsLogs,
     exportedAt: new Date().toISOString(),
   };
 }
@@ -386,6 +407,7 @@ export async function importSnapshot(payload: {
   alerts?: Alert[];
   config?: { key: string; value: unknown }[];
   shops?: Shop[];
+  opsLogs?: OpsLog[];
 }): Promise<void> {
   await db.transaction(
     "rw",
@@ -402,6 +424,7 @@ export async function importSnapshot(payload: {
     db.todos,
     db.calculationRecords,
     db.shops,
+    db.opsLogs,
     async () => {
       if (payload.skuMaster) {
         await db.skuMaster.clear();
@@ -441,6 +464,42 @@ export async function importSnapshot(payload: {
         await db.shops.clear();
         await db.shops.bulkPut(payload.shops);
       }
+      if (payload.opsLogs) {
+        await db.opsLogs.clear();
+        await db.opsLogs.bulkPut(payload.opsLogs);
+      }
     }
   );
+}
+// ==================== OpsLog CRUD ====================
+export async function getOpsLogs(sku: string): Promise<OpsLog[]> {
+  return db.opsLogs.where("sku").equals(sku).reverse().sortBy("createdAt");
+}
+
+export async function addOpsLog(
+  sku: string,
+  date: string,
+  action: string,
+  detail: string,
+  impact?: string,
+  msku?: string,
+  skuName?: string,
+): Promise<string> {
+  const id = `opslog_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  await db.opsLogs.put({
+    id,
+    sku,
+    msku,
+    skuName,
+    date,
+    action,
+    detail,
+    impact,
+    createdAt: new Date().toISOString(),
+  });
+  return id;
+}
+
+export async function deleteOpsLog(id: string): Promise<void> {
+  await db.opsLogs.delete(id);
 }

@@ -10,7 +10,7 @@ import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
-import type { AlertType, TodoItem, Shop } from "@/domain/types";
+import type { AlertType, TodoItem, Shop, OpsLog } from "@/domain/types";
 import AlertList from "./AlertList";
 import LayoutCustomizer from "@/components/layout/LayoutCustomizer";
 import { useDashboardLayout, type DashboardSectionKey, type KpiMetricKey, KPI_METRIC_LABELS, KPI_METRIC_ICONS, KPI_METRIC_TONES } from "@/hooks/useLayoutPrefs";
@@ -39,6 +39,7 @@ export default function Dashboard() {
   } = useOpsData();
 
   const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [opsLogs, setOpsLogs] = useState<OpsLog[]>([]);
   const [shops, setShops] = useState<Shop[]>([]);
   const [shopsMap, setShopsMap] = useState<Map<string, string>>(new Map());
   const [promosExpanded, setPromosExpanded] = useState(false);
@@ -51,6 +52,9 @@ export default function Dashboard() {
     setTodos(all.filter((t) => !t.completed).sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   };
   useEffect(() => { loadTodos(); }, [loading]);
+  useEffect(() => {
+    db.opsLogs.orderBy("createdAt").reverse().limit(10).toArray().then(setOpsLogs);
+  }, [loading]);
 
   useEffect(() => {
     getAllShops().then((allShops) => {
@@ -288,6 +292,41 @@ export default function Dashboard() {
         </div>
       </Section>
     ) : null,
+
+    opsLogs: (
+      <Section title="近期操作记录" icon="ri-history-line" subtitle={`${opsLogs.length} 条`}
+        action={<Link to="/ops-logs" className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer whitespace-nowrap">查看全部 →</Link>}
+      >
+        {opsLogs.length === 0 ? (
+          <EmptyState icon="ri-history-line" title="暂无操作记录" desc="去 SKU 详情页记录运营操作" />
+        ) : (
+          <div className="space-y-2">
+            {opsLogs.slice(0, 5).map((log) => {
+              const dateLabel = log.date === today ? "今天" : log.date === yesterday ? "昨天" : log.date;
+              return (
+                <Link
+                  key={log.id}
+                  to={`/sku/${encodeURIComponent(log.sku)}`}
+                  className="flex items-start gap-3 rounded-[14px] border border-background-200/70 bg-background-50 px-3.5 py-2.5 transition-all hover:border-background-300 hover:shadow-sm"
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-100 text-[14px] text-primary-700">
+                    <i className="ri-file-edit-line" aria-hidden />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-medium text-foreground-900">{log.action}</span>
+                      {log.msku && <span className="text-[11px] text-foreground-500">{log.msku}</span>}
+                    </div>
+                    <div className="mt-0.5 text-[12px] text-foreground-600 truncate">{log.detail}</div>
+                    <div className="mt-0.5 text-[11px] text-foreground-400">{dateLabel}</div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </Section>
+    ),
 
     weekCompare: (
       <Section title="本周 vs 上周环比对比" icon="ri-bar-chart-grouped-line" subtitle="柱状图对比近7天 vs 上期近7天 · 销量 / 广告费比 / 退货退款率 / 评分">
@@ -559,7 +598,7 @@ export default function Dashboard() {
         <LayoutCustomizer
           visibleKeys={visibleKeys}
           orderedKeys={orderedKeys}
-          allKeys={["kpi", "todo", "weekCompare", "promotions", "riskBuckets", "alerts", "shipment", "wowBar"]}
+          allKeys={["kpi", "todo", "opsLogs", "weekCompare", "promotions", "riskBuckets", "alerts", "shipment", "wowBar"]}
           toggle={toggleSection}
           move={moveSection}
           onClose={() => setCustomizing(false)}

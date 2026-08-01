@@ -375,3 +375,15 @@ export interface Shop {
   name: string;
   createdAt: string;
 }
+// ═══════ 运营操作记录（SKU操作日志） ═══════
+export interface OpsLog {
+  id?: string;
+  sku: string;             // 所属 SKU（父SKU或MSKU）
+  msku?: string;           // 具体 MSKU（选填，关联到具体子SKU）
+  skuName?: string;        // 品名（冗余，方便展示）
+  date: string;            // 操作日期 YYYY-MM-DD
+  action: string;          // 操作动作，如"降价"、"开广告"、"优化Listing"
+  detail: string;          // 详细说明
+  impact?: string;         // 销量影响描述，如"销量上涨约30%"
+  createdAt: string;       // 记录创建时间
+}

@@ -17,6 +17,7 @@ import ProfitEstimate from "@/pages/profit-estimate/page";
 import CalculatorPage from "@/pages/calculator/page";
 import TodoPage from "@/pages/todo/page";
 import ShopManagementPage from "@/pages/shop-management/page";
+import OpsLogsPage from "@/pages/ops-logs/page";
 
 const routes: RouteObject[] = [
   {
@@ -38,6 +39,7 @@ const routes: RouteObject[] = [
       { path: "profit-estimate", element: <ProfitEstimate /> },
       { path: "calculator", element: <CalculatorPage /> },
       { path: "todo", element: <TodoPage /> },
+      { path: "ops-logs", element: <OpsLogsPage /> },
       { path: "shop-management", element: <ShopManagementPage /> },
     ],
   },
