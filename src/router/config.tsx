@@ -23,7 +23,6 @@ const ShopManagementPage = lazy(() => import("@/pages/shop-management/page"));
 const OpsLogsPage = lazy(() => import("@/pages/ops-logs/page"));
 const DiagnosisPage = lazy(() => import("@/pages/diagnosis/page"));
 const DataHealthPage = lazy(() => import("@/pages/data-health/page"));
-const CompetitorsPage = lazy(() => import("@/pages/competitors/page"));
 const HistoryPage = lazy(() => import("@/pages/history/page"));
 
 const routes: RouteObject[] = [
@@ -50,7 +49,6 @@ const routes: RouteObject[] = [
       { path: "diagnosis", element: <DiagnosisPage /> },
       { path: "data-health", element: <DataHealthPage /> },
       { path: "history", element: <HistoryPage /> },
-      { path: "competitors", element: <CompetitorsPage /> },
       { path: "shop-management", element: <ShopManagementPage /> },
     ],
   },

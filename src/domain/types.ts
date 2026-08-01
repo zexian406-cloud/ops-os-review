@@ -414,19 +414,3 @@ export interface OpsLog {
   promotionName?: string;  // 关联促销活动名称（冗余，方便展示）
   createdAt: string;       // 记录创建时间
 }
-
-// ═══════ 竞品记录（运营手动记录竞品变化） ═══════
-export interface CompetitorRecord {
-  id: string;
-  sku?: string;              // 关联自家 SKU（选填）
-  skuName?: string;          // 自家品名（冗余，方便展示）
-  competitorName: string;    // 竞品名 / 标识
-  competitorAsin?: string;   // 竞品 ASIN（选填）
-  date: string;              // 记录日期 YYYY-MM-DD
-  price?: number;            // 竞品价格
-  rating?: number;           // 竞品评分
-  reviewCount?: number;      // Review 数量
-  coupon?: number;           // Coupon 金额 / 比例
-  note?: string;             // 变化备注
-  createdAt: string;         // 记录创建时间
-}
