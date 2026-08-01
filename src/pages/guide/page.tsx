@@ -643,9 +643,6 @@ export default function GuidePage() {
         <div className="text-[12px] text-foreground-500">
           Amazon Ops OS v2 · SSOT 运营管理系统 · 本地运行 · 数据 100% 私密
         </div>
-        <div className="mt-1 text-[11px] text-foreground-400">
-          有问题？跟你的 AI 搭子聊聊天，随时帮你改~
-        </div>
       </div>
     </div>
   );
