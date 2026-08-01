@@ -1,0 +1,26 @@
+# Cloudflare Pages 响应头配置
+# 文档: https://developers.cloudflare.com/pages/configuration/headers/
+
+# 带 hash 指纹的静态资源：永久缓存 + 不可变（内容变则文件名变）
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.css
+  Cache-Control: public, max-age=31536000, immutable
+
+# 兜底：禁止任何 source map 被公开访问（即便误生成也不泄露源码）
+/*.map
+  Cache-Control: no-store
+  X-Robots-Tag: noindex
+
+# 全局安全头
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'

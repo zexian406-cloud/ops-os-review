@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ops-os-review.pages.dev/sitemap.xml

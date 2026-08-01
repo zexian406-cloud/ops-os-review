@@ -71,12 +71,31 @@ export default defineConfig({
   ],
   base,
   build: {
-    sourcemap: true,
+    // P0: 关闭生产 source map，避免未混淆源码/目录结构经 *.js.map 公开泄露
+    sourcemap: false,
     outDir: 'out',
+    // P1: 拆分 vendor，使带 hash 的第三方包可长缓存、首屏主包更轻
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('recharts') || id.includes('/d3-') || id.includes('victory')) return 'charts';
+          if (id.includes('xlsx') || id.includes('codepage')) return 'xlsx';
+          if (
+            id.includes('react-router') ||
+            id.includes('react-i18next') ||
+            id.includes('i18next') ||
+            id.includes('@rematch') ||
+            id.includes('react-redux')
+          ) return 'router-i18n';
+          return 'vendor';
+        },
+      },
+    },
   },
   resolve: {
     alias: {
-      "@": resolve(__dirname, "./src"),
+      "@": resolve(import.meta.dirname, "./src"),
     },
   },
   server: {

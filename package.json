@@ -1,12 +1,8 @@
 {
   "dependencies": {
-    "@stripe/react-stripe-js": "4.0.2",
-    "@supabase/supabase-js": "2.57.4",
     "dexie": "4.0.10",
-    "firebase": "12.0.0",
     "i18next": "25.4.1",
     "i18next-browser-languagedetector": "^8.2.0",
-    "lucide-react": "0.539.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-i18next": "^15.6.0",

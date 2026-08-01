@@ -1,5 +1,0 @@
-请找到 src/pages/import/page.tsx 中的 handleClear 函数，在 await clearAllData() 之后添加一行：await db.config.put({ key: "seeded_v9", value: true }); 然后再 db.close()。
-
-原因是 clearAllData() 清空了所有表（包括 seeded_v9 配置标记），页面刷新后种子数据函数 I6() 检测不到标记，又重新填充了所有演示数据。
-
-添加后构建并部署。

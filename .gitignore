@@ -1,4 +1,10 @@
 node_modules/
 dist/
+out/
 .env
 *.local
+
+# 构建产物 / 压缩包 / 日志不应入库
+*.tar.gz
+coze_msg*.txt
+.DS_Store
