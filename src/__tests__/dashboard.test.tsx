@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Dashboard from "@/pages/dashboard/page";
 import { db } from "@/domain/db";
@@ -25,7 +25,7 @@ beforeEach(async () => {
 });
 
 describe("驾驶舱集成冒烟", () => {
-  it("健康度最低 TOP10 区块出现，含分数徽章与下钻链接", async () => {
+  it("健康度最低 TOP10 区块出现，含分数徽章与下钻链接（默认收起，展开后可见）", async () => {
     render(
       <MemoryRouter>
         <Dashboard />
@@ -35,14 +35,18 @@ describe("驾驶舱集成冒烟", () => {
     // 等待加载完成
     await screen.findByText("今日运营驾驶舱");
 
-    // TOP10 区块标题
+    // TOP10 区块标题与右上角「查看全部 SKU」在标题栏，始终可见（不受折叠影响）
     expect(screen.getByText("健康度最低 TOP10")).toBeInTheDocument();
-    // 下钻链接（区块右上角「查看全部 SKU →」）
     expect(screen.getByText(/查看全部 SKU/)).toBeInTheDocument();
-    // SKU 下钻链接（TOP10 表格内，可能多处出现，断言至少存在）
-    expect(
-      screen.getAllByRole("link", { name: /SKU-DASH-1/ }).length,
-    ).toBeGreaterThan(0);
+
+    // 默认收起：表格内容（SKU 下钻链接、分数徽章）未渲染
+    expect(screen.queryAllByRole("link", { name: /SKU-DASH-1/ }).length).toBe(0);
+
+    // 点击区块右侧的「展开」开关
+    fireEvent.click(screen.getByLabelText("展开"));
+
+    // 展开后：SKU 下钻链接与分数徽章出现
+    expect((await screen.findAllByRole("link", { name: /SKU-DASH-1/ })).length).toBeGreaterThan(0);
     // 分数徽章等级文本（品2 rating<3.8 → 关注）
     expect(screen.getAllByText("关注").length).toBeGreaterThan(0);
   });

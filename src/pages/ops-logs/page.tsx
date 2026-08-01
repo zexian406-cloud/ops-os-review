@@ -11,7 +11,7 @@ const ACTION_ICONS: Record<string, string> = {
   "降价": "ri-arrow-down-line",
   "涨价": "ri-arrow-up-line",
   "开广告": "ri-megaphone-line",
-  "关广告": "ri-megaphone-off-line",
+  "关广告": "ri-megaphone-line",
   "优化Listing": "ri-edit-line",
   "补货": "ri-truck-line",
   "报活动": "ri-flashlight-line",

@@ -133,7 +133,7 @@ const tabDefs = [
   { key: "fba", label: "FBA 库存明细", icon: "ri-archive-line", freq: "每周", desc: "ASIN · SKU · FBA库存", tmpl: tmplFba },
   { key: "warehouse", label: "仓库明细(FBM)", icon: "ri-store-2-line", freq: "每周", desc: "SKU · 仓库 · 库存（各海外仓拆分）", tmpl: tmplWarehouse },
   { key: "transit_detail", label: "在途明细", icon: "ri-ship-line", freq: "每周", desc: "SKU · 承运商 · 目的仓 · 件数 · 预计到仓", tmpl: tmplTransitDetail },
-  { key: "factory", label: "工厂明细", icon: "ri-factory-line", freq: "按需", desc: "SKU · 工厂名 · 件数 · 交期", tmpl: tmplFactory },
+  { key: "factory", label: "工厂明细", icon: "ri-building-line", freq: "按需", desc: "SKU · 工厂名 · 件数 · 交期", tmpl: tmplFactory },
   { key: "cost", label: "产品成本", icon: "ri-price-tag-3-line", freq: "每月/手动", desc: "更新各 SKU 的 FOB 产品成本", tmpl: tmplProductCost },
   { key: "shipping", label: "头程更新", icon: "ri-ship-2-line", freq: "每月/手动", desc: "更新头程费 + 配送费", tmpl: tmplShipping },
   { key: "identifiers", label: "SKU 标识符", icon: "ri-barcode-line", freq: "一次性迁移", desc: "店铺 · SKU · 品名 · MSKU · ASIN · 售价 · FOB · 仓租 · 发货方式", tmpl: tmplIdentifiers },
@@ -1110,7 +1110,7 @@ export default function ImportPage() {
                 body: "批次级导入：SKU · 承运商 · 目的仓 · 件数 · 预计到仓。数据直接从同事给的表格复制粘贴过来即可。",
               },
               {
-                icon: "ri-factory-line",
+                icon: "ri-building-line",
                 title: "6. 工厂明细（按需）",
                 body: "SKU · 工厂名 · 件数 · 交期。工厂生产进度或新批次下单时更新。",
               },

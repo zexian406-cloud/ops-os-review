@@ -655,6 +655,9 @@ export default function Dashboard() {
       {/* ── 健康度最低 TOP10 ── */}
       {healthTop10.length > 0 && (
         <Section title="健康度最低 TOP10" subtitle="按综合健康分升序，优先处理低分 SKU" icon="ri-heart-pulse-line"
+          collapsible
+          defaultCollapsed
+          collapsible defaultCollapsed
           action={<Link to="/sku" className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer whitespace-nowrap">查看全部 SKU →</Link>}
         >
           <div className="overflow-x-auto">

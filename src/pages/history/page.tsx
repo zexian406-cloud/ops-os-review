@@ -31,7 +31,7 @@ function MetricCell({ m }: { m: MetricView }) {
   // 方向（箭头）反映实际环比变动；着色（颜色）才反映 good/bad。二者解耦，
   // 否则「下降但更好」的指标（如退货额下降）会被错画成上箭头。
   const dir = delta == null ? "flat" : delta > 0 ? "up" : delta < 0 ? "down" : "flat";
-  const iconCls = dir === "up" ? "ri-arrow-up-line" : dir === "down" ? "ri-arrow-down-line" : "ri-arrow-subtract-line";
+  const iconCls = dir === "up" ? "ri-arrow-up-line" : dir === "down" ? "ri-arrow-down-line" : "ri-subtract-line";
   const color = level === "good" ? "text-accent-600" : level === "bad" ? "text-red-500" : "text-foreground-400";
   const ariaLabel = dir === "up" ? "环比上升" : dir === "down" ? "环比下降" : "环比无变化";
   const fmt = (v: number) => (m.digits === 0 ? Math.round(v).toLocaleString() : v.toFixed(m.digits));
@@ -139,7 +139,7 @@ export default function HistoryPage() {
 
       {rows.length === 0 ? (
         <EmptyState
-          icon="ri-git-compare-line"
+          icon="ri-exchange-line"
           title="暂无上次导入数据"
           desc="请下周导入后查看本周 vs 上周对比"
           action={
@@ -149,7 +149,7 @@ export default function HistoryPage() {
           }
         />
       ) : (
-        <Section title="本周 vs 上周" subtitle={`共 ${rows.length} 个 SKU`} icon="ri-git-compare-line">
+        <Section title="本周 vs 上周" subtitle={`共 ${rows.length} 个 SKU`} icon="ri-exchange-line">
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">
               <thead>

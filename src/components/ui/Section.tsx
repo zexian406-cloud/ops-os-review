@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 interface SectionProps {
@@ -8,9 +9,22 @@ interface SectionProps {
   children: ReactNode;
   className?: string;
   padded?: boolean;
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
 }
 
-export default function Section({ title, subtitle, icon, action, children, className = "", padded = true }: SectionProps) {
+export default function Section({
+  title,
+  subtitle,
+  icon,
+  action,
+  children,
+  className = "",
+  padded = true,
+  collapsible = false,
+  defaultCollapsed = false,
+}: SectionProps) {
+  const [open, setOpen] = useState(!defaultCollapsed);
   return (
     <section className={["glass-card overflow-hidden", className].join(" ")}>
       {(title || action) && (
@@ -28,10 +42,23 @@ export default function Section({ title, subtitle, icon, action, children, class
             </div>
             {subtitle && <div className="mt-1 text-[12px] text-foreground-400">{subtitle}</div>}
           </div>
-          {action && <div className="shrink-0">{action}</div>}
+          <div className="flex shrink-0 items-center gap-2">
+            {action}
+            {collapsible && (
+              <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                aria-expanded={open}
+                aria-label={open ? "收起" : "展开"}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-[15px] text-foreground-400 transition-colors hover:bg-background-100 hover:text-foreground-700"
+              >
+                <i className={open ? "ri-arrow-down-s-line" : "ri-arrow-right-s-line"} aria-hidden />
+              </button>
+            )}
+          </div>
         </header>
       )}
-      <div className={padded ? "p-5 md:p-6" : ""}>{children}</div>
+      {open && <div className={padded ? "p-5 md:p-6" : ""}>{children}</div>}
     </section>
   );
 }
