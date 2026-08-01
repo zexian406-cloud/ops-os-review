@@ -35,7 +35,7 @@ export default function Dashboard() {
   const {
     loading, skuMaster, alerts, promotions,
     shipmentSuggestions, wowDeltas, latestSnapshot,
-    latestInventory, previousSnapshot, today,
+    latestInventory, previousSnapshot, today, healthScores,
   } = useOpsData();
 
   const [todos, setTodos] = useState<TodoItem[]>([]);
@@ -46,6 +46,13 @@ export default function Dashboard() {
   const [alertsExpanded, setAlertsExpanded] = useState(false);
   const [shipmentExpanded, setShipmentExpanded] = useState(false);
   const [shopFilter, setShopFilter] = useState<string>("all");
+
+  // 计算“昨天”的日期字符串（用于操作记录的相对日期展示，避免引用未定义变量导致白屏）
+  const yesterday = useMemo(() => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  }, [today]);
 
   const loadTodos = async () => {
     const all = await db.todos.toArray();
@@ -197,6 +204,21 @@ export default function Dashboard() {
       todoCount: { value: todos.filter((t) => !t.completed).length, sub: `${todos.filter((t) => !t.completed && t.dueDate && t.dueDate < today).length} 个已逾期` },
     };
   }, [activeProductGroups, activeMskuLinks, totalStock, totalDailySales, wowDeltas, wowTotalStockDelta, wowTotalSalesDelta, filteredSkuMaster, latestSnapshot, filteredAlerts, filteredShipmentSuggestions, filteredPromotions, todos, today, shopFilterId]);
+
+  // ── 健康度最低 TOP10 ──
+  const healthTop10 = useMemo(() => {
+    if (!healthScores || healthScores.size === 0) return [];
+    return Array.from(healthScores.entries())
+      .map(([sku, hs]) => ({ sku, score: hs.score, level: hs.level, factors: hs.factors }))
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 10);
+  }, [healthScores]);
+
+  const healthLevelBadge = (level: "健康" | "关注" | "风险") => {
+    if (level === "健康") return "bg-accent-50 text-accent-700 border-accent-200";
+    if (level === "关注") return "bg-secondary-100 text-secondary-700 border-secondary-200";
+    return "bg-red-50 text-red-600 border-red-200";
+  };
 
   if (loading) return <div className="text-sm text-foreground-400">加载中...</div>;
 
@@ -629,6 +651,58 @@ export default function Dashboard() {
           );
         })}
       </div>
+
+      {/* ── 健康度最低 TOP10 ── */}
+      {healthTop10.length > 0 && (
+        <Section title="健康度最低 TOP10" subtitle="按综合健康分升序，优先处理低分 SKU" icon="ri-heart-pulse-line"
+          action={<Link to="/sku" className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer whitespace-nowrap">查看全部 SKU →</Link>}
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground-400">
+                  <th className="border-b border-background-200 px-3 py-2.5">排名</th>
+                  <th className="border-b border-background-200 px-3 py-2.5">SKU</th>
+                  <th className="border-b border-background-200 px-3 py-2.5">健康分</th>
+                  <th className="border-b border-background-200 px-3 py-2.5">主要风险因子</th>
+                </tr>
+              </thead>
+              <tbody>
+                {healthTop10.map((row, idx) => (
+                  <tr key={row.sku} className="group">
+                    <td className="border-b border-background-200/50 px-3 py-2.5 text-[12px] text-foreground-400">{idx + 1}</td>
+                    <td className="border-b border-background-200/50 px-3 py-2.5">
+                      <Link to={`/sku/${encodeURIComponent(row.sku)}`} className="font-medium text-foreground-900 hover:text-primary-700 hover:underline cursor-pointer">
+                        {row.sku}
+                      </Link>
+                    </td>
+                    <td className="border-b border-background-200/50 px-3 py-2.5">
+                      <span className={`mono-num inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-bold ${healthLevelBadge(row.level)}`}>
+                        {row.score}
+                        <span className="text-[11px] font-semibold">{row.level}</span>
+                      </span>
+                    </td>
+                    <td className="border-b border-background-200/50 px-3 py-2.5">
+                      <div className="flex flex-wrap gap-1.5">
+                        {row.factors.length === 0 ? (
+                          <span className="text-[12px] text-foreground-400">无明显风险因子</span>
+                        ) : (
+                          row.factors.slice(0, 2).map((f) => (
+                            <span key={f.key} className="inline-flex items-center rounded-md bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-600">
+                              {f.label}
+                              <span className="ml-1 text-red-400">-{f.impact}</span>
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
 
       {/* Layout Customizer */}
       {customizing && (

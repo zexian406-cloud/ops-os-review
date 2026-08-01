@@ -13,6 +13,19 @@ const typeLabels: Record<AlertType, string> = {
   listing: "Listing 待优化",
 };
 
+// 告警类型 → 诊断页分组 key（与诊断页过滤 map 对齐）
+const DIAGNOSIS_GROUP: Partial<Record<AlertType, string>> = {
+  stockout: "stock",
+  low_stock: "stock",
+  overstock: "stock",
+  profit: "profit",
+  ad: "ad",
+  rating: "rating",
+  return: "return",
+  review: "return",
+  listing: "listing",
+};
+
 const severityConfig = {
   critical: {
     badge: "紧急",
@@ -86,6 +99,19 @@ export default function AlertList({ alerts }: { alerts: Alert[] }) {
                 <div className="mt-0.5 text-[12px] leading-relaxed text-foreground-700">{a.suggestion}</div>
               </div>
             </div>
+
+            {/* 第三行：诊断深链 */}
+            {DIAGNOSIS_GROUP[a.type] && (
+              <div className="flex justify-end">
+                <Link
+                  to={`/diagnosis?type=${DIAGNOSIS_GROUP[a.type]}&sku=${encodeURIComponent(a.sku)}`}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-primary-600 hover:text-primary-700 hover:underline cursor-pointer"
+                >
+                  <i className="ri-search-eye-line" aria-hidden />
+                  查看诊断原因
+                </Link>
+              </div>
+            )}
           </div>
         );
       })}

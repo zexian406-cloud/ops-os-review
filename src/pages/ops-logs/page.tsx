@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { db, deleteOpsLog } from "@/domain/db";
+import { db, deleteOpsLog, addOpsLog } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
-import { anomalyLabel } from "@/domain/anomaly";
-import type { OpsLog } from "@/domain/types";
+import { anomalyLabel, ANOMALY_OPTIONS } from "@/domain/anomaly";
+import type { OpsLog, SkuMaster, Promotion, AnomalyType } from "@/domain/types";
 
 const ACTION_ICONS: Record<string, string> = {
   "降价": "ri-arrow-down-line",
@@ -18,6 +18,8 @@ const ACTION_ICONS: Record<string, string> = {
   "站外推广": "ri-share-line",
   "其他": "ri-more-line",
 };
+
+const ACTION_KEYS = Object.keys(ACTION_ICONS);
 
 const ACTION_TONES: Record<string, string> = {
   "降价": "text-green-600 bg-green-50",
@@ -43,6 +45,9 @@ const ANOMALY_TONES: Record<string, string> = {
   "other": "text-foreground-600 bg-foreground-50",
 };
 
+const inputCls = "w-full rounded-lg border border-background-300 bg-background-50 px-3 py-2 text-[13px] focus:border-primary-500 focus:outline-none cursor-pointer";
+const labelCls = "mb-1 block text-[12px] font-medium text-foreground-600";
+
 function groupByDate(logs: OpsLog[]): Map<string, OpsLog[]> {
   const groups = new Map<string, OpsLog[]>();
   for (const log of logs) {
@@ -53,23 +58,192 @@ function groupByDate(logs: OpsLog[]): Map<string, OpsLog[]> {
   return groups;
 }
 
+/* ────────── 记一笔操作 弹窗 ────────── */
+function RecordModal({
+  skuMaster,
+  promotions,
+  onClose,
+  onSaved,
+}: {
+  skuMaster: SkuMaster[];
+  promotions: Promotion[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [sku, setSku] = useState("");
+  const [promotionId, setPromotionId] = useState("");
+  const [action, setAction] = useState("");
+  const [anomalyType, setAnomalyType] = useState<AnomalyType | "">("");
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const [impact, setImpact] = useState("");
+  const [date, setDate] = useState(today);
+  const [saving, setSaving] = useState(false);
+
+  // 选了 SKU 就过滤出该 SKU 的促销（与促销活动页 SKU↔促销 一致）
+  const skuPromotions = useMemo(
+    () => (sku ? promotions.filter((p) => p.sku === sku) : []),
+    [promotions, sku],
+  );
+
+  const selectedSkuName = skuMaster.find((s) => s.sku === sku)?.name;
+
+  const handleSave = async () => {
+    if (!sku || !action.trim()) return;
+    setSaving(true);
+    const promo = promotions.find((p) => p.id === promotionId);
+    await addOpsLog(
+      sku,
+      date,
+      action.trim(),
+      note.trim() || reason.trim(),
+      impact.trim() || undefined,
+      undefined,
+      selectedSkuName,
+      anomalyType || undefined,
+      reason.trim() || undefined,
+      note.trim() || undefined,
+      promo?.id,
+      promo?.name,
+    );
+    setSaving(false);
+    onSaved();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-background-50 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-heading text-[16px] font-semibold text-foreground-950">记一笔操作</h3>
+          <button onClick={onClose} className="text-[18px] text-foreground-400 hover:text-foreground-700 cursor-pointer">
+            <i className="ri-close-line" aria-hidden />
+          </button>
+        </div>
+
+        <div className="mt-4 max-h-[70vh] space-y-3 overflow-y-auto pr-1">
+          <div>
+            <label className={labelCls}>关联 SKU <span className="text-red-500">*</span></label>
+            <select value={sku} onChange={(e) => { setSku(e.target.value); setPromotionId(""); }}
+              className={inputCls}>
+              <option value="">选择 SKU（必选）</option>
+              {skuMaster.map((s) => (
+                <option key={s.sku} value={s.sku}>{s.sku}{s.name ? ` · ${s.name}` : ""}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className={labelCls}>关联促销活动</label>
+            <select value={promotionId} onChange={(e) => setPromotionId(e.target.value)}
+              disabled={!sku}
+              className={inputCls + (sku ? "" : " opacity-50 cursor-not-allowed")}>
+              <option value="">{sku ? "选择促销活动（选填）" : "先选择 SKU"}</option>
+              {skuPromotions.map((p) => (
+                <option key={p.id} value={p.id}>{p.type} · {p.name}</option>
+              ))}
+            </select>
+            {sku && skuPromotions.length === 0 && (
+              <div className="mt-1 text-[11px] text-foreground-400">该 SKU 暂无促销活动</div>
+            )}
+          </div>
+
+          <div>
+            <label className={labelCls}>处理动作 <span className="text-red-500">*</span></label>
+            <select value={action} onChange={(e) => setAction(e.target.value)} className={inputCls}>
+              <option value="">选择动作</option>
+              {ACTION_KEYS.map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className={labelCls}>异常类型</label>
+            <select value={anomalyType} onChange={(e) => setAnomalyType(e.target.value as AnomalyType)}
+              className={inputCls}>
+              <option value="">无 / 不关联</option>
+              {ANOMALY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className={labelCls}>原因</label>
+            <input value={reason} onChange={(e) => setReason(e.target.value)}
+              placeholder="如：竞品降价导致转化下滑" className="w-full rounded-lg border border-background-300 bg-background-50 px-3 py-2 text-[13px] focus:border-primary-500 focus:outline-none" />
+          </div>
+
+          <div>
+            <label className={labelCls}>备注</label>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
+              placeholder="补充说明（选填）" className="w-full rounded-lg border border-background-300 bg-background-50 px-3 py-2 text-[13px] focus:border-primary-500 focus:outline-none" />
+          </div>
+
+          <div>
+            <label className={labelCls}>影响</label>
+            <input value={impact} onChange={(e) => setImpact(e.target.value)}
+              placeholder="如：日均销量上涨约30%（选填）" className="w-full rounded-lg border border-background-300 bg-background-50 px-3 py-2 text-[13px] focus:border-primary-500 focus:outline-none" />
+          </div>
+
+          <div>
+            <label className={labelCls}>日期</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg border border-background-300 px-4 py-2 text-[13px] text-foreground-600 hover:bg-background-100 cursor-pointer">取消</button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !sku || !action.trim()}
+            className="rounded-lg bg-primary-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-primary-700 cursor-pointer disabled:opacity-40"
+          >
+            {saving ? "保存中…" : "保存记录"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function OpsLogsPage() {
   const [logs, setLogs] = useState<OpsLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [skuMaster, setSkuMaster] = useState<SkuMaster[]>([]);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [showModal, setShowModal] = useState(false);
+
+  const loadLogs = () => {
+    db.opsLogs.toArray().then((data) => {
+      data.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+      setLogs(data);
+    });
+  };
 
   useEffect(() => {
-    db.opsLogs
-      .toArray()
-      .then((data) => {
-        data.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
-        setLogs(data);
-        setLoading(false);
-      })
-      .catch(() => {
-        setLogs([]);
-        setLoading(false);
-      });
+    let mounted = true;
+    Promise.all([
+      db.opsLogs.toArray(),
+      db.skuMaster.toArray(),
+      db.promotions.toArray(),
+    ]).then(([data, sm, promos]) => {
+      if (!mounted) return;
+      data.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+      setLogs(data);
+      setSkuMaster(sm);
+      setPromotions(promos);
+      setLoading(false);
+    }).catch(() => {
+      if (!mounted) return;
+      setLogs([]);
+      setSkuMaster([]);
+      setPromotions([]);
+      setLoading(false);
+    });
+    return () => { mounted = false; };
   }, []);
 
   const handleDelete = async (id: string) => {
@@ -101,13 +275,21 @@ export default function OpsLogsPage() {
             共 {logs.length} 条记录，按日期倒序排列
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowModal(true)}
+          className="inline-flex items-center gap-1.5 rounded-[12px] bg-primary-600 px-3.5 py-2 text-[13px] font-medium text-white hover:bg-primary-700 cursor-pointer"
+        >
+          <i className="ri-add-line" aria-hidden />
+          记一笔操作
+        </button>
       </div>
 
       {logs.length === 0 ? (
         <EmptyState
           icon="ri-history-line"
           title="暂无操作记录"
-          desc="去 SKU 详情页记录你做的运营操作，方便后续汇报和复盘"
+          desc="点击右上角「记一笔操作」，凭空记一笔，或去 SKU 详情页记录"
         />
       ) : (
         <div className="relative">
@@ -157,6 +339,15 @@ export default function OpsLogsPage() {
                                   >
                                     {anomalyLabel(log.anomalyType)}
                                   </span>
+                                )}
+                                {log.promotionId && (
+                                  <Link
+                                    to="/promotions"
+                                    className="inline-flex items-center gap-1 rounded-md bg-accent-50 px-1.5 py-0.5 text-[10px] font-semibold text-accent-700 hover:bg-accent-100 cursor-pointer"
+                                  >
+                                    <i className="ri-flashlight-line" aria-hidden />
+                                    关联促销：{log.promotionName ?? log.promotionId}
+                                  </Link>
                                 )}
                                 {log.msku ? (
                                   <Link
@@ -217,6 +408,18 @@ export default function OpsLogsPage() {
             })}
           </div>
         </div>
+      )}
+
+      {showModal && (
+        <RecordModal
+          skuMaster={skuMaster}
+          promotions={promotions}
+          onClose={() => setShowModal(false)}
+          onSaved={() => {
+            setShowModal(false);
+            loadLogs();
+          }}
+        />
       )}
     </div>
   );

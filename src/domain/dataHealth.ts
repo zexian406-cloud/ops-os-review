@@ -1,5 +1,6 @@
 import type { DailySnapshot, InventoryLayer, SkuMaster } from "./types";
 import { buildSnapshotMap, buildInventoryMap } from "./engine";
+import { computeWarehouseTotals } from "./calculator";
 
 /**
  * 数据健康检查 — 在"发现问题"之前，先校验 ERP 导出的数据质量。
@@ -17,7 +18,9 @@ export type HealthCategory =
   | "missing_cost"
   | "missing_inventory"
   | "abnormal_profit"
-  | "abnormal_sales";
+  | "abnormal_sales"
+  | "missing_leadtime"
+  | "stock_negative";
 
 export interface HealthIssue {
   sku: string;
@@ -40,6 +43,8 @@ const CATEGORY_LABELS: Record<HealthCategory, string> = {
   missing_inventory: "缺失库存",
   abnormal_profit: "异常利润",
   abnormal_sales: "异常销量",
+  missing_leadtime: "缺失备货周期",
+  stock_negative: "库存为负",
 };
 
 export const HEALTH_CATEGORY_LABELS = CATEGORY_LABELS;
@@ -58,6 +63,8 @@ export function runDataHealth(input: {
     missing_inventory: [],
     abnormal_profit: [],
     abnormal_sales: [],
+    missing_leadtime: [],
+    stock_negative: [],
   };
 
   let checked = 0;
@@ -95,6 +102,27 @@ export function runDataHealth(input: {
         sku: sku.sku,
         skuName,
         detail: "无库存记录（未导入 FBA库存明细 / 仓库明细），无法计算覆盖天数与补货建议",
+        severity: "warning",
+      });
+    } else {
+      // ── 库存为负（数据异常）──
+      const whTotal = computeWarehouseTotals(inv).total;
+      if (whTotal < 0) {
+        byCategory.stock_negative.push({
+          sku: sku.sku,
+          skuName,
+          detail: `库存总和为负（${whTotal.toFixed(0)}），四仓/在途数量存在负值，数据异常`,
+          severity: "critical",
+        });
+      }
+    }
+
+    // ── 缺失备货周期（Lead Time）──
+    if (sku.leadTimeDays == null || sku.leadTimeDays <= 0) {
+      byCategory.missing_leadtime.push({
+        sku: sku.sku,
+        skuName,
+        detail: "缺失 Lead Time（工厂→FBA 备货周期）或值为 0，发货决策将退回默认 40 天",
         severity: "warning",
       });
     }
@@ -166,6 +194,8 @@ export function runDataHealth(input: {
     ...byCategory.missing_inventory,
     ...byCategory.abnormal_profit,
     ...byCategory.abnormal_sales,
+    ...byCategory.missing_leadtime,
+    ...byCategory.stock_negative,
   ];
 
   return {
@@ -176,6 +206,8 @@ export function runDataHealth(input: {
       missing_inventory: byCategory.missing_inventory.length,
       abnormal_profit: byCategory.abnormal_profit.length,
       abnormal_sales: byCategory.abnormal_sales.length,
+      missing_leadtime: byCategory.missing_leadtime.length,
+      stock_negative: byCategory.stock_negative.length,
     },
     total: issues.length,
     skuCount: checked,

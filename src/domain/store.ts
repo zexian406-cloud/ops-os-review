@@ -23,6 +23,10 @@ import {
   computeWowDeltas,
   type WowDelta,
 } from "./engine";
+import {
+  computeHealthScores,
+  type HealthScore,
+} from "./healthScore";
 
 /**
  * Central hook. Every module (Dashboard, Shipment, Risk, SKU detail,
@@ -144,6 +148,28 @@ export function useOpsData() {
     });
   }, [skuMaster, latestSnapshot, latestInventory, previousSnapshot, config]);
 
+  // ── 按 SKU 分组的告警（供健康评分引擎使用）──
+  const alertsBySku = useMemo(() => {
+    const map = new Map<string, Alert[]>();
+    for (const a of computedAlerts) {
+      if (!map.has(a.sku)) map.set(a.sku, []);
+      map.get(a.sku)!.push(a);
+    }
+    return map;
+  }, [computedAlerts]);
+
+  // ── SKU 健康评分 ──
+  const healthScores = useMemo((): Map<string, HealthScore> => {
+    return computeHealthScores({
+      skuMaster,
+      latest: latestSnapshot,
+      previous: previousSnapshot ?? new Map<string, DailySnapshot>(),
+      alertsBySku,
+      wowBySku: new Map<string, unknown>(),
+      config,
+    });
+  }, [skuMaster, latestSnapshot, previousSnapshot, alertsBySku, config]);
+
   useEffect(() => {
     setAlerts(computedAlerts);
   }, [computedAlerts]);
@@ -160,9 +186,11 @@ export function useOpsData() {
     config,
     latestSnapshot,
     latestInventory,
+    previousSnapshot,
     activeCampaigns,
     shipmentSuggestions,
     wowDeltas,
+    healthScores,
     today,
     reload,
     setConfig,

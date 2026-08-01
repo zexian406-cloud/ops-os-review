@@ -1,6 +1,8 @@
 node_modules/
 dist/
 out/
+.build-tmp/
+.build-check/
 .env
 *.local
 

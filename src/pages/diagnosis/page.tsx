@@ -6,7 +6,7 @@ import { addOpsLog } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
-import type { Alert, AlertType, AnomalyType, SkuMaster } from "@/domain/types";
+import type { Alert, AlertType, AnomalyType, SkuMaster, Promotion } from "@/domain/types";
 import { ANOMALY_OPTIONS } from "@/domain/anomaly";
 
 const impactMeta = (impact?: Impact) => {
@@ -67,11 +67,13 @@ function DiagnosisFactors({ result }: { result: DiagnosisResult }) {
 function RecordModal({
   alert,
   skuName,
+  promotions,
   onClose,
   onSaved,
 }: {
   alert: Alert;
   skuName?: string;
+  promotions: Promotion[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -81,11 +83,16 @@ function RecordModal({
   const [action, setAction] = useState("");
   const [note, setNote] = useState("");
   const [date, setDate] = useState(today);
+  const [promotionId, setPromotionId] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // 选了 SKU（此处固定为告警 SKU）就过滤出该 SKU 的促销（与促销活动页一致）
+  const skuPromotions = promotions.filter((p) => p.sku === alert.sku);
 
   const handleSave = async () => {
     if (!action.trim()) return;
     setSaving(true);
+    const promo = promotions.find((p) => p.id === promotionId);
     await addOpsLog(
       alert.sku,
       date,
@@ -97,6 +104,8 @@ function RecordModal({
       anomalyType,
       reason.trim() || undefined,
       note.trim() || undefined,
+      promo?.id,
+      promo?.name,
     );
     setSaving(false);
     onSaved();
@@ -123,6 +132,22 @@ function RecordModal({
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="text-[12px] font-medium text-foreground-600">关联促销活动</label>
+            <select
+              value={promotionId}
+              onChange={(e) => setPromotionId(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-background-300 bg-background-50 px-3 py-2 text-[13px] focus:border-primary-500 focus:outline-none cursor-pointer"
+            >
+              <option value="">不关联（选填）</option>
+              {skuPromotions.map((p) => (
+                <option key={p.id} value={p.id}>{p.type} · {p.name}</option>
+              ))}
+            </select>
+            {skuPromotions.length === 0 && (
+              <div className="mt-1 text-[11px] text-foreground-400">该 SKU 暂无促销活动</div>
+            )}
           </div>
           <div>
             <label className="text-[12px] font-medium text-foreground-600">原因</label>
@@ -178,7 +203,7 @@ function RecordModal({
 }
 
 export default function DiagnosisPage() {
-  const { loading, alerts, skuMaster, latestSnapshot, previousSnapshot, latestInventory } = useOpsData();
+  const { loading, alerts, skuMaster, latestSnapshot, previousSnapshot, latestInventory, promotions } = useOpsData();
   const [searchParams] = useSearchParams();
   const [filter, setFilter] = useState<"all" | "critical" | "warning">("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -326,6 +351,7 @@ export default function DiagnosisPage() {
         <RecordModal
           alert={recordFor}
           skuName={recordFor.skuName}
+          promotions={promotions}
           onClose={() => setRecordFor(null)}
           onSaved={() => {
             setRecordFor(null);

@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { computeAll, computeWeeklyPromoCost } from "@/domain/calculator";
 import { useOpsData } from "@/domain/store";
+import { computeDiagnosis, type DiagnosisResult } from "@/domain/diagnosis";
 import { upsertSnapshots, db, addOpsLog, deleteOpsLog } from "@/domain/db";
 import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
@@ -24,6 +25,19 @@ import type { DailySnapshot, SkuMaster, InventoryLayer, TodoItem, OpsLog } from 
 const lifecycleLabel: Record<string, string> = { new: "新品", growth: "成长", mature: "成熟", clearance: "清货", eol: "停售" };
 const saleStatusLabel: Record<string, string> = { active: "在售", clearance: "清货", paused: "暂停", discontinued: "停售" };
 const linkTypeLabel: Record<string, string> = { main: "主链接", follow: "跟卖", backup: "备用" };
+
+// 告警类型 → 诊断页分组 key（与诊断页过滤 map / AlertList 对齐）
+const DIAGNOSIS_GROUP: Record<string, string> = {
+  stockout: "stock",
+  low_stock: "stock",
+  overstock: "stock",
+  profit: "profit",
+  ad: "ad",
+  rating: "rating",
+  return: "return",
+  review: "return",
+  listing: "listing",
+};
 
 const deltaArrow = (v: number, inverse = false) => {
   if (Math.abs(v) < 0.01) return <span className="text-foreground-500">→ 0</span>;
@@ -50,6 +64,8 @@ export default function SkuDetail() {
     manualPromotions,
     shipmentSuggestions,
     wowDeltas,
+    healthScores,
+    alerts,
     config,
     today,
     reload,
@@ -82,6 +98,35 @@ export default function SkuDetail() {
 
   const skuShipment = useMemo(() => shipmentSuggestions.find((s) => s.sku === skuId), [shipmentSuggestions, skuId]);
   const skuWow: WowDelta | undefined = useMemo(() => wowDeltas.find((d) => d.sku === skuId), [wowDeltas, skuId]);
+
+  // ── 该 SKU 的活跃告警诊断（复用诊断引擎）──
+  const skuDiagnoses = useMemo(() => {
+    if (!sku || !curSnap) return [];
+    return alerts
+      .filter((a) => a.sku === skuId && a.severity !== "info")
+      .map((a) => {
+        const result = computeDiagnosis({
+          type: a.type,
+          sku,
+          latestSnap: curSnap,
+          previousSnap: prevSnap,
+          latestInv: inv,
+        });
+        return { alert: a, result };
+      });
+  }, [alerts, skuId, curSnap, prevSnap, inv, sku]);
+
+  // ── 历史变化（previous vs latest 快照）──
+  const historyCompare = useMemo(() => {
+    if (!sku || history.length === 0) return null;
+    const prev = history[0];
+    const latestSnap = history[history.length - 1];
+    const defaultLeadTime = config?.defaultLeadTime ?? 40;
+    const defaultSafetyStockDays = config?.defaultSafetyStockDays ?? 30;
+    const prevCalc = computeAll({ sku, snap: prev, inv, defaultLeadTime, defaultSafetyStockDays });
+    const latestCalc = computeAll({ sku, snap: latestSnap, inv, defaultLeadTime, defaultSafetyStockDays });
+    return { prev, latest: latestSnap, prevCalc, latestCalc };
+  }, [history, sku, inv, config]);
 
   const activeOrUpcomingPromo = skuPromos.find((p) => p.status === "active" || p.status === "upcoming");
 
@@ -364,6 +409,56 @@ export default function SkuDetail() {
         </div>
       </div>
       )}
+
+      {/* ═══════ 健康评分卡 ═══════ */}
+      {(() => {
+        const hs = healthScores.get(skuId ?? "");
+        if (!hs) return null;
+        const cardCls =
+          hs.level === "健康"
+            ? "border-accent-200 bg-accent-50/50"
+            : hs.level === "关注"
+            ? "border-secondary-200 bg-secondary-50/50"
+            : "border-red-200 bg-red-50/50";
+        const badgeCls =
+          hs.level === "健康"
+            ? "bg-accent-500 text-white"
+            : hs.level === "关注"
+            ? "bg-secondary-500 text-white"
+            : "bg-red-500 text-white";
+        const ringCls =
+          hs.level === "健康"
+            ? "text-accent-600"
+            : hs.level === "关注"
+            ? "text-secondary-600"
+            : "text-red-600";
+        return (
+          <div className={`flex flex-wrap items-center gap-4 rounded-2xl border p-4 ${cardCls}`}>
+            <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-4 ${ringCls} border-current/20 bg-background-50`}>
+              <span className={`mono-num text-[26px] font-bold ${ringCls}`}>{hs.score}</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${badgeCls}`}>{hs.level}</span>
+                <span className="text-[12px] text-foreground-500">综合健康分（100 满分）</span>
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-foreground-400">主要风险因子：</span>
+                {hs.factors.length === 0 ? (
+                  <span className="text-[12px] text-accent-700">无明显风险因子</span>
+                ) : (
+                  hs.factors.slice(0, 3).map((f) => (
+                    <span key={f.key} className="inline-flex items-center rounded-md bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-600">
+                      {f.label}
+                      <span className="ml-1 text-red-400">-{f.impact}</span>
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 布局自定义 */}
       {customizing && (
@@ -1508,6 +1603,59 @@ export default function SkuDetail() {
         </Section>
       )}
 
+      {/* ======= 异常原因拆解 ======= */}
+      {skuDiagnoses.length > 0 && (
+        <Section title="异常原因拆解" icon="ri-search-eye-line" subtitle={`共 ${skuDiagnoses.length} 条活跃告警`}>
+          <div className="space-y-4">
+            {skuDiagnoses.map(({ alert, result }) => (
+              <div key={alert.id} className="rounded-xl border border-background-200/70 bg-background-50 p-4">
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    alert.severity === "critical" ? "bg-red-50 text-red-600" : "bg-secondary-100 text-secondary-700"
+                  }`}>{alert.severity === "critical" ? "紧急" : "关注"}</span>
+                  <span className="text-[13px] font-semibold text-foreground-900">{alert.title}</span>
+                  <Link to={`/diagnosis?type=${DIAGNOSIS_GROUP[alert.type] ?? alert.type}&sku=${encodeURIComponent(alert.sku)}`} className="ml-auto text-[11px] font-medium text-primary-600 hover:underline cursor-pointer">
+                    去诊断页 →
+                  </Link>
+                </div>
+                <p className="mt-2 text-[13px] leading-relaxed text-foreground-700">{result.summary}</p>
+                <DiagnosisFactorsInline result={result} />
+                {result.suggestion && (
+                  <div className="mt-3 flex items-start gap-2 rounded-[10px] bg-accent-50/50 px-3 py-2">
+                    <i className="ri-lightbulb-line mt-0.5 text-[14px] text-accent-700" aria-hidden />
+                    <span className="text-[12px] text-foreground-700"><span className="font-semibold">建议动作：</span>{result.suggestion}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* ======= 历史变化表 ======= */}
+      {historyCompare && (
+        <Section title="历史变化" icon="ri-history-line" subtitle={`${historyCompare.prev.date} → ${historyCompare.latest.date}`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground-400">
+                  <th className="border-b border-background-200 px-3 py-2.5">指标</th>
+                  <th className="border-b border-background-200 px-3 py-2.5">上期</th>
+                  <th className="border-b border-background-200 px-3 py-2.5">最新</th>
+                  <th className="border-b border-background-200 px-3 py-2.5">变化</th>
+                </tr>
+              </thead>
+              <tbody>
+                <HistoryRow label="日均销量" prev={historyCompare.prev.dailySales7d} cur={historyCompare.latest.dailySales7d} unit="" digits={1} goodDir="up" />
+                <HistoryRow label="库存(总)" prev={historyCompare.prevCalc.inStockTotal} cur={historyCompare.latestCalc.inStockTotal} unit="" digits={0} goodDir="up" />
+                <HistoryRow label="利润率" prev={historyCompare.prevCalc.grossMargin} cur={historyCompare.latestCalc.grossMargin} unit="%" digits={1} goodDir="up" />
+                <HistoryRow label="评分" prev={historyCompare.prev.rating} cur={historyCompare.latest.rating} unit="" digits={1} goodDir="up" />
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
+
       {/* ======= 运营操作记录 ======= */}
       {(
         <Section
@@ -1670,6 +1818,78 @@ function DataTile({ label, value, sub }: { label: string; value: string; sub?: s
       <div className="mt-1 font-heading text-[18px] font-bold text-foreground-950">{value}</div>
       {sub && <div className="text-[11px] text-foreground-500">{sub}</div>}
     </div>
+  );
+}
+
+/* ────────── 诊断因子拆解（复用诊断引擎结果） ────────── */
+function DiagnosisFactorsInline({ result }: { result: DiagnosisResult }) {
+  if (result.factors.length === 0) {
+    return <div className="mt-3 text-[12px] text-foreground-400">暂无结构化拆解。</div>;
+  }
+  const impactMeta = (impact?: string) => {
+    if (impact === "up_bad" || impact === "down_bad") return "text-red-600";
+    if (impact === "up_good" || impact === "down_good") return "text-accent-600";
+    return "text-foreground-500";
+  };
+  return (
+    <div className="mt-3 overflow-x-auto">
+      <table className="w-full text-[12px]">
+        <thead>
+          <tr className="text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground-400">
+            <th className="border-b border-background-200 px-2 py-1.5">归因项</th>
+            <th className="border-b border-background-200 px-2 py-1.5 text-right">上期</th>
+            <th className="border-b border-background-200 px-2 py-1.5 text-right">本期</th>
+            <th className="border-b border-background-200 px-2 py-1.5 text-right">变化</th>
+          </tr>
+        </thead>
+        <tbody>
+          {result.factors.map((f) => {
+            const deltaText =
+              f.delta != null
+                ? `${f.delta > 0 ? "↑" : f.delta < 0 ? "↓" : "→"}${Math.abs(f.delta)}${f.unit ?? ""}`
+                : f.after != null && f.before == null
+                ? `${f.after}`
+                : "—";
+            return (
+              <tr key={f.key} className="align-top">
+                <td className="border-b border-background-200/50 px-2 py-2 font-medium text-foreground-800">
+                  {f.label}
+                  {f.note && <div className="mt-0.5 text-[10px] font-normal text-foreground-400">{f.note}</div>}
+                </td>
+                <td className="mono-num border-b border-background-200/50 px-2 py-2 text-right text-foreground-500">{f.before ?? "—"}</td>
+                <td className="mono-num border-b border-background-200/50 px-2 py-2 text-right text-foreground-900">{f.after ?? "—"}</td>
+                <td className={`mono-num border-b border-background-200/50 px-2 py-2 text-right font-semibold ${impactMeta(f.impact)}`}>{deltaText}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ────────── 历史变化行 ────────── */
+function HistoryRow({ label, prev, cur, unit, digits, goodDir }: {
+  label: string;
+  prev: number;
+  cur: number;
+  unit: string;
+  digits: number;
+  goodDir: "up" | "down";
+}) {
+  const fmt = (v: number) => (digits === 0 ? Math.round(v).toLocaleString() : v.toFixed(digits));
+  const same = prev === cur;
+  const up = cur > prev;
+  const good = goodDir === "up" ? up : !up;
+  const color = same ? "text-foreground-400" : good ? "text-accent-600" : "text-red-500";
+  const arrow = same ? "→" : up ? "↑" : "↓";
+  return (
+    <tr>
+      <td className="border-b border-background-200/50 px-3 py-2.5 text-[12px] font-medium text-foreground-600">{label}</td>
+      <td className="mono-num border-b border-background-200/50 px-3 py-2.5 text-foreground-700">{fmt(prev)}{unit}</td>
+      <td className="mono-num border-b border-background-200/50 px-3 py-2.5 font-semibold text-foreground-900">{fmt(cur)}{unit}</td>
+      <td className={`mono-num border-b border-background-200/50 px-3 py-2.5 font-semibold ${color}`}>{arrow} {fmt(Math.abs(cur - prev))}{unit}</td>
+    </tr>
   );
 }
 

@@ -11,6 +11,8 @@ const CATEGORY_ICON: Record<HealthCategory, string> = {
   missing_inventory: "ri-archive-line",
   abnormal_profit: "ri-money-dollar-circle-line",
   abnormal_sales: "ri-bar-chart-line",
+  missing_leadtime: "ri-timer-line",
+  stock_negative: "ri-error-warning-line",
 };
 
 const CATEGORY_TONE: Record<HealthCategory, "danger" | "warn" | "secondary" | "primary"> = {
@@ -18,9 +20,11 @@ const CATEGORY_TONE: Record<HealthCategory, "danger" | "warn" | "secondary" | "p
   missing_inventory: "secondary",
   abnormal_profit: "danger",
   abnormal_sales: "primary",
+  missing_leadtime: "warn",
+  stock_negative: "danger",
 };
 
-const ORDER: HealthCategory[] = ["missing_cost", "missing_inventory", "abnormal_profit", "abnormal_sales"];
+const ORDER: HealthCategory[] = ["missing_cost", "missing_inventory", "abnormal_profit", "abnormal_sales", "missing_leadtime", "stock_negative"];
 
 export default function DataHealthPage() {
   const { loading, skuMaster, snapshots, inventory } = useOpsData();

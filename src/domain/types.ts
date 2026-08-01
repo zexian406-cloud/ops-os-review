@@ -410,6 +410,8 @@ export interface OpsLog {
   anomalyType?: AnomalyType; // 关联的异常类型（来自诊断）
   reason?: string;         // 原因
   note?: string;           // 备注
+  promotionId?: string;    // 关联的促销活动 ID（与促销活动页 SKU↔促销 一致）
+  promotionName?: string;  // 关联促销活动名称（冗余，方便展示）
   createdAt: string;       // 记录创建时间
 }
 

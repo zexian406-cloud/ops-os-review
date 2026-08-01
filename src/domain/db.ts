@@ -519,6 +519,8 @@ export async function addOpsLog(
   anomalyType?: string,
   reason?: string,
   note?: string,
+  promotionId?: string,
+  promotionName?: string,
 ): Promise<string> {
   const id = `opslog_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   await db.opsLogs.put({
@@ -533,6 +535,8 @@ export async function addOpsLog(
     anomalyType,
     reason,
     note,
+    promotionId,
+    promotionName,
     createdAt: new Date().toISOString(),
   });
   return id;
