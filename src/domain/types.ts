@@ -290,6 +290,15 @@ export interface RateTier {
   rate: number;       // USD 费率
 }
 
+export type WarehouseRegion = "east" | "west" | "southeast" | "southcentral";
+
+export interface WarehouseMapping {
+  id?: number;
+  warehouseName: string;   // 原始仓库名，如 "乐歌(新) CAP"
+  region: WarehouseRegion; // 映射到的区域
+  createdAt: string;
+}
+
 export interface WarehouseProvider {
   id: string;
   name: string;                 // 服务商名称，如"无忧达"

@@ -10,6 +10,7 @@ import type {
   GlobalConfig,
   CloudConfig,
   WarehouseProvider,
+  WarehouseMapping,
   EstimateInput,
   TodoItem,
   CalculationRecord,
@@ -31,6 +32,7 @@ export class AmzOpsDB extends Dexie {
   alerts!: Table<Alert, string>;
   config!: Table<{ key: string; value: unknown }, string>;
   warehouseProviders!: Table<WarehouseProvider, string>;
+  warehouseMappings!: Table<WarehouseMapping, number>;
   calculationRecords!: Table<CalculationRecord, string>;
   todos!: Table<TodoItem, string>;
   shops!: Table<Shop, string>;
@@ -103,6 +105,9 @@ export class AmzOpsDB extends Dexie {
       todos: "id, completed, dueDate",
       shops: "id, name, createdAt",
       opsLogs: "id, sku, date, action",
+    });
+    this.version(8).stores({
+      warehouseMappings: "++id, warehouseName, region",
     });
   }
 }
@@ -350,6 +355,7 @@ export async function clearAllData(): Promise<void> {
       await db.calculationRecords.clear();
       await db.shops.clear();
       await db.opsLogs.clear();
+      await db.warehouseMappings.clear();
     }
   );
 }
@@ -368,7 +374,7 @@ export async function exportSnapshot(): Promise<{
   opsLogs: OpsLog[];
   exportedAt: string;
 }> {
-  const [skuMaster, dailySnapshot, inventoryLayer, campaigns, promotions, manualPromotions, alerts, config, shops, opsLogs] =
+  const [skuMaster, dailySnapshot, inventoryLayer, campaigns, promotions, manualPromotions, alerts, config, shops, opsLogs, warehouseMappings] =
     await Promise.all([
       db.skuMaster.toArray(),
       db.dailySnapshot.toArray(),
@@ -380,6 +386,7 @@ export async function exportSnapshot(): Promise<{
       db.config.toArray(),
       db.shops.toArray(),
       db.opsLogs.toArray(),
+      db.warehouseMappings.toArray(),
     ]);
   return {
     skuMaster,
@@ -392,6 +399,7 @@ export async function exportSnapshot(): Promise<{
     config,
     shops,
     opsLogs,
+    warehouseMappings,
     exportedAt: new Date().toISOString(),
   };
 }
@@ -408,6 +416,7 @@ export async function importSnapshot(payload: {
   config?: { key: string; value: unknown }[];
   shops?: Shop[];
   opsLogs?: OpsLog[];
+  warehouseMappings?: WarehouseMapping[];
 }): Promise<void> {
   await db.transaction(
     "rw",
@@ -425,6 +434,7 @@ export async function importSnapshot(payload: {
     db.calculationRecords,
     db.shops,
     db.opsLogs,
+    db.warehouseMappings,
     async () => {
       if (payload.skuMaster) {
         await db.skuMaster.clear();
@@ -468,6 +478,10 @@ export async function importSnapshot(payload: {
         await db.opsLogs.clear();
         await db.opsLogs.bulkPut(payload.opsLogs);
       }
+      if (payload.warehouseMappings) {
+        await db.warehouseMappings.clear();
+        await db.warehouseMappings.bulkPut(payload.warehouseMappings);
+      }
     }
   );
 }
@@ -503,4 +517,56 @@ export async function addOpsLog(
 
 export async function deleteOpsLog(id: string): Promise<void> {
   await db.opsLogs.delete(id);
+}
+
+// ==================== Warehouse Mapping helpers ====================
+
+/** 智能猜测仓库名对应的区域 */
+export function guessRegion(warehouseName: string): import("./types").WarehouseRegion | null {
+  const name = warehouseName.toLowerCase();
+  // 美东关键词
+  if (/美东|east|nj|newjersey|新泽西|njf|njjw/.test(name)) return "east";
+  // 美西关键词
+  if (/美西|west|ca[^a-z]|cali|洛杉矶|cajw|cap /.test(name)) return "west";
+  // 东南关键词
+  if (/东南|southeast|sav|savannah|萨凡纳/.test(name)) return "southeast";
+  // 中南关键词
+  if (/中南|southcentral|hou|texas|tx|休斯顿|txjw/.test(name)) return "southcentral";
+  return null;
+}
+
+/** 获取所有仓库映射 */
+export async function getAllWarehouseMappings(): Promise<import("./types").WarehouseMapping[]> {
+  return db.warehouseMappings.toArray();
+}
+
+/** 根据仓库名获取映射的区域 */
+export async function getWarehouseRegion(warehouseName: string): Promise<import("./types").WarehouseRegion | null> {
+  const mapping = await db.warehouseMappings.where("warehouseName").equals(warehouseName).first();
+  return mapping?.region ?? null;
+}
+
+/** 批量获取仓库名→区域映射 */
+export async function getWarehouseRegionMap(): Promise<Map<string, import("./types").WarehouseRegion>> {
+  const all = await db.warehouseMappings.toArray();
+  return new Map(all.map(m => [m.warehouseName, m.region]));
+}
+
+/** 保存或更新单条仓库映射 */
+export async function upsertWarehouseMapping(warehouseName: string, region: import("./types").WarehouseRegion): Promise<void> {
+  const existing = await db.warehouseMappings.where("warehouseName").equals(warehouseName).first();
+  if (existing) {
+    await db.warehouseMappings.update(existing.id!, { region });
+  } else {
+    await db.warehouseMappings.add({
+      warehouseName,
+      region,
+      createdAt: new Date().toISOString(),
+    });
+  }
+}
+
+/** 删除仓库映射 */
+export async function deleteWarehouseMapping(id: number): Promise<void> {
+  await db.warehouseMappings.delete(id);
 }
