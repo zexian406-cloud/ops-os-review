@@ -1328,14 +1328,16 @@ function ChildRow({
 
   return (
     <tr className={`hover:bg-background-100/50 ${selected ? 'bg-primary-50/50' : ''}`}>
-      <td className="px-2 py-2 border-b border-background-200/40 w-8">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={onToggleSelect}
-          className="h-3.5 w-3.5 rounded border-background-300 cursor-pointer accent-primary-500"
-        />
-      </td>
+      {selectionMode && (
+        <td className="px-2 py-2 border-b border-background-200/40 w-8">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            className="h-3.5 w-3.5 rounded border-background-300 cursor-pointer accent-primary-500"
+          />
+        </td>
+      )}
       <td className="px-3 py-2 border-b border-background-200/40">
         <Badge
           tone={
