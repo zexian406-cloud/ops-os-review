@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
 import { computeDiagnosis, type DiagnosisResult, type Impact } from "@/domain/diagnosis";
@@ -205,6 +205,7 @@ function RecordModal({
 export default function DiagnosisPage() {
   const { loading, alerts, skuMaster, latestSnapshot, previousSnapshot, latestInventory, promotions } = useOpsData();
   const [searchParams] = useSearchParams();
+  const skuParam = searchParams.get("sku");
   const [filter, setFilter] = useState<"all" | "critical" | "warning">("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [recordFor, setRecordFor] = useState<Alert | null>(null);
@@ -215,10 +216,14 @@ export default function DiagnosisPage() {
   const actionable = useMemo(() => alerts.filter((a) => a.severity !== "info"), [alerts]);
 
   const filtered = useMemo(() => {
-    const list = actionable.filter((a) => {
+    let list = actionable.filter((a) => {
       if (filter === "all") return true;
       return a.severity === filter;
     });
+    // 按 SKU 过滤：从驾驶舱等入口带 ?sku= 进入时，仅展示该 SKU 的风险
+    if (skuParam) {
+      list = list.filter((a) => a.sku === skuParam);
+    }
     const t = searchParams.get("type");
     if (t) {
       const map: Record<string, AlertType[]> = {
@@ -232,7 +237,14 @@ export default function DiagnosisPage() {
       if (types) return list.filter((a) => types.includes(a.type));
     }
     return list;
-  }, [actionable, filter, searchParams]);
+  }, [actionable, filter, searchParams, skuParam]);
+
+  // 按 SKU 进入诊断页时，自动展开该 SKU 的全部风险卡片（提升可用性）
+  useEffect(() => {
+    if (skuParam && filtered.length > 0) {
+      setExpanded(new Set(filtered.map((d) => d.id)));
+    }
+  }, [skuParam, filtered]);
 
   const diagnoses = useMemo(() => {
     return filtered
@@ -264,6 +276,13 @@ export default function DiagnosisPage() {
 
   return (
     <div className="space-y-6">
+      {skuParam && (
+        <div className="flex items-center gap-2 rounded-xl border border-primary-200 bg-primary-50 px-4 py-2.5 text-[13px] text-primary-800">
+          <i className="ri-heart-pulse-line" aria-hidden />
+          <span>正在查看 SKU <b className="mono-num">{skuParam}</b> 的风险诊断</span>
+          <Link to={`/sku/${encodeURIComponent(skuParam)}`} className="ml-auto text-[12px] font-medium text-primary-600 hover:underline">查看 SKU 详情 →</Link>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-heading text-[22px] font-bold text-foreground-950">异常诊断详情</h1>
@@ -287,7 +306,20 @@ export default function DiagnosisPage() {
       </div>
 
       {diagnoses.length === 0 ? (
-        <EmptyState icon="ri-check-double-line" title="没有待诊断的异常" desc="当前筛选条件下一切正常，或尚未导入数据" />
+        skuParam ? (
+          <EmptyState
+            icon="ri-heart-pulse-line"
+            title="该 SKU 暂无风险告警"
+            desc={`未找到 SKU ${skuParam} 的风险诊断记录`}
+            action={
+              <Link to={`/sku/${encodeURIComponent(skuParam)}`} className="text-[12px] font-medium text-primary-600 hover:underline">
+                查看 SKU 详情 →
+              </Link>
+            }
+          />
+        ) : (
+          <EmptyState icon="ri-check-double-line" title="没有待诊断的异常" desc="当前筛选条件下一切正常，或尚未导入数据" />
+        )
       ) : (
         <div className="space-y-3">
           {diagnoses.map(({ alert, result }) => {

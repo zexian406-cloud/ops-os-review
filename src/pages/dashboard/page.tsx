@@ -233,18 +233,6 @@ export default function Dashboard() {
 
   const activePromos = filteredPromotions.filter((p) => p.status === "upcoming" || p.status === "active");
 
-  const buckets: Array<{
-    key: string; title: string; icon: string;
-    tone: "danger" | "warn" | "primary" | "accent" | "secondary";
-    types: AlertType[]; href: string;
-  }> = [
-    { key: "stock", title: "库存风险", icon: "ri-inbox-2-line", tone: "danger", types: ["stockout", "low_stock", "overstock"], href: "/risk?type=stock" },
-    { key: "profit", title: "利润风险", icon: "ri-money-dollar-circle-line", tone: "warn", types: ["profit"], href: "/operations?tab=profit" },
-    { key: "ad", title: "广告风险", icon: "ri-megaphone-line", tone: "primary", types: ["ad"], href: "/operations?tab=ad" },
-    { key: "rating", title: "评分风险", icon: "ri-star-half-line", tone: "warn", types: ["rating"], href: "/operations?tab=rating" },
-    { key: "return", title: "退货风险", icon: "ri-arrow-go-back-line", tone: "secondary", types: ["return", "review"], href: "/operations?tab=return" },
-  ];
-
   // ── Section renderers ──
   const sections: Record<DashboardSectionKey, React.ReactNode> = {
     kpi: (
@@ -465,31 +453,6 @@ export default function Dashboard() {
       </Section>
     ) : null,
 
-    riskBuckets: (
-      <Section title="今日需要处理的事" subtitle="按类型聚合，点击查看详情" icon="ri-flashlight-line">
-        <div className="grid grid-cols-6 gap-3">
-          {buckets.map((b) => {
-            const count = b.types.reduce((s, t) => s + groupCount(t), 0);
-            const badgeBg = b.tone === "danger" ? "bg-red-500" : b.tone === "warn" ? "bg-secondary-500" : b.tone === "primary" ? "bg-foreground-800" : b.tone === "accent" ? "bg-accent-500" : "bg-foreground-400";
-            return (
-              <Link key={b.key} to={b.href} className="glass-card glass-card-hover group flex flex-col p-4 cursor-pointer">
-                <div className="flex items-center justify-between">
-                  <span className={["flex h-9 w-9 items-center justify-center rounded-[12px] text-[17px] transition-transform group-hover:scale-110",
-                    b.tone === "danger" ? "bg-red-50 text-red-500" : b.tone === "warn" ? "bg-secondary-100 text-secondary-700" : b.tone === "primary" ? "bg-foreground-100 text-foreground-700" : b.tone === "accent" ? "bg-accent-50 text-accent-600" : "bg-background-100 text-foreground-500"
-                  ].join(" ")}>
-                    <i className={b.icon} aria-hidden />
-                  </span>
-                  {count > 0 && <span className={`flex h-6 min-w-[24px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white ${badgeBg}`}>{count}</span>}
-                </div>
-                <div className="mt-3 text-[13px] font-semibold text-foreground-800">{b.title}</div>
-                <div className="mt-0.5 text-[11px] text-foreground-400">{count > 0 ? "点击查看" : "全部正常"}</div>
-              </Link>
-            );
-          })}
-        </div>
-      </Section>
-    ),
-
     alerts: (
       <Section title="紧急告警" subtitle={`Critical ${criticalCount} · Warning ${warnCount}`} icon="ri-alarm-warning-line"
         className="lg:col-span-2"
@@ -674,7 +637,7 @@ export default function Dashboard() {
                   <tr key={row.sku} className="group">
                     <td className="border-b border-background-200/50 px-3 py-2.5 text-[12px] text-foreground-400">{idx + 1}</td>
                     <td className="border-b border-background-200/50 px-3 py-2.5">
-                      <Link to={`/sku/${encodeURIComponent(row.sku)}`} className="font-medium text-foreground-900 hover:text-primary-700 hover:underline cursor-pointer">
+                      <Link to={`/diagnosis?sku=${encodeURIComponent(row.sku)}`} className="font-medium text-foreground-900 hover:text-primary-700 hover:underline cursor-pointer">
                         {row.sku}
                       </Link>
                     </td>
@@ -711,7 +674,7 @@ export default function Dashboard() {
         <LayoutCustomizer
           visibleKeys={visibleKeys}
           orderedKeys={orderedKeys}
-          allKeys={["kpi", "todo", "opsLogs", "weekCompare", "promotions", "riskBuckets", "alerts", "shipment", "wowBar"]}
+          allKeys={["kpi", "todo", "opsLogs", "weekCompare", "promotions", "alerts", "shipment", "wowBar"]}
           toggle={toggleSection}
           move={moveSection}
           onClose={() => setCustomizing(false)}

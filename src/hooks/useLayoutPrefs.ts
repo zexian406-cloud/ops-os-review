@@ -7,7 +7,6 @@ export type DashboardSectionKey =
   | "opsLogs"
   | "weekCompare"
   | "promotions"
-  | "riskBuckets"
   | "alerts"
   | "shipment"
   | "wowBar";
@@ -205,7 +204,6 @@ const DEFAULT_DASHBOARD_ORDER: DashboardSectionKey[] = [
   "opsLogs",
   "weekCompare",
   "promotions",
-  "riskBuckets",
   "alerts",
   "shipment",
   "wowBar",
@@ -478,7 +476,6 @@ export const DASHBOARD_LABELS: Record<DashboardSectionKey, string> = {
   opsLogs: "操作记录",
   weekCompare: "本周 vs 上周",
   promotions: "促销活动",
-  riskBuckets: "今日待处理",
   alerts: "紧急告警",
   shipment: "发货建议",
   wowBar: "上期对比条",
