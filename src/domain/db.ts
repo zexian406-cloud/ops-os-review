@@ -552,7 +552,7 @@ export async function getWarehouseRegionMap(): Promise<Map<string, import("./typ
   return new Map(all.map(m => [m.warehouseName, m.region]));
 }
 
-/** 保存或更新单条仓库映射 */
+/** 保存或更新单条仓库映射，并自动重算已有库存数据的区域字段 */
 export async function upsertWarehouseMapping(warehouseName: string, region: import("./types").WarehouseRegion): Promise<void> {
   const existing = await db.warehouseMappings.where("warehouseName").equals(warehouseName).first();
   if (existing) {
@@ -564,9 +564,41 @@ export async function upsertWarehouseMapping(warehouseName: string, region: impo
       createdAt: new Date().toISOString(),
     });
   }
+  await reapplyWarehouseMappings();
 }
 
-/** 删除仓库映射 */
+/** 删除仓库映射，并自动重算已有库存数据的区域字段 */
 export async function deleteWarehouseMapping(id: number): Promise<void> {
   await db.warehouseMappings.delete(id);
+  await reapplyWarehouseMappings();
+}
+
+/**
+ * 重新应用仓库映射：遍历所有 inventoryLayer 记录，
+ * 根据 warehouseBreakdown 中的仓库名 + 当前映射重算四仓区域字段。
+ * 在映射变更后自动调用，无需重新导入数据。
+ */
+export async function reapplyWarehouseMappings(): Promise<number> {
+  const regionMap = await getWarehouseRegionMap();
+  const allInv = await db.inventoryLayer.toArray();
+  let updated = 0;
+  for (const inv of allInv) {
+    if (!inv.warehouseBreakdown?.length) continue;
+    let eastStock = 0, westStock = 0, southeastStock = 0, southcentralStock = 0;
+    for (const wb of inv.warehouseBreakdown) {
+      const region = regionMap.get(wb.warehouse);
+      if (!region) continue;
+      switch (region) {
+        case "east": eastStock += wb.qty; break;
+        case "west": westStock += wb.qty; break;
+        case "southeast": southeastStock += wb.qty; break;
+        case "southcentral": southcentralStock += wb.qty; break;
+      }
+    }
+    await db.inventoryLayer.update(inv.id!, {
+      eastStock, westStock, southeastStock, southcentralStock,
+    });
+    updated++;
+  }
+  return updated;
 }

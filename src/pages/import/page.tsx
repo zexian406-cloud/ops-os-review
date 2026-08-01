@@ -18,6 +18,7 @@ import {
   upsertWarehouseMapping,
   getAllWarehouseMappings,
   deleteWarehouseMapping,
+  reapplyWarehouseMappings,
 } from "@/domain/db";
 import { pullFromGitHub, pushToGitHub, verifyGitHubConfig } from "@/domain/cloud";
 import type { CloudConfig, DailySnapshot, InventoryLayer, SkuMaster, Shop, TransitBatch, FactoryBatch, WarehouseMapping, WarehouseRegion } from "@/domain/types";
@@ -1597,6 +1598,13 @@ function WarehouseMappingPanel() {
     reload();
   };
 
+  const [reapplyMsg, setReapplyMsg] = useState<string | null>(null);
+  const handleReapply = async () => {
+    const count = await reapplyWarehouseMappings();
+    setReapplyMsg(`已重新计算 ${count} 条库存记录的区域字段`);
+    setTimeout(() => setReapplyMsg(null), 4000);
+  };
+
   // 从已有的 warehouseBreakdown 中收集所有出现过的仓库名
   const [knownWarehouses, setKnownWarehouses] = useState<string[]>([]);
   useEffect(() => {
@@ -1618,6 +1626,20 @@ function WarehouseMappingPanel() {
         <i className="ri-information-line mr-1 text-primary-600" aria-hidden />
         导入仓库明细时，系统会自动按仓库名匹配区域并填入美东/美西/东南/中南字段。
         匹配不到的仓库名会在这里显示，你可以手动指定区域。仓库编码换了只需改这里。
+        修改映射后系统会自动重算已有库存数据的区域字段，无需重新导入。
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleReapply}
+          className="rounded-md bg-primary-600 px-3 py-1.5 text-[12px] text-white hover:bg-primary-700 cursor-pointer transition-colors"
+        >
+          <i className="ri-refresh-line mr-1" aria-hidden />
+          重新应用映射
+        </button>
+        {reapplyMsg && (
+          <span className="text-[12px] text-accent-600">{reapplyMsg}</span>
+        )}
       </div>
 
       {/* 已有映射列表 */}
