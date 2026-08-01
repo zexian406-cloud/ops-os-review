@@ -473,7 +473,8 @@ export async function importSnapshot(payload: {
 }
 // ==================== OpsLog CRUD ====================
 export async function getOpsLogs(sku: string): Promise<OpsLog[]> {
-  return db.opsLogs.where("sku").equals(sku).reverse().sortBy("createdAt");
+  const data = await db.opsLogs.where("sku").equals(sku).toArray();
+  return data.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 }
 
 export async function addOpsLog(

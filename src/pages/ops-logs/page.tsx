@@ -47,11 +47,14 @@ export default function OpsLogsPage() {
 
   useEffect(() => {
     db.opsLogs
-      .orderBy("createdAt")
-      .reverse()
       .toArray()
       .then((data) => {
+        data.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
         setLogs(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLogs([]);
         setLoading(false);
       });
   }, []);

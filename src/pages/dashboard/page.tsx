@@ -53,7 +53,10 @@ export default function Dashboard() {
   };
   useEffect(() => { loadTodos(); }, [loading]);
   useEffect(() => {
-    db.opsLogs.orderBy("createdAt").reverse().limit(10).toArray().then(setOpsLogs);
+    db.opsLogs.toArray().then((data) => {
+      data.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+      setOpsLogs(data.slice(0, 10));
+    }).catch(() => setOpsLogs([]));
   }, [loading]);
 
   useEffect(() => {
