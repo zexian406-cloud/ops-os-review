@@ -264,6 +264,8 @@ export default function SkuDetail() {
   const coverDays = dailySales > 0 ? Math.round(totalStock / dailySales) : 999;
   const stockSalesRatio = curSnap && curSnap.monthlySales > 0 ? (totalStock / curSnap.monthlySales).toFixed(1) : "N/A";
   const returnFee = returnFee30d;
+  const dailySales30d = curSnap ? curSnap.monthlySales / 30 : 0;
+  const salesDelta = dailySales > 0 && dailySales30d > 0 ? ((dailySales - dailySales30d) / dailySales30d * 100) : 0;
 
   // 仓库区域明细
   const eastStock = (inv?.eastStock ?? 0);
@@ -393,7 +395,7 @@ export default function SkuDetail() {
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {coreKpiCardOrder.map((key) => {
               switch (key) {
-                case "dailySales7d": return <KpiCard key={key} label="7天日均销量" value={latest.dailySales7d.toFixed(1)} sub={`月销 ${latest.monthlySales}`} icon="ri-shopping-cart-2-line" tone="primary" />;
+                case "dailySales7d": return <KpiCard key={key} label="7天日均销量" value={latest.dailySales7d.toFixed(1)} sub={`30天日均 ${dailySales30d.toFixed(1)} ${salesDelta > 0 ? `↑${salesDelta.toFixed(0)}%` : salesDelta < 0 ? `↓${Math.abs(salesDelta).toFixed(0)}%` : "持平"}`} icon="ri-shopping-cart-2-line" tone={salesDelta > 10 ? "primary" : salesDelta < -10 ? "warn" : "primary"} />;
                 case "monthlySales": return <KpiCard key={key} label="30天销量" value={latest.monthlySales.toLocaleString()} sub="近30天累计" icon="ri-bar-chart-2-line" />;
                 case "inStock": return <KpiCard key={key} label="在库库存" value={allStock.toLocaleString()} sub={`美东${eastStock} + 美西${westStock} + 东南${southeastStock} + 中南${southcentralStock}`} icon="ri-archive-drawer-line" tooltip="公式: 美东在库 + 美西在库 + 东南在库 + 中南在库" />;
                 case "inTransit": return <KpiCard key={key} label="在途库存" value={allTransit.toLocaleString()} sub={`美东${eastTransitNew}+美西${westTransitNew}+东南${southeastTransit}+中南${southcentralTransit}`} icon="ri-ship-line" tone="secondary" tooltip="公式: 美东在途 + 美西在途 + 东南在途 + 中南在途" />;

@@ -135,7 +135,7 @@ export default function Operations() {
             metric: snap.rating,
             metricLabel: `${snap.rating.toFixed(1)} ★`,
             tone: "warn",
-            note: "关注 Review 增量与差评回复",
+            note: "继续维护保持",
           });
         }
       } else if (tab === "return") {
@@ -147,7 +147,7 @@ export default function Operations() {
             metric: returnMetric,
             metricLabel: `${returnMetric.toFixed(1)}%`,
             tone: returnMetric > 10 ? "danger" : "warn",
-            note: sku.fulfillment === "FBM" ? "分析退款原因（物流 / 描述不符）" : "分析退货原因（质量 / 描述）",
+            note: "注意退货率增长",
           });
         }
       }
@@ -226,7 +226,6 @@ export default function Operations() {
                 <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground-500">
                   <th className="border-b border-background-200 px-3 py-2.5">SKU / 品名</th>
                   <th className="border-b border-background-200 px-3 py-2.5">店铺</th>
-                  <th className="border-b border-background-200 px-3 py-2.5">负责人</th>
                   <th className="border-b border-background-200 px-3 py-2.5 text-right">日销</th>
                   <th className="border-b border-background-200 px-3 py-2.5 text-right">
                     {activeTab.label.replace("异常", "")}
@@ -250,9 +249,6 @@ export default function Operations() {
                     </td>
                     <td className="border-b border-background-200/70 px-3 py-2.5 text-[12px] text-foreground-600">
                       {getShopName(r.sku.store)}
-                    </td>
-                    <td className="border-b border-background-200/70 px-3 py-2.5 text-[12px] text-foreground-600">
-                      {r.sku.owner ?? "-"}
                     </td>
                     <td className="mono-num border-b border-background-200/70 px-3 py-2.5 text-right">
                       {r.snap?.dailySales7d.toFixed(1) ?? "-"}

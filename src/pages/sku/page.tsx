@@ -131,6 +131,7 @@ export default function SkuList() {
   } | null>(null);
 
   /* ── 批量删除 ── */
+  const [selectionMode, setSelectionMode] = useState(false);
   const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set());
 
   const toggleSelect = (sku: string) => {
@@ -548,25 +549,39 @@ export default function SkuList() {
         subtitle={
           <span className="flex items-center gap-3">
             <span>共 {filteredGroups.length} 个产品组，{totalMskus} 个 MSKU</span>
-            <label className="flex items-center gap-1.5 text-[12px] text-foreground-500 cursor-pointer select-none hover:text-foreground-700">
-              <input
-                type="checkbox"
-                checked={selectedSkus.size > 0 && selectedSkus.size === totalMskus}
-                onChange={() => {
-                  if (selectedSkus.size === totalMskus) {
-                    setSelectedSkus(new Set());
-                  } else {
-                    const all = new Set<string>();
-                    filteredGroups.forEach((g) => g.children.forEach((c) => all.add(c.sku)));
-                    setSelectedSkus(all);
-                    // 全选时自动展开所有组，让框框可见
-                    setExpanded(new Set(filteredGroups.map((g) => g.parent.sku)));
-                  }
+            {!selectionMode ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectionMode(true);
+                  const all = new Set<string>();
+                  filteredGroups.forEach((g) => g.children.forEach((c) => all.add(c.sku)));
+                  setSelectedSkus(all);
+                  setExpanded(new Set(filteredGroups.map((g) => g.parent.sku)));
                 }}
-                className="h-3.5 w-3.5 rounded border-background-300 cursor-pointer accent-primary-500"
-              />
-              全选
-            </label>
+                className="text-[12px] text-foreground-500 hover:text-foreground-700 cursor-pointer"
+              >
+                全选
+              </button>
+            ) : (
+              <label className="flex items-center gap-1.5 text-[12px] text-foreground-500 cursor-pointer select-none hover:text-foreground-700">
+                <input
+                  type="checkbox"
+                  checked={selectedSkus.size > 0 && selectedSkus.size === totalMskus}
+                  onChange={() => {
+                    if (selectedSkus.size === totalMskus) {
+                      setSelectedSkus(new Set());
+                    } else {
+                      const all = new Set<string>();
+                      filteredGroups.forEach((g) => g.children.forEach((c) => all.add(c.sku)));
+                      setSelectedSkus(all);
+                    }
+                  }}
+                  className="h-3.5 w-3.5 rounded border-background-300 cursor-pointer accent-primary-500"
+                />
+                全选
+              </label>
+            )}
             {selectedSkus.size > 0 && (
               <span className="text-[12px] font-medium text-red-600">
                 已选 {selectedSkus.size} 个
@@ -627,7 +642,7 @@ export default function SkuList() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSelectedSkus(new Set())}
+                  onClick={() => { setSelectedSkus(new Set()); setSelectionMode(false); }}
                   className="text-[12px] text-red-500 hover:text-red-700 cursor-pointer"
                 >
                   取消选择
@@ -649,6 +664,7 @@ export default function SkuList() {
               <SkuGroupCard
                 key={group.parent.sku}
                 group={group}
+                selectionMode={selectionMode}
                 expanded={expanded.has(group.parent.sku)}
                 onToggle={() => toggleExpand(group.parent.sku)}
                 latestSnapshot={latestSnapshot}
@@ -991,6 +1007,7 @@ export default function SkuList() {
 
 function SkuGroupCard({
   group,
+  selectionMode,
   expanded,
   onToggle,
   latestSnapshot,
@@ -1010,6 +1027,7 @@ function SkuGroupCard({
   allSelected,
 }: {
   group: SkuGroup;
+  selectionMode: boolean;
   expanded: boolean;
   onToggle: () => void;
   latestSnapshot: Map<string, DailySnapshot>;
@@ -1087,7 +1105,7 @@ function SkuGroupCard({
         }`}
       >
         <div className="flex items-center gap-3 min-w-0">
-          {isMultiChild && (
+          {isMultiChild && selectionMode && (
             <input
               type="checkbox"
               checked={allSelected}
@@ -1219,14 +1237,16 @@ function SkuGroupCard({
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-foreground-500 border-b border-background-200/70">
-                  <th className="px-2 py-2 w-8">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      onChange={allSelected ? onDeselectAll : onSelectAll}
-                      className="h-3.5 w-3.5 rounded border-background-300 cursor-pointer accent-primary-500"
-                    />
-                  </th>
+                  {selectionMode && (
+                    <th className="px-2 py-2 w-8">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={allSelected ? onDeselectAll : onSelectAll}
+                        className="h-3.5 w-3.5 rounded border-background-300 cursor-pointer accent-primary-500"
+                      />
+                    </th>
+                  )}
                   <th className="px-3 py-2 whitespace-nowrap">在售</th>
                   <th className="px-3 py-2 whitespace-nowrap">MSKU</th>
                   <th className="px-3 py-2 whitespace-nowrap">店铺</th>
@@ -1245,6 +1265,7 @@ function SkuGroupCard({
                   <ChildRow
                     key={child.sku}
                     child={child}
+                    selectionMode={selectionMode}
                     snap={latestSnapshot.get(child.sku)}
                     inv={latestInventory.get(child.sku)}
                     promotions={promotions}
