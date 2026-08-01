@@ -4,6 +4,7 @@ import Section from "@/components/ui/Section";
 import KpiCard from "@/components/ui/KpiCard";
 import Badge from "@/components/ui/Badge";
 import { computeShipmentSuggestions } from "@/domain/engine";
+import { computeAll } from "@/domain/calculator";
 import { db } from "@/domain/db";
 import type { Campaign, SkuMaster } from "@/domain/types";
 
@@ -135,15 +136,7 @@ export default function Season() {
       const snap = latestSnapshot.get(sku.sku);
       if (!snap || snap.dailySales7d <= 0) continue;
 
-      const costFob = sku.costFob ?? 0;
-      const costShipping = sku.costShipping ?? 0;
-      const costDelivery = sku.costDelivery ?? 0;
-      const costCommission = sku.costCommission ?? 0;
-      const costStorage = sku.costStorage ?? 0;
-      const costReturn = sku.costReturn ?? 0;
-      const costAd = sku.costAd ?? 0;
-      const coupon = sku.coupon ?? 0;
-      const totalCost = costFob + costShipping + costDelivery + costCommission + costStorage + costReturn + costAd + coupon;
+      const totalCost = computeAll({ sku, snap }).totalCost;
 
       const profit = discountPrice - totalCost;
       const margin = discountPrice > 0 ? (profit / discountPrice) * 100 : 0;

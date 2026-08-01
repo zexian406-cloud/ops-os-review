@@ -326,7 +326,7 @@ export default function SkuDetail() {
     totalCost, grossProfit, grossMargin, isAdInferred, isReturnInferred, isCommissionInferred,
     isDiscountAdInferred, isDiscountReturnInferred,
     discountTotalCost, discountProfit, discountMargin,
-    discountCostCommission, discountCostAd, discountCostReturn,
+    discountCostCommission, discountCostAd, discountCostReturn, discountCostCoupon,
     discountAdEstimated, discountReturnFeeEstimated,
     costFob, costShipping, costDelivery, costCommission, costStorage, costAd, costReturn, costCoupon, costPromo,
     returnFee30d, adRatio: calcAdRatio, returnRate: calcReturnRate, refundRate: calcRefundRate,
@@ -357,11 +357,6 @@ export default function SkuDetail() {
   const westTransitNew = (inv?.westTransit ?? 0);
   const southeastTransit = (inv?.southeastTransit ?? 0);
   const southcentralTransit = (inv?.southcentralTransit ?? 0);
-
-  // 旧数据兼容
-  const fbaStock = inv?.fbaStock ?? 0;
-  const fbmStock = inv?.fbmStock ?? 0;
-  const factoryStock = inv?.factoryStock ?? 0;
 
   return (
     <div className="space-y-6">
@@ -634,19 +629,23 @@ export default function SkuDetail() {
                   const newReturnRate = Number(fd.get("returnRate")) || latestForEdit.returnRate;
                   const newRefundRate = Number(fd.get("refundRate")) || (latestForEdit.refundRate ?? 0);
 
-                  // 自动计算餀爆公式：如果运营表单没有直接改指则部分，就从字段反推
-                  const costFob = sku.costFob ?? 0;
-                  const costShipping = sku.costShipping ?? 0;
-                  const costDelivery = sku.costDelivery ?? 0;
-                  const costStorage = sku.costStorage ?? 0;
-                  const coupon = sku.coupon ?? 0;
-
-                  // 成本项优先用SKU主档字段，如果为空则用运营指标反推
-                  const costAd = (sku.costAd ?? 0) > 0 ? (sku.costAd ?? 0) : (newAdRatio / 100) * sku.price;
-                  const costReturn = (sku.costReturn ?? 0) > 0 ? (sku.costReturn ?? 0) : (newReturnRate / 100) * sku.price;
-                  const costCommission = (sku.costCommission ?? 0) > 0 ? (sku.costCommission ?? 0) : sku.price * 0.15;
-
-                  const totalCostCalc = costFob + costShipping + costDelivery + costCommission + costStorage + costAd + costReturn + coupon;
+                  // 用统一计算引擎 computeAll 得到总成本，杜绝手写公式误加 coupon
+                  const editSnap: DailySnapshot = {
+                    ...latestForEdit,
+                    dailySales7d: newDailySales7d,
+                    monthlySales: newMonthlySales,
+                    stockOnHand: newStockOnHand,
+                    stockInTransit: newStockInTransit,
+                    adSpend: newAdSpend,
+                    adRatio: newAdRatio,
+                    rating: newRating,
+                    returnRate: newReturnRate,
+                    refundRate: newRefundRate,
+                    daysOfCoverOnHand: newDailySales7d > 0 ? Number((newStockOnHand / newDailySales7d).toFixed(1)) : 999,
+                    daysOfCoverWithTransit: newDailySales7d > 0 ? Number(((newStockOnHand + newStockInTransit) / newDailySales7d).toFixed(1)) : 999,
+                  };
+                  const editCalc = computeAll({ sku, snap: editSnap, inv });
+                  const totalCostCalc = editCalc.totalCost;
 
                   // 如果用户手动填了利润率则优先用手动值，否则自动计算
                   const rawProfit = Number(fd.get("profit"));
@@ -655,22 +654,10 @@ export default function SkuDetail() {
                   const newMargin = (rawMargin !== 0) ? rawMargin : sku.price > 0 ? (newProfit / sku.price) * 100 : latestForEdit.profitMargin;
 
                   const updated: DailySnapshot = {
-                    date: latestForEdit.date,
-                    sku: latestForEdit.sku,
-                    dailySales7d: newDailySales7d,
-                    monthlySales: newMonthlySales,
-                    stockOnHand: newStockOnHand,
-                    stockInTransit: newStockInTransit,
-                    adSpend: newAdSpend,
-                    adRatio: newAdRatio,
+                    ...editSnap,
+                    totalCost: totalCostCalc,
                     profit: newProfit,
                     profitMargin: newMargin,
-                    totalCost: totalCostCalc,
-                    rating: newRating,
-                    returnRate: newReturnRate,
-                    refundRate: newRefundRate,
-                    daysOfCoverOnHand: newDailySales7d > 0 ? Number((newStockOnHand / newDailySales7d).toFixed(1)) : 999,
-                    daysOfCoverWithTransit: newDailySales7d > 0 ? Number(((newStockOnHand + newStockInTransit) / newDailySales7d).toFixed(1)) : 999,
                   };
 
                   // ── 读取区域库存字段 ──
@@ -852,7 +839,7 @@ export default function SkuDetail() {
               {costCoupon > 0 && <ProfitRow label="优惠券(历史)" value={`($${costCoupon.toFixed(2)})`} />}
               {costPromo > 0 && <ProfitRow label="促销成本(手动)" value={`-$${costPromo.toFixed(2)}`} />}
               {weekPromoCost.count > 0 && (
-                <div className="text-[11px] text-accent-600 italic text-right">{weekPromoCost.count} 条促销 · 含促销 ¥{costPromo.toFixed(2)}</div>
+                <div className="text-[11px] text-accent-600 italic text-right">{weekPromoCost.count} 条促销 · 含促销 ${costPromo.toFixed(2)}</div>
               )}
               <div className="my-1.5 h-px bg-background-200/50" />
               <ProfitRow label="总成本" value={`$${totalCost.toFixed(2)}`} bold />
@@ -892,7 +879,7 @@ export default function SkuDetail() {
                 <ProfitRow label="仓租" value={`-$${(sku.costStorage ?? 0).toFixed(2)}`} />
                 <ProfitRow label="折扣广告费" value={`-$${discountCostAd.toFixed(2)}`} inferred={isDiscountAdInferred} />
                 <ProfitRow label="折扣退货费" value={`-$${discountCostReturn.toFixed(2)}`} inferred={isDiscountReturnInferred} />
-                <ProfitRow label="优惠券" value={`-$${costCoupon.toFixed(2)}`} />
+                <ProfitRow label="优惠券" value={`(${discountCostCoupon.toFixed(2)})`} />
                 <div className="my-1.5 h-px bg-background-200/50" />
                 <ProfitRow label="折扣总成本" value={`$${discountTotalCost.toFixed(2)}`} bold />
                 <ProfitRow label="折扣净利" value={`$${discountProfit.toFixed(2)}`} bold tone={discountProfit < 0 ? "text-red-600" : "text-accent-700"} />
@@ -923,11 +910,10 @@ export default function SkuDetail() {
             {sku.costFob ? <CostWaterfall label="FOB (产品成本)" value={-sku.costFob} color="bg-secondary-400" /> : null}
             {sku.costShipping ? <CostWaterfall label="头程费" value={-sku.costShipping} color="bg-secondary-400" /> : null}
             {sku.costDelivery ? <CostWaterfall label="尾程(配送费)" value={-sku.costDelivery} color="bg-secondary-400" /> : null}
-            {sku.costCommission ? <CostWaterfall label="佣金" value={-sku.costCommission} color="bg-secondary-400" /> : null}
-            {sku.costStorage ? <CostWaterfall label="仓租" value={-sku.costStorage} color="bg-secondary-300" /> : null}
+            {costCommission > 0 ? <CostWaterfall label="佣金" value={-costCommission} color="bg-secondary-400" /> : null}
+            {costStorage > 0 ? <CostWaterfall label="仓租" value={-costStorage} color="bg-secondary-300" /> : null}
             {costAd > 0 ? <CostWaterfall label="广告费" value={-costAd} color="bg-secondary-300" /> : null}
-            {sku.costReturn ? <CostWaterfall label="退货费" value={-sku.costReturn} color="bg-secondary-300" /> : null}
-            {costCoupon > 0 ? <CostWaterfall label="优惠券" value={-costCoupon} color="bg-secondary-300" /> : null}
+            {costReturn > 0 ? <CostWaterfall label="退货费" value={-costReturn} color="bg-secondary-300" /> : null}
             <div className="my-2 h-px bg-background-200/70" />
             <CostWaterfall label="单件净利" value={grossProfit} color={grossProfit >= 0 ? "bg-accent-500" : "bg-red-500"} isEnd />
             <div className="flex items-center justify-between text-[13px]">
@@ -1104,17 +1090,6 @@ export default function SkuDetail() {
             <div className="text-[11px] text-foreground-500">在库{allStock} + 在途{allTransit}</div>
           </div>
         </div>
-        {/* 富运数据: 兼容旧字段展示 */}
-        {(fbaStock + fbmStock + factoryStock > 0) && (
-          <div className="mt-3 rounded-lg border border-background-200/70 bg-background-50 p-3">
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-foreground-500">旧数据 - FBA/FBM/工厂</div>
-            <div className="grid grid-cols-3 gap-3">
-              <WarehouseCell label="FBA 在库" qty={fbaStock} />
-              <WarehouseCell label="FBM 在库" qty={fbmStock} />
-              <WarehouseCell label="工厂库存" qty={factoryStock} />
-            </div>
-          </div>
-        )}
         {latest && (
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <DataTile label="7天销量" value={latest.dailySales7d.toFixed(1)} sub="日均" />
@@ -1890,15 +1865,6 @@ function HistoryRow({ label, prev, cur, unit, digits, goodDir }: {
       <td className="mono-num border-b border-background-200/50 px-3 py-2.5 font-semibold text-foreground-900">{fmt(cur)}{unit}</td>
       <td className={`mono-num border-b border-background-200/50 px-3 py-2.5 font-semibold ${color}`}>{arrow} {fmt(Math.abs(cur - prev))}{unit}</td>
     </tr>
-  );
-}
-
-function WarehouseCell({ label, qty }: { label: string; qty: number }) {
-  return (
-    <div className="rounded-lg border border-background-200/70 bg-background-100/50 p-3">
-      <div className="text-[11px] uppercase tracking-[0.08em] text-foreground-500">{label}</div>
-      <div className="mono-num mt-1 font-heading text-[18px] font-bold text-foreground-900">{qty.toLocaleString()}</div>
-    </div>
   );
 }
 

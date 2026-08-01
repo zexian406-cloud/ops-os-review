@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import { parseOperationExcel, type ImportResult } from "@/domain/excel";
+import { applyIncrementalCostUpdate } from "@/domain/cost-merge";
 import {
   clearAllData,
   db,
@@ -297,6 +298,11 @@ export default function ImportPage() {
       // 保存 SKU 主档
       if (parsed.skuMaster.length > 0) {
         await upsertSkuMaster(parsed.skuMaster);
+      }
+      // 增量成本更新：单表「产品成本更新」/「头程更新」场景，skuMaster 为空，
+      // 需按 SKU 回写现有 skuMaster 的 costFob/costShipping/costDelivery（见 cost-merge.ts）
+      if (parsed.skuMaster.length === 0 && (parsed.costFobMap.size > 0 || parsed.shippingMap.size > 0)) {
+        await applyIncrementalCostUpdate(parsed.costFobMap, parsed.shippingMap);
       }
       // 保存销量快照
       if (parsed.dailySnapshot.length > 0) {

@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { computeAll } from "./calculator";
 
 const BOM = "\uFEFF";
 
@@ -77,17 +78,19 @@ export async function exportAllCsv(): Promise<void> {
     "总成本", "单件净利", "净利率(%)",
   ];
   const costRows = skuMaster.map((s) => {
-    const fob = s.costFob ?? 0;
-    const shipping = s.costShipping ?? 0;
-    const delivery = s.costDelivery ?? 0;
-    const commission = s.costCommission ?? 0;
-    const storage = s.costStorage ?? 0;
-    const ad = s.costAd ?? 0;
-    const ret = s.costReturn ?? 0;
+    // 用统一计算引擎 computeAll，杜绝手写公式误加 coupon
+    const calc = computeAll({ sku: s });
+    const fob = calc.costFob;
+    const shipping = calc.costShipping;
+    const delivery = calc.costDelivery;
+    const commission = calc.costCommission;
+    const storage = calc.costStorage;
+    const ad = calc.costAd;
+    const ret = calc.costReturn;
     const coupon = s.coupon ?? 0;
-    const totalCost = fob + shipping + delivery + commission + storage + ad + ret + coupon;
-    const profit = s.price - totalCost;
-    const margin = s.price > 0 ? ((profit / s.price) * 100) : 0;
+    const totalCost = calc.totalCost;
+    const profit = calc.grossProfit;
+    const margin = calc.grossMargin;
     return [
       s.sku, s.name, s.price, fob, shipping, delivery, commission, storage, ad, ret, coupon,
       Number(totalCost.toFixed(2)), Number(profit.toFixed(2)), Number(margin.toFixed(1)),
@@ -181,17 +184,19 @@ export async function exportCostCsv(): Promise<void> {
   const dateStr = today();
   const headers = ["SKU", "品名", "售价", "FOB", "头程", "配送费", "佣金", "仓储费", "广告费", "退货费", "优惠券", "总成本", "单件净利", "净利率(%)"];
   const rows = skuMaster.map((s) => {
-    const fob = s.costFob ?? 0;
-    const shipping = s.costShipping ?? 0;
-    const delivery = s.costDelivery ?? 0;
-    const commission = s.costCommission ?? 0;
-    const storage = s.costStorage ?? 0;
-    const ad = s.costAd ?? 0;
-    const ret = s.costReturn ?? 0;
+    // 用统一计算引擎 computeAll，杜绝手写公式误加 coupon
+    const calc = computeAll({ sku: s });
+    const fob = calc.costFob;
+    const shipping = calc.costShipping;
+    const delivery = calc.costDelivery;
+    const commission = calc.costCommission;
+    const storage = calc.costStorage;
+    const ad = calc.costAd;
+    const ret = calc.costReturn;
     const coupon = s.coupon ?? 0;
-    const totalCost = fob + shipping + delivery + commission + storage + ad + ret + coupon;
-    const profit = s.price - totalCost;
-    const margin = s.price > 0 ? ((profit / s.price) * 100) : 0;
+    const totalCost = calc.totalCost;
+    const profit = calc.grossProfit;
+    const margin = calc.grossMargin;
     return [s.sku, s.name, s.price, fob, shipping, delivery, commission, storage, ad, ret, coupon, Number(totalCost.toFixed(2)), Number(profit.toFixed(2)), Number(margin.toFixed(1))];
   });
   downloadCsv(`成本明细-${dateStr}.csv`, headers, rows);

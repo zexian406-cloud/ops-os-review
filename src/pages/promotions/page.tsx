@@ -4,6 +4,7 @@ import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import PageLayoutCustomizer from "@/components/layout/PageLayoutCustomizer";
 import { usePageLayout } from "@/hooks/usePageLayout";
+import { computeAll } from "@/domain/calculator";
 import type { Promotion, PromotionType, SkuMaster, DailySnapshot, Shop } from "@/domain/types";
 
 const PROMO_TYPES: { value: PromotionType; label: string }[] = [
@@ -126,16 +127,8 @@ export default function PromotionsPage() {
       const snap = snapMap.get(p.sku);
       const salePrice = p.discountPrice ?? sku?.price ?? 0;
 
-      // Total cost per unit
-      const costFob = sku?.costFob ?? 0;
-      const costShipping = sku?.costShipping ?? 0;
-      const costDelivery = sku?.costDelivery ?? 0;
-      const costCommission = sku?.costCommission ?? 0;
-      const costStorage = sku?.costStorage ?? 0;
-      const costReturn = sku?.costReturn ?? 0;
-      const costAd = sku?.costAd ?? 0;
-      const coupon = sku?.coupon ?? 0;
-      const totalCost = costFob + costShipping + costDelivery + costCommission + costStorage + costReturn + costAd + coupon;
+      // Total cost per unit — 用统一计算引擎 computeAll，杜绝误加 coupon
+      const totalCost = sku ? computeAll({ sku, snap }).totalCost : 0;
 
       const profit = salePrice - totalCost;
       const margin = salePrice > 0 ? (profit / salePrice) * 100 : 0;

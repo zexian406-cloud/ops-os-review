@@ -4,7 +4,7 @@ import {
   BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { useOpsData } from "@/domain/store";
-import { computeWarehouseTotals } from "@/domain/calculator";
+import { computeWarehouseTotals, computeAll } from "@/domain/calculator";
 import { db, getAllShops } from "@/domain/db";
 import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
@@ -183,7 +183,7 @@ export default function Dashboard() {
 
   const kpiValues = useMemo((): Record<KpiMetricKey, { value: string | number; sub: React.ReactNode }> => {
     const avgMarginVal = filteredSkuMaster.filter((s) => s.saleStatus === "active").reduce((sum, s, _, arr) => {
-      const cost = (s.costFob ?? 0) + (s.costShipping ?? 0) + (s.costDelivery ?? 0) + (s.costCommission ?? 0) + (s.costStorage ?? 0) + (s.costReturn ?? 0) + (s.costAd ?? 0) + (s.coupon ?? 0);
+      const cost = computeAll({ sku: s }).totalCost;
       return s.price > 0 ? sum + (s.price - cost) / s.price * 100 : sum;
     }, 0) / (filteredSkuMaster.filter((s) => s.saleStatus === "active").length || 1);
 

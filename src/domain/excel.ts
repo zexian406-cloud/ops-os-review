@@ -54,6 +54,10 @@ export interface ImportResult {
   inventoryLayer: InventoryLayer[];
   transitBatches: Map<string, TransitBatch[]>;
   factoryBatches: Map<string, FactoryBatch[]>;
+  /** 产品成本更新 sheet 解析出的 FOB 映射（SKU → FOB），用于增量成本回写 */
+  costFobMap: Map<string, number>;
+  /** 头程更新 sheet 解析出的头程/配送费映射（SKU → {shipping, delivery}） */
+  shippingMap: Map<string, { shipping: number; delivery: number }>;
   today: string;
   droppedFields: string[];
   addedFields: string[];
@@ -434,6 +438,8 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
     inventoryLayer,
     transitBatches,
     factoryBatches,
+    costFobMap,
+    shippingMap,
     today,
     droppedFields: [],
     addedFields: [],
