@@ -1305,6 +1305,7 @@ function ChildRow({
   getShopName,
   selected,
   onToggleSelect,
+  selectionMode,
 }: {
   child: SkuMaster;
   snap: DailySnapshot | undefined;
@@ -1319,6 +1320,7 @@ function ChildRow({
   getShopName: (storeId: string) => string;
   selected: boolean;
   onToggleSelect: () => void;
+  selectionMode: boolean;
 }) {
   const { profit, margin, adRatio, returnRate, refundRate } = computeMskuProfit(child, snap, inv);
   const childPromos = promotions.filter((p) => p.sku === child.sku);
