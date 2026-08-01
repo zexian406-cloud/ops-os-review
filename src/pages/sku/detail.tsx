@@ -313,6 +313,31 @@ export default function SkuDetail() {
   const southeastTransit = (inv?.southeastTransit ?? 0);
   const southcentralTransit = (inv?.southcentralTransit ?? 0);
 
+  // 在库库存来源说明（四仓为0时显示实际来源）
+  const fbaStockVal = inv?.fbaStock ?? 0;
+  const fbmWarehouseSum = inv?.warehouseBreakdown
+    ? inv.warehouseBreakdown.reduce((s, wb) => s + (wb.qty || 0), 0)
+    : 0;
+  const fbaRegionStockSum = eastStock + westStock + southeastStock + southcentralStock;
+  const stockSubText = fbaRegionStockSum > 0
+    ? `美东${eastStock} + 美西${westStock} + 东南${southeastStock} + 中南${southcentralStock}`
+    : fbaStockVal > 0 && fbmWarehouseSum > 0
+      ? `FBA ${fbaStockVal} + 海外仓 ${fbmWarehouseSum}`
+      : fbaStockVal > 0
+        ? `FBA库存 ${fbaStockVal}`
+        : fbmWarehouseSum > 0
+          ? `海外仓明细 ${fbmWarehouseSum}`
+          : `美东${eastStock} + 美西${westStock} + 东南${southeastStock} + 中南${southcentralStock}`;
+
+  // 在途库存来源说明（四仓在途为0时显示在途批次）
+  const fbaRegionTransitSum = eastTransitNew + westTransitNew + southeastTransit + southcentralTransit;
+  const transitBatchCount = inv?.transitBatches?.length ?? 0;
+  const transitSubText = fbaRegionTransitSum > 0
+    ? `美东${eastTransitNew}+美西${westTransitNew}+东南${southeastTransit}+中南${southcentralTransit}`
+    : transitBatchCount > 0
+      ? `在途批次 ${transitBatchCount} 批`
+      : `美东${eastTransitNew}+美西${westTransitNew}+东南${southeastTransit}+中南${southcentralTransit}`;
+
   // 旧数据兼容
   const fbaStock = inv?.fbaStock ?? 0;
   const fbmStock = inv?.fbmStock ?? 0;
@@ -433,8 +458,8 @@ export default function SkuDetail() {
               switch (key) {
                 case "dailySales7d": return <KpiCard key={key} label="7天日均销量" value={latest.dailySales7d.toFixed(1)} sub={`30天日均 ${dailySales30d.toFixed(1)} 件 · ${salesDelta > 0 ? `↑+${(dailySales - dailySales30d).toFixed(1)}` : salesDelta < 0 ? `↓${(dailySales - dailySales30d).toFixed(1)}` : "—"} 件/日`} icon="ri-shopping-cart-2-line" tone={salesDelta > 10 ? "primary" : salesDelta < -10 ? "warn" : "primary"} />;
                 case "monthlySales": return <KpiCard key={key} label="30天销量" value={latest.monthlySales.toLocaleString()} sub="近30天累计" icon="ri-bar-chart-2-line" />;
-                case "inStock": return <KpiCard key={key} label="在库库存" value={allStock.toLocaleString()} sub={`美东${eastStock} + 美西${westStock} + 东南${southeastStock} + 中南${southcentralStock}`} icon="ri-archive-drawer-line" tooltip="公式: 美东在库 + 美西在库 + 东南在库 + 中南在库" />;
-                case "inTransit": return <KpiCard key={key} label="在途库存" value={allTransit.toLocaleString()} sub={`美东${eastTransitNew}+美西${westTransitNew}+东南${southeastTransit}+中南${southcentralTransit}`} icon="ri-ship-line" tone="secondary" tooltip="公式: 美东在途 + 美西在途 + 东南在途 + 中南在途" />;
+                case "inStock": return <KpiCard key={key} label="在库库存" value={allStock.toLocaleString()} sub={stockSubText} icon="ri-archive-drawer-line" tooltip="四仓区域在库合计，四仓为0时自动取FBA库存或海外仓明细" />;
+                case "inTransit": return <KpiCard key={key} label="在途库存" value={allTransit.toLocaleString()} sub={transitSubText} icon="ri-ship-line" tone="secondary" tooltip="四仓在途合计，四仓为0时自动取在途批次汇总" />;
                 case "totalStock": return <KpiCard key={key} label="总库存" value={allAvailable.toLocaleString()} sub={`在库${allStock}+在途${allTransit}，自动汇总`} icon="ri-archive-line" tone="accent" tooltip="公式: 在库库存 + 在途库存" />;
                 case "stockSalesRatio": return <KpiCard key={key} label="存销比" value={String(stockSalesRatio)} sub="总库存/月销" icon="ri-pie-chart-box-line" tooltip="公式: 总库存 ÷ 月销量" />;
                 default: return null;
