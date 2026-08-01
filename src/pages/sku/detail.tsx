@@ -397,7 +397,7 @@ export default function SkuDetail() {
             <i className="ri-coupon-3-line" aria-hidden /> 添加促销成本
           </Link>
           {sku.productUrl && (
-            <a href={sku.productUrl} target="_blank" rel="nofollow noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-[12px] border border-background-200 bg-background-50 px-3 py-1.5 text-[12px] font-medium text-foreground-600 hover:bg-background-100 cursor-pointer whitespace-nowrap">
+            <a href={safeHref(sku.productUrl)} target="_blank" rel="nofollow noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-[12px] border border-background-200 bg-background-50 px-3 py-1.5 text-[12px] font-medium text-foreground-600 hover:bg-background-100 cursor-pointer whitespace-nowrap">
               <i className="ri-external-link-line" aria-hidden /> 在 Amazon 打开
             </a>
           )}
@@ -907,13 +907,14 @@ export default function SkuDetail() {
         <div className="rounded-xl border border-background-200/70 bg-background-50 p-4">
           <div className="space-y-3">
             <CostWaterfall label="售价" value={sku.price} color="bg-primary-500" isStart />
-            {sku.costFob ? <CostWaterfall label="FOB (产品成本)" value={-sku.costFob} color="bg-secondary-400" /> : null}
-            {sku.costShipping ? <CostWaterfall label="头程费" value={-sku.costShipping} color="bg-secondary-400" /> : null}
-            {sku.costDelivery ? <CostWaterfall label="尾程(配送费)" value={-sku.costDelivery} color="bg-secondary-400" /> : null}
+            {costFob ? <CostWaterfall label="FOB (产品成本)" value={-costFob} color="bg-secondary-400" /> : null}
+            {costShipping ? <CostWaterfall label="头程费" value={-costShipping} color="bg-secondary-400" /> : null}
+            {costDelivery ? <CostWaterfall label="尾程(配送费)" value={-costDelivery} color="bg-secondary-400" /> : null}
             {costCommission > 0 ? <CostWaterfall label="佣金" value={-costCommission} color="bg-secondary-400" /> : null}
             {costStorage > 0 ? <CostWaterfall label="仓租" value={-costStorage} color="bg-secondary-300" /> : null}
             {costAd > 0 ? <CostWaterfall label="广告费" value={-costAd} color="bg-secondary-300" /> : null}
             {costReturn > 0 ? <CostWaterfall label="退货费" value={-costReturn} color="bg-secondary-300" /> : null}
+            {costPromo > 0 ? <CostWaterfall label="促销成本(手动)" value={-costPromo} color="bg-secondary-300" /> : null}
             <div className="my-2 h-px bg-background-200/70" />
             <CostWaterfall label="单件净利" value={grossProfit} color={grossProfit >= 0 ? "bg-accent-500" : "bg-red-500"} isEnd />
             <div className="flex items-center justify-between text-[13px]">
@@ -1362,7 +1363,7 @@ export default function SkuDetail() {
                 <InfoRow label="透明计划" value={sku.transparentPlan ?? "-"} />
                 {sku.productUrl && (
                   <div className="pt-1">
-                    <a href={sku.productUrl} target="_blank" rel="nofollow noopener noreferrer" className="inline-flex items-center gap-1.5 text-[12px] text-primary-700 hover:underline cursor-pointer break-all">
+                    <a href={safeHref(sku.productUrl)} target="_blank" rel="nofollow noopener noreferrer" className="inline-flex items-center gap-1.5 text-[12px] text-primary-700 hover:underline cursor-pointer break-all">
                       <i className="ri-external-link-line shrink-0" aria-hidden /> 产品链接
                     </a>
                   </div>
@@ -1371,7 +1372,7 @@ export default function SkuDetail() {
                   <div className="space-y-1 pt-1">
                     <span className="text-[12px] text-foreground-500">竞品链接</span>
                     {sku.competitorUrls.map((url, i) => (
-                      <a key={i} href={url} target="_blank" rel="nofollow noopener noreferrer" className="block truncate text-[12px] text-primary-700 hover:underline cursor-pointer">
+                      <a key={i} href={safeHref(url)} target="_blank" rel="nofollow noopener noreferrer" className="block truncate text-[12px] text-primary-700 hover:underline cursor-pointer">
                         竞品 {i + 1} · {url.slice(0, 50)}...
                       </a>
                     ))}
@@ -1887,6 +1888,14 @@ function CostWaterfall({ label, value, color, isStart, isEnd }: { label: string;
       </div>
     </div>
   );
+}
+
+/** 仅允许 http/https 协议的链接，其他（javascript:/data:/file: 等）一律返回 '#'，防存储型 XSS。 */
+function safeHref(url: string): string {
+  if (!url) return "#";
+  const lower = url.trim().toLowerCase();
+  if (lower.startsWith("http://") || lower.startsWith("https://")) return url;
+  return "#";
 }
 
 /* ────────── 周对比柱状图组件 ────────── */

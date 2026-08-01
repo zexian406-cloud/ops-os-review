@@ -10,6 +10,7 @@ import {
   ensureDefaultShops,
   getCloudConfig,
   getAllShops,
+  getOrCreateShopByName,
   setCloudConfig,
   upsertSkuMaster,
   upsertInventoryLayers,
@@ -402,7 +403,8 @@ export default function ImportPage() {
         const sku = str(row["SKU"]);
         if (!sku) continue;
         const existing = await db.skuMaster.get(sku);
-        const store = str(row["店铺"]) || existing?.store || selectedShopId || "-";
+        const storeName = str(row["店铺"]);
+        const store = storeName ? await getOrCreateShopByName(storeName) : (existing?.store || selectedShopId || "-");
         const name = str(row["品名"]) || sku;
         const asin = str(row["ASIN"]);
 
@@ -759,7 +761,8 @@ export default function ImportPage() {
       for (const row of rows) {
         const sku = str(row["SKU"]);
         if (!sku) continue;
-        const store = str(row["店铺"]) || selectedShopId || "-";
+        const storeName = str(row["店铺"]);
+        const store = storeName ? await getOrCreateShopByName(storeName) : (selectedShopId || "-");
         const name = str(row["品名"]) || sku;
         const msku = str(row["MSKU"]);
         const asin = str(row["ASIN"]);
@@ -1051,7 +1054,7 @@ export default function ImportPage() {
           ))}
         </select>
         <span className="text-[11px] text-foreground-400">
-          导入的数据将关联到该店铺（Excel 中的"所属店铺"字段将被忽略）
+          导入时使用 Excel「店铺」列；若该店铺在店铺管理中不存在，将自动创建。
         </span>
       </div>
 

@@ -225,6 +225,20 @@ export async function addShop(name: string): Promise<Shop> {
   return shop;
 }
 
+/**
+ * 按名称查找店铺（忽略大小写与前后空格），命中返回其 id；
+ * 未命中则自动创建新店铺并返回其 id。用于导入时把 Excel「店铺」列联动到店铺管理。
+ */
+export async function getOrCreateShopByName(name: string): Promise<string> {
+  const normalized = name.trim();
+  if (!normalized) return "-";
+  const shops = await getAllShops();
+  const hit = shops.find((s) => s.name.trim().toLowerCase() === normalized.toLowerCase());
+  if (hit) return hit.id;
+  const created = await addShop(normalized);
+  return created.id;
+}
+
 export async function renameShop(id: string, newName: string): Promise<void> {
   const shop = await db.shops.get(id);
   if (!shop) throw new Error("店铺不存在");

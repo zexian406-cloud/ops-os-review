@@ -7,7 +7,13 @@ function csvLine(cells: (string | number)[]): string {
   return cells
     .map((c) => {
       const s = String(c ?? "");
-      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+      // CSV 公式注入防护（CWE-1236）：以 = + - @ <tab> <cr> 开头（含前导空白）的单元格加前缀单引号，强制 Excel 以文本处理
+      const needsQuoteEscape = s.includes(",") || s.includes('"') || s.includes("\n");
+      if (/^\s*[=+\-@\t\r]/.test(s)) {
+        const prefixed = `'${s}`;
+        return needsQuoteEscape ? `"${prefixed.replace(/"/g, '""')}"` : prefixed;
+      }
+      if (needsQuoteEscape) {
         return `"${s.replace(/"/g, '""')}"`;
       }
       return s;
