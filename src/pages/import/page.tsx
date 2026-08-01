@@ -6,6 +6,7 @@ import { parseOperationExcel, type ImportResult } from "@/domain/excel";
 import {
   clearAllData,
   db,
+  ensureDefaultShops,
   getCloudConfig,
   getAllShops,
   setCloudConfig,
@@ -186,6 +187,17 @@ export default function ImportPage() {
       }
     });
   }, []);
+
+  // 导入完成后自动同步店铺记录
+  const prevImporting = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevImporting.current !== null && importing === null) {
+      ensureDefaultShops().then(() => {
+        getAllShops().then(setShops);
+      });
+    }
+    prevImporting.current = importing;
+  }, [importing]);
 
   /* ────────── 通用 Excel 解析 ────────── */
   const parseExcelFile = async (file: File) => {

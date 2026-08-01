@@ -56,11 +56,18 @@ export default function SkuDetail() {
   } = useOpsData();
 
   const sku = useMemo(() => skuMaster.find((s) => s.sku === skuId), [skuMaster, skuId]);
-  const history = useMemo(() => snapshots.filter((s) => s.sku === skuId).sort((a, b) => a.date.localeCompare(b.date)), [snapshots, skuId]);
+  const parentSkuId = sku?.groupSku;
+  const history = useMemo(() => {
+    const own = snapshots.filter((s) => s.sku === skuId).sort((a, b) => a.date.localeCompare(b.date));
+    if (own.length > 0) return own;
+    // 子SKU无快照时继承父SKU数据
+    if (parentSkuId) return snapshots.filter((s) => s.sku === parentSkuId).sort((a, b) => a.date.localeCompare(b.date));
+    return own;
+  }, [snapshots, skuId, parentSkuId]);
   const latest = history.at(-1);
-  const inv = latestInventory.get(skuId ?? "");
-  const curSnap = latestSnapshot.get(skuId ?? "");
-  const prevSnap = previousSnapshot?.get(skuId ?? "");
+  const inv = (latestInventory.get(skuId ?? "") ?? (parentSkuId ? latestInventory.get(parentSkuId) : undefined));
+  const curSnap = (latestSnapshot.get(skuId ?? "") ?? (parentSkuId ? latestSnapshot.get(parentSkuId) : undefined));
+  const prevSnap = (previousSnapshot?.get(skuId ?? "") ?? (parentSkuId ? previousSnapshot?.get(parentSkuId) : undefined));
   const skuPromos = useMemo(() => promotions.filter((p) => p.sku === skuId), [promotions, skuId]);
   const skuManualPromos = useMemo(() => manualPromotions.filter((p) => p.sku === skuId), [manualPromotions, skuId]);
 
@@ -891,7 +898,7 @@ export default function SkuDetail() {
           <Section
             title="发货建议"
             icon="ri-truck-line"
-            subtitle={`${skuShipment.priority === "urgent" ? "紧急" : skuShipment.priority === "high" ? "优先" : "常规"} · 建议发 ${skuShipment.suggestQty} 件`}
+            subtitle={`${skuShipment.priority === "urgent" ? "Urgent" : skuShipment.priority === "high" ? "Priority" : "Normal"} · Ship ${skuShipment.suggestQty} units`}
             action={<Link to="/shipment" className="text-[12px] font-medium text-primary-700 hover:underline cursor-pointer whitespace-nowrap">前往决策中心 →</Link>}
           >
             <div className="grid grid-cols-2 gap-3">
