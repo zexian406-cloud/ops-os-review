@@ -368,32 +368,6 @@ export default function SkuList() {
     setDragOverSku(sku);
   }, []);
 
-  const handleDrop = useCallback(() => {
-    const from = dragSkuRef.current;
-    const to = dragOverSku;
-    if (!from || !to || from === to) {
-      setDragOverSku(null);
-      return;
-    }
-    setParentOrder((prev) => {
-      let order = prev.length > 0 ? [...prev] : filteredGroups.map((g) => g.parent.sku);
-      const fromIdx = order.indexOf(from);
-      const toIdx = order.indexOf(to);
-      if (fromIdx === -1 || toIdx === -1) return prev;
-      const [removed] = order.splice(fromIdx, 1);
-      order.splice(toIdx, 0, removed);
-      saveParentOrder(order);
-      return order;
-    });
-    setDragOverSku(null);
-    dragSkuRef.current = null;
-  }, [dragOverSku, filteredGroups]);
-
-  const handleDragEnd = useCallback(() => {
-    dragSkuRef.current = null;
-    setDragOverSku(null);
-  }, []);
-
   const filteredGroups = useMemo((): SkuGroup[] => {
     const storeId = shopMap.get(store) ?? store;
     return groups
@@ -463,6 +437,32 @@ export default function SkuList() {
     () => filteredGroups.reduce((sum, g) => sum + g.children.length, 0),
     [filteredGroups]
   );
+
+  const handleDrop = useCallback(() => {
+    const from = dragSkuRef.current;
+    const to = dragOverSku;
+    if (!from || !to || from === to) {
+      setDragOverSku(null);
+      return;
+    }
+    setParentOrder((prev) => {
+      let order = prev.length > 0 ? [...prev] : filteredGroups.map((g) => g.parent.sku);
+      const fromIdx = order.indexOf(from);
+      const toIdx = order.indexOf(to);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const [removed] = order.splice(fromIdx, 1);
+      order.splice(toIdx, 0, removed);
+      saveParentOrder(order);
+      return order;
+    });
+    setDragOverSku(null);
+    dragSkuRef.current = null;
+  }, [dragOverSku, filteredGroups]);
+
+  const handleDragEnd = useCallback(() => {
+    dragSkuRef.current = null;
+    setDragOverSku(null);
+  }, []);
 
   const toggleExpand = (sku: string) => {
     setExpanded((prev) => {
