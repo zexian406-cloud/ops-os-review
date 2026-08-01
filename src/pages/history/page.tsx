@@ -28,10 +28,12 @@ function MetricCell({ m }: { m: MetricView }) {
   const level = metricLevel(m);
   const delta = m.prev == null ? null : m.cur - m.prev;
   const hasPrev = m.prev != null;
-  // 用 RemixIcon 矢量图标表达方向，替代文字箭头（可访问性：加 aria-label）
-  const iconCls = level === "good" ? "ri-arrow-up-line" : level === "bad" ? "ri-arrow-down-line" : "ri-arrow-subtract-line";
+  // 方向（箭头）反映实际环比变动；着色（颜色）才反映 good/bad。二者解耦，
+  // 否则「下降但更好」的指标（如退货额下降）会被错画成上箭头。
+  const dir = delta == null ? "flat" : delta > 0 ? "up" : delta < 0 ? "down" : "flat";
+  const iconCls = dir === "up" ? "ri-arrow-up-line" : dir === "down" ? "ri-arrow-down-line" : "ri-arrow-subtract-line";
   const color = level === "good" ? "text-accent-600" : level === "bad" ? "text-red-500" : "text-foreground-400";
-  const ariaLabel = level === "good" ? "环比上升" : level === "bad" ? "环比下降" : "环比无变化";
+  const ariaLabel = dir === "up" ? "环比上升" : dir === "down" ? "环比下降" : "环比无变化";
   const fmt = (v: number) => (m.digits === 0 ? Math.round(v).toLocaleString() : v.toFixed(m.digits));
   return (
     <div className="flex items-baseline gap-1.5">
