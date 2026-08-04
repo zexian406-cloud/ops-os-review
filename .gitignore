@@ -1,4 +1,7 @@
 node_modules/
 dist/
+out/
 .env
 *.local
+project.tar.gz
+coze_msg*.txt
