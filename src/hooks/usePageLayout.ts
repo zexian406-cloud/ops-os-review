@@ -16,7 +16,7 @@ export type PageId =
   | "risk"
   | "season"
   | "settings"
-  | "import";
+  | "import" | "promo-center";
 
 interface PageLayout {
   visible: string[];
@@ -50,6 +50,9 @@ export const DEFAULT_SECTIONS: Record<PageId, string[]> = {
   season: [],
   settings: [],
   import: [],
+  promoCenter: [
+    "summaryCards", "addForm", "promoList", "manualCost", "timeline",
+  ],
 };
 
 export const PAGE_LABELS: Record<PageId, string> = {
@@ -64,6 +67,7 @@ export const PAGE_LABELS: Record<PageId, string> = {
   season: "旺季模拟",
   settings: "参数中心",
   import: "数据导入",
+  promoCenter: "促销运营中心",
 };
 
 export const SECTION_LABELS: Record<string, Record<string, string>> = {
@@ -112,6 +116,13 @@ export const SECTION_LABELS: Record<string, Record<string, string>> = {
     globalParams: "全局参数",
     productCards: "产品测算卡片",
     providerConfig: "服务商配置",
+  },
+  promoCenter: {
+    summaryCards: "汇总统计",
+    addForm: "新增促销",
+    promoList: "促销列表",
+    manualCost: "手动成本",
+    timeline: "促销时间线",
   },
 };
 
