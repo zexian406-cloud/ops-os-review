@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+﻿import { useEffect, useRef, useState, type ReactNode } from "react";
 import * as XLSX from "xlsx";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
@@ -153,8 +153,8 @@ const tmplIdentifiers = () =>
 
 /* ────────── 标签页配置 ────────── */
 const tabDefs = [
-  { key: "bundle", label: "缁煎悎杩愯惀琛?, icon: "ri-file-excel-2-line", freq: "棣栨", desc: "涓€閿笅杞藉叏閮?8 涓?Sheet 路 杩愯惀鏁版嵁 / 鍛ㄩ攢閲?/ FBA / 浠撳簱 / 鍦ㄩ€?/ 宸ュ巶 / 澶寸▼ / SKU", tmpl: tmplBundle },
-  { key: "warehouse_mapping", label: "浠撳簱鏄犲皠", icon: "ri-map-2-line", freq: "閰嶇疆", desc: "浠撳簱鍚嶇О 鈫?鍖哄煙鏄犲皠锛堢編涓?缇庤タ/涓滃崡/涓崡锛夛紝瀵煎叆鏃惰嚜鍔ㄥ尮閰? },
+  { key: "bundle", label: "\u7efc\u5408\u8fd0\u8425\u8868", icon: "ri-file-excel-2-line", freq: "\u9996\u6b21", desc: "\u4e00\u952e\u4e0b\u8f7d\u5168\u90e8 8 \u4e2a Sheet \u00b7 \u8fd0\u8425\u6570\u636e / \u5468\u9500\u91cf / FBA / \u4ed3\u5e93 / \u5728\u9014 / \u5de5\u5382 / \u5934\u7a0b / SKU", tmpl: tmplBundle },
+  { key: "warehouse_mapping", label: "\u4ed3\u5e93\u6620\u5c04", icon: "ri-map-2-line", freq: "\u914d\u7f6e", desc: "\u4ed3\u5e93\u540d\u79f0 \u2192 \u533a\u57df\u6620\u5c04\uff08\u7f8e\u4e1c/\u7f8e\u897f/\u4e1c\u5357/\u4e2d\u5357\uff09\uff0c\u5bfc\u5165\u65f6\u81ea\u52a8\u5339\u914d" },
 ] as const;
 
 type TabKey = (typeof tabDefs)[number]["key"];
@@ -1855,4 +1855,5 @@ function WarehouseMappingPanel() {
     </div>
   );
 }
+
 
