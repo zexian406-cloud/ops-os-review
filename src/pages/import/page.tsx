@@ -1855,5 +1855,3 @@ function WarehouseMappingPanel() {
     </div>
   );
 }
-
-
