@@ -9,6 +9,7 @@ export interface CalcResult {
   totalCost: number;
   grossProfit: number;
   grossMargin: number;
+  profitSource?: "CALCULATED" | "ESTIMATED";  // 利润来源标记（费率联动重算后写入）
   adRatio: number;
   returnRate: number;
   refundRate: number;
@@ -42,6 +43,7 @@ export interface CalcResult {
   costStorage: number;
   costAd: number;
   costReturn: number;
+  costRefundLoss: number;
   costCoupon: number;
   costPromo: number;
   discountCostFob: number;
@@ -51,6 +53,7 @@ export interface CalcResult {
   discountCostStorage: number;
   discountCostAd: number;
   discountCostReturn: number;
+  discountCostRefundLoss: number;
   discountCostCoupon: number;
   discountCostPromo: number;
 
@@ -80,6 +83,43 @@ export interface ReplenishResult {
 // ────────── 空值取 0 ──────────
 const n = (v?: number | null) => v ?? 0;
 
+// ────────── 成本是否全部缺失 ──────────
+/**
+ * 成本字段是否全部缺失：有售价但 6 项成本（FOB/头程/配送/佣金/仓储/广告）
+ * 全为 0 或未填。此时 computeAll 会把利润率算成 100%，为失真占位值，
+ * 界面应标注「缺失/成本缺失」而非直接显示 0。
+ *
+ * 注：退货费(costReturn)与退款率(refundRate)不纳入成本缺失判断——
+ * 退货损失改用 refundRate × 售价（见 computeTotalCost 的 refundLoss），
+ * 退款率缺失与否由 isReturnRateMissing 单独判断。
+ */
+export function isCostFullyMissing(sku: SkuMaster): boolean {
+  if (!sku.price || sku.price <= 0) return false;
+  const c = (v?: number | null) => (v == null ? 0 : v);
+  return (
+    c(sku.costFob) === 0 &&
+    c(sku.costShipping) === 0 &&
+    c(sku.costDelivery) === 0 &&
+    c(sku.costCommission) === 0 &&
+    c(sku.costStorage) === 0 &&
+    c(sku.costAd) === 0
+  );
+}
+
+/**
+ * 退款率是否因底层数据缺失而失真（真实值未导入）。
+ * 退款率(refundRate)现已对所有履约方式生效（FBA/FBM/mixed 均使用上传的 refundRate，
+ * 不再依赖退货成本 costReturn 是否全缺），因此只要 refundRate 为空（null/undefined）
+ * 即判定缺失，界面标注「缺失」而非误导性的 0%。
+ */
+export function isReturnRateMissing(opts: {
+  fulfillment: "FBA" | "FBM" | "mixed";
+  costMissing: boolean;
+  refundRate?: number | null;
+}): boolean {
+  return opts.refundRate == null;
+}
+
 // ────────── 规则1：总成本（正常列） ──────────
 export function computeTotalCost(
   sku: SkuMaster,
@@ -95,12 +135,16 @@ export function computeTotalCost(
   const storage = n(sku.costStorage);
   const coupon = n(sku.coupon);
 
-  // 佣金：有值保留，空则 15% 估算
+  // 佣金：costCommission 优先；为空时若显式设定 commissionRate 则用 费率×售价，否则 15% 估算
   let commission = n(sku.costCommission);
   let isCommissionInferred = false;
   if (commission === 0 && price > 0) {
-    commission = price * 0.15;
-    isCommissionInferred = true;
+    if (sku.commissionRate && sku.commissionRate > 0) {
+      commission = (sku.commissionRate / 100) * price;
+    } else {
+      commission = price * 0.15;
+      isCommissionInferred = true;
+    }
   }
 
   // 广告费：有值保留，空则从费比×售价反推
@@ -111,8 +155,7 @@ export function computeTotalCost(
     isAdInferred = true;
   }
 
-  // 退货费：有值保留，空则从退款率/退货率×售价反推
-  //   FBM优先用退款率（含部分退款），FBA优先用退货率
+  // 退货费(costReturn)：仅用于诊断查看的退货率(returnRate=costReturn/售价)，不再计入成本
   let ret = n(sku.costReturn);
   let isReturnInferred = false;
   if (ret === 0 && snap && price > 0) {
@@ -123,11 +166,15 @@ export function computeTotalCost(
     }
   }
 
-  const total = fob + shipping + delivery + commission + storage + ad + ret + promoCost;
+  // 退货损失（计入总成本）：退款率 × 售价，对所有履约方式生效（FBA 也用上传的 refundRate，不再强制 0）
+  const refundLoss = snap ? (snap.refundRate ?? 0) / 100 * price : 0;
+
+  // 优惠券计入总成本（用户拍板：优惠券是真实支出，应纳入成本与净利）
+  const total = fob + shipping + delivery + commission + storage + ad + refundLoss + promoCost + coupon;
 
   return {
     total,
-    detail: { fob, shipping, delivery, commission, storage, ad, ret, coupon, promoCost },
+    detail: { fob, shipping, delivery, commission, storage, ad, ret, refundLoss, coupon, promoCost },
     inferred: { isAdInferred, isReturnInferred, isCommissionInferred },
   };
 }
@@ -140,6 +187,7 @@ export interface CostDetail {
   storage: number;
   ad: number;
   ret: number;
+  refundLoss: number;
   coupon: number;
   promoCost: number;
 }
@@ -177,7 +225,7 @@ export function computeDiscountTotalCost(
     commission = nd.commission * (dp / sku.price);
     isCommissionInferred = nd.commission === 0 || sku.costCommission == null;
   } else {
-    commission = dp * 0.15;
+    commission = dp * (sku.commissionRate && sku.commissionRate > 0 ? sku.commissionRate / 100 : 0.15);
     isCommissionInferred = true;
   }
 
@@ -196,7 +244,7 @@ export function computeDiscountTotalCost(
     ad = nd.ad;
   }
 
-  // 退货费：折扣退货费为空 → 退款率/退货率×折扣价 或 按比例缩放
+  // 折扣退货费(costReturn/discountReturn)：仅用于诊断查看的退货率，不再计入成本
   let ret: number;
   let isReturnInferred = false;
   if (sku.discountReturn != null) {
@@ -216,11 +264,15 @@ export function computeDiscountTotalCost(
     ret = nd.ret;
   }
 
-  const total = fob + shipping + delivery + commission + storage + ad + ret + promoCost;
+  // 退货损失（计入折扣总成本）：退款率 × 折扣价，对所有履约方式生效
+  const refundLoss = snap ? (snap.refundRate ?? 0) / 100 * dp : 0;
+
+  // 优惠券计入折扣总成本（与正常成本口径一致）
+  const total = fob + shipping + delivery + commission + storage + ad + refundLoss + promoCost + coupon;
 
   return {
     total,
-    detail: { fob, shipping, delivery, commission, storage, ad, ret, coupon, promoCost },
+    detail: { fob, shipping, delivery, commission, storage, ad, ret, refundLoss, coupon, promoCost },
     inferred: { isAdInferred, isReturnInferred, isCommissionInferred },
   };
 }
@@ -331,9 +383,17 @@ export function computeWarehouseTotals(inv?: InventoryLayer): {
 
 // ────────── 规则10：覆盖天数 ──────────
 export function computeCoverDays(stock: number, dailySales: number): number {
-  if (dailySales <= 0) return 999;
+  if (dailySales <= 0) return Infinity;
   return stock / dailySales;
 }
+
+/** 覆盖天数展示：有限值显示天数，无销量（Infinity）显示 ∞。 */
+export function formatCoverDays(days: number): string {
+  return Number.isFinite(days) ? `${Math.round(days)}` : "∞";
+}
+
+/** 无销量时覆盖卡片的副标题。 */
+export const COVER_NO_SALES_SUB = "暂无销量";
 
 // ────────── 规则11：混卖FBA补货 ──────────
 export function computeFbaReplenishment(
@@ -353,7 +413,7 @@ export function computeFbaReplenishment(
 
   const safetyStock = leadTime * dailySales * 0.2;
   const suggestQty = Math.ceil((leadTime * dailySales) + safetyStock - stockOnHand - stockInTransit);
-  const coverDays = dailySales > 0 ? stockOnHand / dailySales : 999;
+  const coverDays = dailySales > 0 ? stockOnHand / dailySales : Infinity;
 
   return { dailySales, stockOnHand, stockInTransit, leadTimeDays: leadTime, safetyStockDays: safetyDays, safetyStock, suggestQty: Math.max(0, suggestQty), coverDays };
 }
@@ -376,12 +436,20 @@ export function computeFbmReplenishment(
 
   const safetyStock = leadTime * dailySales * 0.5;
   const suggestQty = Math.ceil((leadTime * dailySales) + safetyStock - stockOnHand - stockInTransit);
-  const coverDays = dailySales > 0 ? stockOnHand / dailySales : 999;
+  const coverDays = dailySales > 0 ? stockOnHand / dailySales : Infinity;
 
   return { dailySales, stockOnHand, stockInTransit, leadTimeDays: leadTime, safetyStockDays: safetyDays, safetyStock, suggestQty: Math.max(0, suggestQty), coverDays };
 }
 
 // ────────── 规则12：计算优先级链（总入口） ──────────
+// ────────── 利润来源标记（费率联动重算） ──────────
+// 其他成本组件（FOB/头程/配送/佣金/仓储）齐全 → CALCULATED；有缺失 → ESTIMATED。
+// 注：退款损失(refundLoss) 允许为 0（退款率=0 属正常），不计入齐全判定。
+export function deriveProfitSource(detail: CostDetail): "CALCULATED" | "ESTIMATED" {
+  const core = [detail.fob, detail.shipping, detail.delivery, detail.commission, detail.storage];
+  return core.every((v) => v > 0) ? "CALCULATED" : "ESTIMATED";
+}
+
 export function computeAll(params: {
   sku: SkuMaster;
   snap?: DailySnapshot;
@@ -416,18 +484,18 @@ export function computeAll(params: {
   const adRatio = computeAdRatio(normal.detail.ad, sku.price);
   const discountAdRatio = discountPrice ? computeAdRatio(discount.detail.ad, discountPrice) : 0;
 
-  // Step 6: 退款率
+  // Step 6: 退货率(returnRate = costReturn/售价) — 仅用于诊断异常查看，不再计入成本
   const returnRate = computeReturnRate(normal.detail.ret, sku.price);
   const discountReturnRate = discountPrice ? computeReturnRate(discount.detail.ret, discountPrice) : 0;
 
-  // 退款率 (FBM)
-  const refundRate = sku.fulfillment === "FBM" ? (snap?.refundRate ?? 0) : 0;
+  // 退款率(refundRate)：对所有履约方式生效（FBA 也使用上传的 refundRate，不再强制 0）
+  const refundRate = snap?.refundRate ?? 0;
   const discountRefundRate = discountPrice ? refundRate : 0;
 
-  // Step 7: 退款费(30天) — 使用计算器自身的退货率
+  // Step 7: 退款费(30天) — 使用退款率(refundRate)
   const monthlySales = snap?.monthlySales ?? 0;
-  const returnFee30d = computeReturnFee30d(sku.price, returnRate, monthlySales);
-  const discountReturnFee30d = discountPrice ? computeReturnFee30d(discountPrice, discountReturnRate, monthlySales) : 0;
+  const returnFee30d = computeReturnFee30d(sku.price, refundRate, monthlySales);
+  const discountReturnFee30d = discountPrice ? computeReturnFee30d(discountPrice, discountRefundRate, monthlySales) : 0;
 
   // Step 8: 估算字段
   const discountAdEstimated = computeDiscountAdEstimated(normal.detail.ad, discount.detail.ad);
@@ -448,6 +516,7 @@ export function computeAll(params: {
   return {
     totalCost,
     grossProfit,
+    profitSource: deriveProfitSource(normal.detail),
     grossMargin,
     adRatio,
     returnRate,
@@ -474,6 +543,7 @@ export function computeAll(params: {
     costStorage: normal.detail.storage,
     costAd: normal.detail.ad,
     costReturn: normal.detail.ret,
+    costRefundLoss: normal.detail.refundLoss,
     costCoupon: normal.detail.coupon,
     costPromo: normal.detail.promoCost,
     discountCostFob: discount.detail.fob,
@@ -483,6 +553,7 @@ export function computeAll(params: {
     discountCostStorage: discount.detail.storage,
     discountCostAd: discount.detail.ad,
     discountCostReturn: discount.detail.ret,
+    discountCostRefundLoss: discount.detail.refundLoss,
     discountCostCoupon: discount.detail.coupon,
     discountCostPromo: discount.detail.promoCost,
     inStockTotal: warehouse.inStock,
@@ -566,4 +637,133 @@ export function computeWeeklyPromoCost(
   }
 
   return { total, count };
+}
+
+/**
+ * 计算单条 Promotion 的有效促销成本（用于利润率计算时传入 computeAll 的 promoCost）。
+ * - amount 模式：直接返回 amount
+ * - rate 模式：rate% × price × weeklySales；无周销量则回退 estimatedCost
+ * - 无 costMode：返回 0（向后兼容，旧数据无成本字段）
+ */
+export function getEffectivePromoCost(
+  promo: Promotion,
+  sku?: SkuMaster,
+  snap?: DailySnapshot,
+): number {
+  if (promo.costMode === "amount" && promo.amount != null && promo.amount > 0) {
+    return promo.amount;
+  }
+  if (promo.costMode === "rate" && promo.rate != null && promo.rate > 0) {
+    const price = sku?.price ?? 0;
+    const dailySales = snap?.dailySales7d ?? 0;
+    const weeklySales = dailySales * 7;
+    if (weeklySales > 0 && price > 0) {
+      return Number(((promo.rate / 100) * price * weeklySales).toFixed(2));
+    }
+    return promo.estimatedCost ?? 0;
+  }
+  return 0;
+}
+
+export interface WeeklyCostBucket {
+  weekStart: string;
+  weekEnd: string;
+  promoCost: number;   // 活动成本（Promotion 内嵌）
+  otherCost: number;   // 其他成本（ManualPromotion）
+  total: number;
+  count: number;
+}
+
+/**
+ * 按周聚合促销成本时间线（活动成本 + 其他成本）。
+ * - amount 模式：跨周按覆盖周数均摊（避免重复计入）
+ * - rate 模式：每周独立计入（rate% × price × weeklySales，天然按周）
+ * - 以 today 所在周为末周，向前取 weeksBack 周（默认 8）
+ */
+export function aggregateWeeklyCosts(
+  promotions: Promotion[],
+  manualPromotions: ManualPromotion[],
+  skuMasterMap: Map<string, SkuMaster>,
+  snapMap: Map<string, DailySnapshot>,
+  today: string,
+  weeksBack: number = 8,
+): WeeklyCostBucket[] {
+  const buckets: WeeklyCostBucket[] = [];
+  const todayWeekStart = getWeekStart(today);
+  const todayWeekDate = new Date(todayWeekStart + "T00:00:00");
+
+  for (let i = weeksBack - 1; i >= 0; i--) {
+    const d = new Date(todayWeekDate);
+    d.setDate(d.getDate() - i * 7);
+    const weekStart = d.toISOString().slice(0, 10);
+    const weekEnd = getWeekEnd(weekStart);
+    buckets.push({ weekStart, weekEnd, promoCost: 0, otherCost: 0, total: 0, count: 0 });
+  }
+
+  // 活动成本（Promotion 内嵌）— amount 跨周均摊，rate 每周独立
+  for (const promo of promotions) {
+    if (!promo.costMode) continue;
+    const sku = skuMasterMap.get(promo.sku);
+    const snap = snapMap.get(promo.sku);
+    const effectiveCost = getEffectivePromoCost(promo, sku, snap);
+    if (effectiveCost <= 0) continue;
+
+    let coveringWeeks = 0;
+    for (const b of buckets) {
+      if (rangesOverlap(promo.startDate, promo.endDate, b.weekStart, b.weekEnd)) coveringWeeks++;
+    }
+    if (coveringWeeks === 0) continue;
+
+    const perWeekCost = promo.costMode === "amount" ? effectiveCost / coveringWeeks : effectiveCost;
+    for (const b of buckets) {
+      if (rangesOverlap(promo.startDate, promo.endDate, b.weekStart, b.weekEnd)) {
+        b.promoCost += Number(perWeekCost.toFixed(2));
+        b.count++;
+      }
+    }
+  }
+
+  // 其他成本（ManualPromotion）— amount 跨周均摊，rate 每周独立
+  for (const m of manualPromotions) {
+    const sku = skuMasterMap.get(m.sku);
+    const snap = snapMap.get(m.sku);
+    let effectiveCost = 0;
+    if (m.costMode === "amount" && m.amount != null && m.amount > 0) {
+      effectiveCost = m.amount;
+    } else if (m.costMode === "rate" && m.rate != null && m.rate > 0) {
+      const price = sku?.price ?? 0;
+      const dailySales = snap?.dailySales7d ?? 0;
+      const weeklySales = dailySales * 7;
+      if (weeklySales > 0 && price > 0) {
+        effectiveCost = Number(((m.rate / 100) * price * weeklySales).toFixed(2));
+      } else {
+        effectiveCost = m.estimatedCost ?? 0;
+      }
+    } else if (m.estimatedCost != null && m.estimatedCost > 0) {
+      effectiveCost = m.estimatedCost;
+    }
+    if (effectiveCost <= 0) continue;
+
+    let coveringWeeks = 0;
+    for (const b of buckets) {
+      if (rangesOverlap(m.startDate, m.endDate, b.weekStart, b.weekEnd)) coveringWeeks++;
+    }
+    if (coveringWeeks === 0) continue;
+
+    const perWeekCost = m.costMode === "amount" ? effectiveCost / coveringWeeks : effectiveCost;
+    for (const b of buckets) {
+      if (rangesOverlap(m.startDate, m.endDate, b.weekStart, b.weekEnd)) {
+        b.otherCost += Number(perWeekCost.toFixed(2));
+        b.count++;
+      }
+    }
+  }
+
+  for (const b of buckets) {
+    b.promoCost = Number(b.promoCost.toFixed(2));
+    b.otherCost = Number(b.otherCost.toFixed(2));
+    b.total = Number((b.promoCost + b.otherCost).toFixed(2));
+  }
+
+  return buckets;
 }
