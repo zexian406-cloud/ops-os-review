@@ -1,23 +1,30 @@
 import type { RouteObject } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import NotFound from "@/pages/NotFound";
 import AppShell from "@/components/layout/AppShell";
-import Dashboard from "@/pages/dashboard/page";
-import Shipment from "@/pages/shipment/page";
-import Risk from "@/pages/risk/page";
-import Operations from "@/pages/operations/page";
-import SkuList from "@/pages/sku/page";
-import SkuDetail from "@/pages/sku/detail";
-import Season from "@/pages/season/page";
-import ImportPage from "@/pages/import/page";
-import Settings from "@/pages/settings/page";
-import GuidePage from "@/pages/guide/page";
-import PromotionsPage from "@/pages/promotions/page";
-import PromoCostPage from "@/pages/promo-cost/page";
-import ProfitEstimate from "@/pages/profit-estimate/page";
-import CalculatorPage from "@/pages/calculator/page";
-import TodoPage from "@/pages/todo/page";
-import ShopManagementPage from "@/pages/shop-management/page";
-import OpsLogsPage from "@/pages/ops-logs/page";
+
+// P0/P1: 页面按需懒加载，避免 recharts / xlsx 等重型依赖被卷进首屏主包。
+// `lazy` 由 unplugin-auto-import 自动注入，无需显式 import。
+const Dashboard = lazy(() => import("@/pages/dashboard/page"));
+const Shipment = lazy(() => import("@/pages/shipment/page"));
+const Risk = lazy(() => import("@/pages/risk/page"));
+const Operations = lazy(() => import("@/pages/operations/page"));
+const SkuList = lazy(() => import("@/pages/sku/page"));
+const SkuDetail = lazy(() => import("@/pages/sku/detail"));
+const Season = lazy(() => import("@/pages/season/page"));
+const ImportPage = lazy(() => import("@/pages/import/page"));
+const Settings = lazy(() => import("@/pages/settings/page"));
+const GuidePage = lazy(() => import("@/pages/guide/page"));
+// 合并后的促销运营中心（替换原来的 PromotionsPage 和 PromoCostPage）
+const PromoCenterPage = lazy(() => import("@/pages/promo-center/page"));
+const ProfitEstimate = lazy(() => import("@/pages/profit-estimate/page"));
+const CalculatorPage = lazy(() => import("@/pages/calculator/page"));
+const TodoPage = lazy(() => import("@/pages/todo/page"));
+const ShopManagementPage = lazy(() => import("@/pages/shop-management/page"));
+const OpsLogsPage = lazy(() => import("@/pages/ops-logs/page"));
+const DiagnosisPage = lazy(() => import("@/pages/diagnosis/page"));
+const DataHealthPage = lazy(() => import("@/pages/data-health/page"));
+const HistoryPage = lazy(() => import("@/pages/history/page"));
 
 const routes: RouteObject[] = [
   {
@@ -34,12 +41,18 @@ const routes: RouteObject[] = [
       { path: "import", element: <ImportPage /> },
       { path: "settings", element: <Settings /> },
       { path: "guide", element: <GuidePage /> },
-      { path: "promotions", element: <PromotionsPage /> },
-      { path: "promo-cost", element: <PromoCostPage /> },
+      // ── 合并后的促销运营中心 ──
+      { path: "promo-center", element: <PromoCenterPage /> },
+      // 旧路由 301 重定向，确保书签和链接不失效
+      { path: "promotions", element: <Navigate to="/promo-center?tab=activity" replace /> },
+      { path: "promo-cost", element: <Navigate to="/promo-center?tab=cost" replace /> },
       { path: "profit-estimate", element: <ProfitEstimate /> },
       { path: "calculator", element: <CalculatorPage /> },
       { path: "todo", element: <TodoPage /> },
       { path: "ops-logs", element: <OpsLogsPage /> },
+      { path: "diagnosis", element: <DiagnosisPage /> },
+      { path: "data-health", element: <DataHealthPage /> },
+      { path: "history", element: <HistoryPage /> },
       { path: "shop-management", element: <ShopManagementPage /> },
     ],
   },

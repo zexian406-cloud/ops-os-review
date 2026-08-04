@@ -12,6 +12,7 @@ export interface SkuMaster {
   linkType?: "main" | "follow" | "backup"; // 主链接 / 跟卖 / 备用
   saleStatus: "active" | "clearance" | "paused" | "discontinued"; // 在售 / 清货 / 停售
   fulfillment: "FBA" | "FBM" | "mixed";  // 仓库类型，mixed=混卖
+  fulfillmentMode?: FulfillmentMode;     // 计算模式：FBA_ONLY/FBM_ONLY/FBA_FBM_COMBINED（缺省=严格分拆，不自动合并）
   store: string;               // 所属店铺
   marketplace?: string;        // 站点，默认 US
   price: number;               // 售价
@@ -26,6 +27,7 @@ export interface SkuMaster {
   costShipping?: number;       // 头程
   costDelivery?: number;       // 配送费
   costCommission?: number;     // 佣金
+  commissionRate?: number;      // 佣金率 %（显式设置时优先于固定 15% 默认）
   costStorage?: number;        // 仓储费
   costReturn?: number;         // 退货费
   costAd?: number;             // 广告费
@@ -55,6 +57,22 @@ export interface SkuMaster {
   parentSku?: string;          // 父体 SKU
 groupSku?: string;           // 所属父SKU分组，空/未设置表示自己是父SKU/独立SKU
   msku?: string;               // MSKU
+  /** 各 MSKU 对应的独立店铺（MSKU -> storeId/storeName）。
+   *  导入「SKU标识符」时按行保留，展示/筛选时优先取此值，缺失则回退 store。
+   *  向后兼容：旧数据无此字段时一律用父级 store。 */
+  mskuStores?: Record<string, string>;
+  /** 各 MSKU 独立的动态指标（按 MSKU 行保留，不取平均）。
+   *  导入「销量导入」「运营数据导入」时按行写入，展示层展开 MSKU 时优先取此值。
+   *  向后兼容：旧数据无此字段时回退到家族级快照。 */
+  mskuMetrics?: Record<string, {
+    rating?: number;
+    reviewCount?: number;
+    adRatio?: number;
+    returnRate?: number;
+    refundRate?: number;
+    sales7d?: number;
+    sales30d?: number;
+  }>;
   listPrice?: number;          // List Price
   coupon?: number;             // 优惠券金额
   packageLength?: number;      // 包裹长 cm
@@ -74,6 +92,7 @@ export interface DailySnapshot {
   sku: string;
   // 销量
   dailySales7d: number;      // 近 7 天日均
+  dailySales30d?: number;    // 近 30 天日均（由 sales30d 导入 ÷30；可选，缺省按 7d）
   monthlySales: number;
   // 库存
   stockOnHand: number;
@@ -85,6 +104,7 @@ export interface DailySnapshot {
   adRatio: number;           // 费比 %
   profit: number;
   profitMargin: number;      // 利润率 %
+  profitSource?: "CALCULATED" | "ESTIMATED";  // 利润来源标记（费率联动重算后写入）
   totalCost: number;
   // Review
   rating: number;
@@ -104,6 +124,32 @@ export interface DailySnapshot {
   discountTotalCost?: number;
   discountProfit?: number;
   discountMargin?: number;
+}
+
+/** 履约计算模式 */
+export type FulfillmentMode = "FBA_ONLY" | "FBM_ONLY" | "FBA_FBM_COMBINED";
+
+/** 销售实体（分析层派生，主键 = SKU + 店铺 + 发货方式）
+ *  底层 skuMaster / dailySnapshot 仍按家族 SKU 存储，仅在分析层按维度展开。
+ *  - FBA_ONLY / FBM_ONLY / 缺省：FBA 与 FBM 严格分开（各自独立卡片）
+ *  - FBA_FBM_COMBINED：运营明确选择后合并（库存/销量/在途汇总，底层仍独立） */
+export interface SalesEntity {
+  key: string;                 // `${sku}__${store}__${fulfillment}`
+  sku: string;
+  skuName: string;
+  store: string;
+  marketplace: string;
+  fulfillment: "FBA" | "FBM" | "COMBINED";
+  mode: FulfillmentMode;
+  dailySales: number;          // 当前口径日均（按 config.salesBasis）
+  dailySales7d: number;
+  dailySales30d: number;
+  stockOnHand: number;
+  stockInTransit: number;
+  fbaStockOnHand: number;
+  fbmStockOnHand: number;
+  fbaStockInTransit: number;
+  fbmStockInTransit: number;
 }
 
 /** 分仓库存切片 */
@@ -142,8 +188,15 @@ export interface Campaign {
   discountPrice?: number;    // 大促期间预估折扣售价，用于利润模拟
 }
 
-/** 促销 / Deal 活动（BD / LD / 7DD / Coupon 等） */
-export type PromotionType = "BD" | "LD" | "7DD" | "Coupon" | "other";
+/** 促销 / Deal 活动
+ *  支持标准类型 + 自定义命名（type=custom 时用 customTypeName 显示） */
+export type PromotionType =
+  | "BD"              // Best Deal
+  | "LD"              // Lightning Deal
+  | "Coupon"
+  | "Price Discount"
+  | "Promotion"
+  | "custom";         // 自定义（用 customTypeName 展示）
 
 export interface Promotion {
   id: string;
@@ -151,6 +204,8 @@ export interface Promotion {
   skuName?: string;
   store: string;
   type: PromotionType;
+  /** 自定义类型名称：type=custom 时必填，其他类型忽略 */
+  customTypeName?: string;
   name: string;
   startDate: string;
   endDate: string;
@@ -158,6 +213,12 @@ export interface Promotion {
   notes?: string;
   multiplier?: number;
   discountPrice?: number;    // 折扣价格（运营表中的折扣售价）
+  // —— 内嵌促销成本（活动创建即录，实现"一次录入，全局联动"）——
+  costMode?: "amount" | "rate";   // 缺省=无独立促销成本；amount=金额模式，rate=折扣率模式
+  amount?: number;                // 金额模式：该活动促销成本 USD
+  rate?: number;                  // 折扣率模式：如 20 表示 20%
+  estimatedCost?: number;         // rate 模式自动估算（rate% × 售价 × 周销量）
+  promoCost?: number;             // 【冗余缓存】计算后有效成本，供时间线/汇总快速取用
 }
 
 /** 手动促销成本类型（优惠券/秒杀/站外折扣） */
@@ -235,6 +296,7 @@ export interface GlobalConfig {
   defaultLeadTime: number;         // 默认 Lead Time
   defaultSafetyStockDays: number;  // 默认安全库存天数
   defaultTargetCoverDays: number;  // 默认目标库存天数
+  salesBasis?: "7d" | "30d";       // 日均销量口径（缺省 7d，可在参数中心切 30d）
   profitMarginThreshold: number;   // 利润率异常阈值 %
   adRatioThreshold: number;        // 费比异常阈值 %
   ratingDropThreshold: number;     // 评分下降阈值
@@ -385,14 +447,32 @@ export interface Shop {
   createdAt: string;
 }
 // ═══════ 运营操作记录（SKU操作日志） ═══════
+/** 异常类型（用于"诊断→处理"闭环关联） */
+export type AnomalyType =
+  | "stockout"      // 断货
+  | "low_stock"     // 库存紧张
+  | "overstock"     // 库存积压
+  | "profit"        // 利润异常
+  | "ad"            // 广告异常
+  | "rating"        // 评分下降
+  | "return"        // 退货异常
+  | "listing"       // Listing 待优化
+  | "other";        // 其他
+
 export interface OpsLog {
   id?: string;
   sku: string;             // 所属 SKU（父SKU或MSKU）
   msku?: string;           // 具体 MSKU（选填，关联到具体子SKU）
   skuName?: string;        // 品名（冗余，方便展示）
   date: string;            // 操作日期 YYYY-MM-DD
-  action: string;          // 操作动作，如"降价"、"开广告"、"优化Listing"
-  detail: string;          // 详细说明
+  action: string;          // 处理动作，如"降价"、"开广告"、"优化Listing"
+  detail?: string;         // 详细说明（旧字段，向后兼容）
   impact?: string;         // 销量影响描述，如"销量上涨约30%"
+  // ── 增强字段（贴合"记录处理过程"：日期/异常类型/原因/处理动作/备注）──
+  anomalyType?: AnomalyType; // 关联的异常类型（来自诊断）
+  reason?: string;         // 原因
+  note?: string;           // 备注
+  promotionId?: string;    // 关联的促销活动 ID（与促销活动页 SKU↔促销 一致）
+  promotionName?: string;  // 关联促销活动名称（冗余，方便展示）
   createdAt: string;       // 记录创建时间
 }

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback, useEffect } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -9,8 +9,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { computeAll, computeWeeklyPromoCost } from "@/domain/calculator";
+import { computeAll, computeWeeklyPromoCost, isCostFullyMissing, isReturnRateMissing, formatCoverDays, COVER_NO_SALES_SUB } from "@/domain/calculator";
 import { useOpsData } from "@/domain/store";
+import { computeDiagnosis, type DiagnosisResult } from "@/domain/diagnosis";
 import { upsertSnapshots, db, addOpsLog, deleteOpsLog } from "@/domain/db";
 import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
@@ -24,6 +25,23 @@ import type { DailySnapshot, SkuMaster, InventoryLayer, TodoItem, OpsLog } from 
 const lifecycleLabel: Record<string, string> = { new: "新品", growth: "成长", mature: "成熟", clearance: "清货", eol: "停售" };
 const saleStatusLabel: Record<string, string> = { active: "在售", clearance: "清货", paused: "暂停", discontinued: "停售" };
 const linkTypeLabel: Record<string, string> = { main: "主链接", follow: "跟卖", backup: "备用" };
+
+/** 取某 MSKU 的展示店铺：优先 mskuStores（导入保留的各 MSKU 店铺），否则回退 sku.store。 */
+const mskuStoreOf = (sku: SkuMaster, m: string): string =>
+  (sku.mskuStores && sku.mskuStores[m]) || sku.store;
+
+// 告警类型 → 诊断页分组 key（与诊断页过滤 map / AlertList 对齐）
+const DIAGNOSIS_GROUP: Record<string, string> = {
+  stockout: "stock",
+  low_stock: "stock",
+  overstock: "stock",
+  profit: "profit",
+  ad: "ad",
+  rating: "rating",
+  return: "return",
+  review: "return",
+  listing: "listing",
+};
 
 const deltaArrow = (v: number, inverse = false) => {
   if (Math.abs(v) < 0.01) return <span className="text-foreground-500">→ 0</span>;
@@ -39,6 +57,8 @@ const labelCls = "mb-1 block text-[11px] font-medium uppercase tracking-wider te
 
 export default function SkuDetail() {
   const { sku: skuId } = useParams<{ sku: string }>();
+  const [searchParams] = useSearchParams();
+  const focusMsku = searchParams.get("focus") ?? undefined;
   const {
     loading,
     skuMaster,
@@ -50,6 +70,8 @@ export default function SkuDetail() {
     manualPromotions,
     shipmentSuggestions,
     wowDeltas,
+    healthScores,
+    alerts,
     config,
     today,
     reload,
@@ -57,6 +79,16 @@ export default function SkuDetail() {
 
   const sku = useMemo(() => skuMaster.find((s) => s.sku === skuId), [skuMaster, skuId]);
   const parentSkuId = sku?.groupSku;
+
+  // ── focus=MSKU 时（从列表点击 MSKU 跳转而来）自动滚动并高亮对应 MSKU ──
+  // 向后兼容：无 focus 参数时完全不触发，详情页默认行为不变。
+  useEffect(() => {
+    if (!focusMsku) return;
+    const el = document.getElementById(`msku-${focusMsku}`);
+    if (el && typeof el.scrollIntoView === "function") {
+      try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch { /* jsdom 未实现，忽略 */ }
+    }
+  }, [focusMsku, sku]);
   const history = useMemo(() => {
     const own = snapshots.filter((s) => s.sku === skuId).sort((a, b) => a.date.localeCompare(b.date));
     if (own.length > 0) return own;
@@ -66,8 +98,23 @@ export default function SkuDetail() {
   }, [snapshots, skuId, parentSkuId]);
   const inv = (latestInventory.get(skuId ?? "") ?? (parentSkuId ? latestInventory.get(parentSkuId) : undefined));
   const curSnap = (latestSnapshot.get(skuId ?? "") ?? (parentSkuId ? latestSnapshot.get(parentSkuId) : undefined));
+  // FIX: focus=MSKU 时（从列表点击 MSKU 跳转），用 mskuMetrics 中的独立指标覆盖家族级快照，
+  //      这样详情页 KPI 卡片/评分/退货率/退款率/广告费比 都展示该 MSKU 自身的值，
+  //      而非家族平均值。无 focus 参数或无 mskuMetrics 时回退到 curSnap（向后兼容）。
+  const focusMetric = (sku && focusMsku && sku.mskuMetrics) ? sku.mskuMetrics[focusMsku] : undefined;
+  const focusedSnap: DailySnapshot | undefined = (focusMetric && curSnap) ? {
+    ...curSnap,
+    rating: focusMetric.rating ?? curSnap.rating,
+    reviewCount: focusMetric.reviewCount ?? curSnap.reviewCount,
+    adRatio: focusMetric.adRatio ?? curSnap.adRatio,
+    returnRate: focusMetric.returnRate ?? curSnap.returnRate,
+    refundRate: focusMetric.refundRate ?? curSnap.refundRate,
+    dailySales7d: focusMetric.sales7d ?? curSnap.dailySales7d,
+    dailySales30d: focusMetric.sales30d ?? curSnap.dailySales30d,
+    monthlySales: focusMetric.sales30d ?? curSnap.monthlySales,
+  } : curSnap;
   // 优先使用 merged 快照（同日多来源导入已合并），避免取到运营导入的 0 值原始记录
-  const latest = curSnap ?? history.at(-1);
+  const latest = focusedSnap ?? history.at(-1);
   const prevSnap = (previousSnapshot?.get(skuId ?? "") ?? (parentSkuId ? previousSnapshot?.get(parentSkuId) : undefined));
   const skuPromos = useMemo(() => promotions.filter((p) => p.sku === skuId), [promotions, skuId]);
   const skuManualPromos = useMemo(() => manualPromotions.filter((p) => p.sku === skuId), [manualPromotions, skuId]);
@@ -82,6 +129,35 @@ export default function SkuDetail() {
 
   const skuShipment = useMemo(() => shipmentSuggestions.find((s) => s.sku === skuId), [shipmentSuggestions, skuId]);
   const skuWow: WowDelta | undefined = useMemo(() => wowDeltas.find((d) => d.sku === skuId), [wowDeltas, skuId]);
+
+  // ── 该 SKU 的活跃告警诊断（复用诊断引擎）──
+  const skuDiagnoses = useMemo(() => {
+    if (!sku || !curSnap) return [];
+    return alerts
+      .filter((a) => a.sku === skuId && a.severity !== "info")
+      .map((a) => {
+        const result = computeDiagnosis({
+          type: a.type,
+          sku,
+          latestSnap: curSnap,
+          previousSnap: prevSnap,
+          latestInv: inv,
+        });
+        return { alert: a, result };
+      });
+  }, [alerts, skuId, curSnap, prevSnap, inv, sku]);
+
+  // ── 历史变化（previous vs latest 快照）──
+  const historyCompare = useMemo(() => {
+    if (!sku || history.length === 0) return null;
+    const prev = history[0];
+    const latestSnap = history[history.length - 1];
+    const defaultLeadTime = config?.defaultLeadTime ?? 40;
+    const defaultSafetyStockDays = config?.defaultSafetyStockDays ?? 30;
+    const prevCalc = computeAll({ sku, snap: prev, inv, defaultLeadTime, defaultSafetyStockDays });
+    const latestCalc = computeAll({ sku, snap: latestSnap, inv, defaultLeadTime, defaultSafetyStockDays });
+    return { prev, latest: latestSnap, prevCalc, latestCalc };
+  }, [history, sku, inv, config]);
 
   const activeOrUpcomingPromo = skuPromos.find((p) => p.status === "active" || p.status === "upcoming");
 
@@ -203,6 +279,34 @@ export default function SkuDetail() {
     }
   }, [editSku, reload]);
 
+  // 费率（广告费比/退款率）改动 → 立即联动重算总成本/利润/利润率并写入 IndexedDB（无需点保存）
+  const commitRateEdit = useCallback(async (field: "adRatio" | "refundRate", value: number) => {
+    if (!curSnap) return;
+    const base: DailySnapshot = { ...curSnap, [field]: value };
+    const c = computeAll({
+      sku,
+      snap: base,
+      inv,
+      defaultLeadTime: config?.defaultLeadTime ?? 40,
+      defaultSafetyStockDays: config?.defaultSafetyStockDays ?? 30,
+    });
+    const updated: DailySnapshot = {
+      ...base,
+      totalCost: c.totalCost,
+      profit: sku.price > 0 ? c.grossProfit : base.profit,
+      profitMargin: sku.price > 0 ? c.grossMargin : base.profitMargin,
+      profitSource: c.profitSource,
+    };
+    try {
+      await upsertSnapshots([updated]);
+      setEditMsg(`已自动保存并联动重算（来源：${c.profitSource === "CALCULATED" ? "计算" : "估算"}）`);
+      setTimeout(() => setEditMsg(null), 1800);
+      reload();
+    } catch (err) {
+      setEditMsg(`自动保存失败: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [curSnap, sku, inv, config, reload]);
+
   // ── 按周聚合历史数据 ──
   const weeklyData = useMemo(() => {
     const map = new Map<string, DailySnapshot>();
@@ -235,18 +339,19 @@ export default function SkuDetail() {
   }, [history]);
 
   // ── 使用统一计算引擎 computeAll，覆盖全部13条规则 ──
+  // FIX: 用 focusedSnap（含 MSKU 独立指标覆盖）而非 curSnap，保证 focus=MSKU 时 KPI 显示该 MSKU 自身值
   const calc = useMemo(() => {
     if (!sku) return null;
     return computeAll({
       sku,
-      snap: curSnap,
+      snap: focusedSnap,
       inv,
       activePromo: activeOrUpcomingPromo,
       defaultLeadTime: config?.defaultLeadTime ?? 40,
       defaultSafetyStockDays: config?.defaultSafetyStockDays ?? 30,
       promoCost: weekPromoCost.total,
     });
-  }, [sku, curSnap, inv, activeOrUpcomingPromo, config, weekPromoCost]);
+  }, [sku, focusedSnap, inv, activeOrUpcomingPromo, config, weekPromoCost]);
 
   if (loading) return <div className="text-sm text-foreground-500">加载中...</div>;
 
@@ -256,7 +361,7 @@ export default function SkuDetail() {
       title="没找到这个 SKU"
       desc="请返回 SKU 列表选择"
       action={
-        <Link to="/sku" className="rounded-md bg-primary-500 px-3 py-1.5 text-[12px] font-medium text-background-50 hover:bg-primary-600 cursor-pointer whitespace-nowrap">返回 SKU 列表</Link>
+        <Link to="/sku" className="rounded-[9px] bg-primary-500 px-3 py-1.5 text-[12px] font-medium text-background-50 hover:bg-primary-600 cursor-pointer whitespace-nowrap">返回 SKU 列表</Link>
       }
     />
   );
@@ -270,7 +375,7 @@ export default function SkuDetail() {
         title="数据计算异常"
         desc="该 SKU 数据有误，无法计算利润。请尝试重新导入数据或检查控制台日志。"
         action={
-          <Link to="/sku" className="rounded-md bg-primary-500 px-3 py-1.5 text-[12px] font-medium text-background-50 hover:bg-primary-600 cursor-pointer whitespace-nowrap">返回 SKU 列表</Link>
+          <Link to="/sku" className="rounded-[9px] bg-primary-500 px-3 py-1.5 text-[12px] font-medium text-background-50 hover:bg-primary-600 cursor-pointer whitespace-nowrap">返回 SKU 列表</Link>
         }
       />
     );
@@ -281,23 +386,31 @@ export default function SkuDetail() {
     totalCost, grossProfit, grossMargin, isAdInferred, isReturnInferred, isCommissionInferred,
     isDiscountAdInferred, isDiscountReturnInferred,
     discountTotalCost, discountProfit, discountMargin,
-    discountCostCommission, discountCostAd, discountCostReturn,
+    discountCostCommission, discountCostAd, discountCostReturn, discountCostRefundLoss, discountCostCoupon,
     discountAdEstimated, discountReturnFeeEstimated,
-    costFob, costShipping, costDelivery, costCommission, costStorage, costAd, costReturn, costCoupon, costPromo,
+    costFob, costShipping, costDelivery, costCommission, costStorage, costAd, costReturn, costRefundLoss, costCoupon, costPromo,
     returnFee30d, adRatio: calcAdRatio, returnRate: calcReturnRate, refundRate: calcRefundRate,
     inStockTotal, inTransitTotal, totalStock,
     daysOfCoverOnHand, daysOfCoverWithTransit,
     fbaReplenish, fbmReplenish,
   } = calc;
 
+  // 成本全缺失 → 利润率/退货率失真（算成 100%/0），界面标注「缺失/成本缺失」而非 0
+  const costMissing = isCostFullyMissing(sku);
+  // 退款率(refundRate)对所有履约方式生效；缺失时展示「缺失」而非误导性的 0%
+  const refundMissing = isReturnRateMissing({
+    fulfillment: sku.fulfillment,
+    costMissing,
+    refundRate: latest?.refundRate,
+  });
+
   // 兼容旧变量
   const allStock = inStockTotal;
   const allTransit = inTransitTotal;
   const allAvailable = totalStock;
-  const coverOnHandDays = Math.round(daysOfCoverOnHand);
-  const coverWithTransitDays = Math.round(daysOfCoverWithTransit);
+  // 覆盖天数展示统一走 formatCoverDays（无销量时为 ∞）
   const dailySales = curSnap?.dailySales7d ?? 0;
-  const coverDays = dailySales > 0 ? Math.round(totalStock / dailySales) : 999;
+  const coverDays = dailySales > 0 ? Math.round(totalStock / dailySales) : Infinity;
   const stockSalesRatio = curSnap && curSnap.monthlySales > 0 ? (totalStock / curSnap.monthlySales).toFixed(1) : "N/A";
   const returnFee = returnFee30d;
   const dailySales30d = curSnap ? curSnap.monthlySales / 30 : 0;
@@ -313,11 +426,6 @@ export default function SkuDetail() {
   const southeastTransit = (inv?.southeastTransit ?? 0);
   const southcentralTransit = (inv?.southcentralTransit ?? 0);
 
-  // 旧数据兼容
-  const fbaStock = inv?.fbaStock ?? 0;
-  const fbmStock = inv?.fbmStock ?? 0;
-  const factoryStock = inv?.factoryStock ?? 0;
-
   return (
     <div className="space-y-6">
       {/* ═══════ 1. 头部信息 ═══════ */}
@@ -328,7 +436,13 @@ export default function SkuDetail() {
           <h1 className="mt-1 font-heading text-[28px] font-bold leading-tight text-foreground-950">{sku.name}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[12px]">
             <span className="mono-num rounded-[10px] bg-background-100 px-2.5 py-0.5 text-foreground-700">{sku.sku}</span>
-            {sku.msku && sku.msku !== sku.sku && <span className="mono-num rounded-[10px] bg-background-100 px-2.5 py-0.5 text-foreground-500">MSKU: {sku.msku}</span>}
+            {sku.msku && sku.msku !== sku.sku && sku.msku.split(/[,\s，、·]+/).map((m) => m.trim()).filter(Boolean).map((m) => (
+              <span key={m} id={`msku-${m}`}
+                className={`mono-num rounded-[10px] px-2.5 py-0.5 text-foreground-500 ${focusMsku && m === focusMsku ? "bg-primary-50 ring-2 ring-primary-400" : "bg-background-100"}`}>
+                MSKU: {m}
+                <span className="ml-1 text-[10px] text-foreground-400">{mskuStoreOf(sku, m)}</span>
+              </span>
+            ))}
             {sku.asin && <span className="mono-num text-foreground-500">{sku.asin}</span>}
             {sku.marketplace && <Badge tone="secondary">{sku.marketplace}</Badge>}
             <Badge tone="primary">{sku.store}</Badge>
@@ -346,24 +460,74 @@ export default function SkuDetail() {
           <button
             type="button"
             onClick={() => setCustomizing(!customizing)}
-            className="flex items-center gap-1.5 rounded-[12px] border border-background-200 bg-background-50 px-3 py-1.5 text-[12px] font-medium text-foreground-500 hover:bg-background-100 hover:text-foreground-800 cursor-pointer"
+            className="flex items-center gap-1.5 rounded-[9px] border border-background-200 bg-background-50 px-3 py-1.5 text-[12px] font-medium text-foreground-500 hover:bg-background-100 hover:text-foreground-800 cursor-pointer"
           >
             <i className={customizing ? "ri-close-line" : "ri-layout-masonry-line"} aria-hidden />
             {customizing ? "关闭设置" : "自定义布局"}
           </button>
           <Link to={`/promo-cost?sku=${encodeURIComponent(sku.sku)}`}
-            className="inline-flex items-center gap-1.5 rounded-[12px] border border-accent-200 bg-accent-50 px-3 py-1.5 text-[12px] font-medium text-accent-700 hover:bg-accent-100 cursor-pointer whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 rounded-[9px] border border-accent-200 bg-accent-50 px-3 py-1.5 text-[12px] font-medium text-accent-700 hover:bg-accent-100 cursor-pointer whitespace-nowrap"
           >
             <i className="ri-coupon-3-line" aria-hidden /> 添加促销成本
           </Link>
           {sku.productUrl && (
-            <a href={sku.productUrl} target="_blank" rel="nofollow noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-[12px] border border-background-200 bg-background-50 px-3 py-1.5 text-[12px] font-medium text-foreground-600 hover:bg-background-100 cursor-pointer whitespace-nowrap">
+            <a href={safeHref(sku.productUrl)} target="_blank" rel="nofollow noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-[9px] border border-background-200 bg-background-50 px-3 py-1.5 text-[12px] font-medium text-foreground-600 hover:bg-background-100 cursor-pointer whitespace-nowrap">
               <i className="ri-external-link-line" aria-hidden /> 在 Amazon 打开
             </a>
           )}
         </div>
       </div>
       )}
+
+      {/* ═══════ 健康评分卡 ═══════ */}
+      {(() => {
+        const hs = healthScores.get(skuId ?? "");
+        if (!hs) return null;
+        const cardCls =
+          hs.level === "健康"
+            ? "border-accent-200 bg-accent-50/50"
+            : hs.level === "关注"
+            ? "border-secondary-200 bg-secondary-50/50"
+            : "border-red-200 bg-red-50/50";
+        const badgeCls =
+          hs.level === "健康"
+            ? "bg-accent-500 text-white"
+            : hs.level === "关注"
+            ? "bg-secondary-500 text-white"
+            : "bg-red-500 text-white";
+        const ringCls =
+          hs.level === "健康"
+            ? "text-accent-600"
+            : hs.level === "关注"
+            ? "text-secondary-600"
+            : "text-red-600";
+        return (
+          <div className={`flex flex-wrap items-center gap-4 rounded-2xl border p-4 ${cardCls}`}>
+            <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-4 ${ringCls} border-current/20 bg-background-50`}>
+              <span className={`mono-num text-[26px] font-bold ${ringCls}`}>{hs.score}</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${badgeCls}`}>{hs.level}</span>
+                <span className="text-[12px] text-foreground-500">综合健康分（100 满分）</span>
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-foreground-400">主要风险因子：</span>
+                {hs.factors.length === 0 ? (
+                  <span className="text-[12px] text-accent-700">无明显风险因子</span>
+                ) : (
+                  hs.factors.slice(0, 3).map((f) => (
+                    <span key={f.key} className="inline-flex items-center rounded-md bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-600">
+                      {f.label}
+                      <span className="ml-1 text-red-400">-{f.impact}</span>
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 布局自定义 */}
       {customizing && (
@@ -389,7 +553,7 @@ export default function SkuDetail() {
         <>
           {/* ── 折扣利润率横幅 ── */}
           {visibleKeys.includes("discountBanner") && activeOrUpcomingPromo?.discountPrice && activeOrUpcomingPromo.discountPrice > 0 && (
-            <div className="rounded-xl border-2 border-accent-500 bg-accent-50/70 p-4">
+            <div className="rounded-[14px] border-2 border-accent-500 bg-accent-50/70 p-4">
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-100 text-[18px] text-accent-700">
                   <i className="ri-coupon-3-line" aria-hidden />
@@ -447,9 +611,12 @@ export default function SkuDetail() {
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {coverageKpiCardOrder.map((key) => {
               switch (key) {
-                case "coverDays": return <KpiCard key={key} label="综合覆盖" value={`${coverDays} 天`} sub={`日均${dailySales.toFixed(1)}`} icon="ri-timer-line" tone={coverDays < 60 ? "warn" : "accent"} tooltip="公式: 总库存 ÷ 日均销量" />;
-                case "coverOnHand": return <KpiCard key={key} label="在库覆盖" value={`${coverOnHandDays} 天`} sub="仅算在库" icon="ri-archive-drawer-line" tooltip="公式: 在库库存 ÷ 日均销量" />;
-                case "coverWithTransit": return <KpiCard key={key} label="含在途覆盖" value={`${coverWithTransitDays} 天`} sub="含在途" icon="ri-ship-line" tone="secondary" tooltip="公式: (在库+在途) ÷ 日均销量" />;
+                case "coverDays": {
+                  const noSales = !Number.isFinite(coverDays);
+                  return <KpiCard key={key} label="综合覆盖" value={`${formatCoverDays(coverDays)} 天`} sub={noSales ? COVER_NO_SALES_SUB : `日均${dailySales.toFixed(1)}`} icon="ri-timer-line" tone={noSales ? "secondary" : (coverDays < 60 ? "warn" : "accent")} tooltip="公式: 总库存 ÷ 日均销量" />;
+                }
+                case "coverOnHand": return <KpiCard key={key} label="在库覆盖" value={`${formatCoverDays(daysOfCoverOnHand)} 天`} sub={Number.isFinite(daysOfCoverOnHand) ? "仅算在库" : COVER_NO_SALES_SUB} icon="ri-archive-drawer-line" tooltip="公式: 在库库存 ÷ 日均销量" />;
+                case "coverWithTransit": return <KpiCard key={key} label="含在途覆盖" value={`${formatCoverDays(daysOfCoverWithTransit)} 天`} sub={Number.isFinite(daysOfCoverWithTransit) ? "含在途" : COVER_NO_SALES_SUB} icon="ri-ship-line" tone="secondary" tooltip="公式: (在库+在途) ÷ 日均销量" />;
                 case "leadTime": return <KpiCard key={key} label="Lead Time" value={`${sku.leadTimeDays ?? 40} 天`} sub={`安全库存 ${sku.safetyStockDays ?? 30} 天`} icon="ri-time-line" tone="secondary" tooltip={`安全库存公式: LeadTime × 日均 × ${sku.fulfillment === "FBM" ? "50%(FBM)" : "20%(FBA)"}`} />;
                 default: return null;
               }
@@ -465,11 +632,11 @@ export default function SkuDetail() {
                 case "reviewCount": return <KpiCard key={key} label="Review 数" value={latest.reviewCount != null ? latest.reviewCount.toLocaleString() : "N/A"} sub="累计" icon="ri-chat-3-line" />;
                 case "returnRate": return sku.fulfillment === "mixed" ? (
                   <React.Fragment key={key}>
-                    <KpiCard label="FBA退货率" value={`${calcReturnRate.toFixed(1)}%`} sub={calcReturnRate > 5 ? "⚠ 需关注" : "正常"} icon="ri-arrow-go-back-line" tone={calcReturnRate > 8 ? "danger" : calcReturnRate > 5 ? "warn" : "accent"} />
-                    <KpiCard label="FBM退款率" value={`${(latest.refundRate ?? 0).toFixed(1)}%`} sub={(latest.refundRate ?? 0) > 5 ? "⚠ 需关注" : "正常"} icon="ri-refund-2-line" tone={(latest.refundRate ?? 0) > 8 ? "danger" : (latest.refundRate ?? 0) > 5 ? "warn" : "accent"} />
+                    <KpiCard label="退款率" value={refundMissing ? "缺失" : `${(latest.refundRate ?? 0).toFixed(1)}%`} sub={refundMissing ? "未导入" : ((latest.refundRate ?? 0) > 5 ? "⚠ 需关注" : "正常")} icon="ri-refund-2-line" tone={refundMissing ? "secondary" : ((latest.refundRate ?? 0) > 8 ? "danger" : (latest.refundRate ?? 0) > 5 ? "warn" : "accent")} />
+                    <KpiCard label="FBA退货率" value={costMissing ? "缺失" : `${calcReturnRate.toFixed(1)}%`} sub={costMissing ? "成本缺失" : (calcReturnRate > 5 ? "⚠ 需关注" : "正常")} icon="ri-arrow-go-back-line" tone={costMissing ? "secondary" : (calcReturnRate > 8 ? "danger" : calcReturnRate > 5 ? "warn" : "accent")} />
                   </React.Fragment>
                 ) : (
-                  <KpiCard key={key} label={sku.fulfillment === "FBM" ? "退款率" : "退货率"} value={`${sku.fulfillment === "FBM" ? (latest.refundRate ?? 0).toFixed(1) : calcReturnRate.toFixed(1)}%`} sub={sku.fulfillment === "FBM" ? ((latest.refundRate ?? 0) > 5 ? "⚠ 需关注" : "正常") : (calcReturnRate > 5 ? "⚠ 需关注" : "正常")} icon="ri-arrow-go-back-line" tone={sku.fulfillment === "FBM" ? ((latest.refundRate ?? 0) > 8 ? "danger" : (latest.refundRate ?? 0) > 5 ? "warn" : "accent") : (calcReturnRate > 8 ? "danger" : calcReturnRate > 5 ? "warn" : "accent")} />
+                  <KpiCard key={key} label="退款率" value={refundMissing ? "缺失" : `${(latest.refundRate ?? 0).toFixed(1)}%`} sub={refundMissing ? "未导入" : ((latest.refundRate ?? 0) > 5 ? "⚠ 需关注" : "正常")} icon="ri-refund-2-line" tone={refundMissing ? "secondary" : ((latest.refundRate ?? 0) > 8 ? "danger" : (latest.refundRate ?? 0) > 5 ? "warn" : "accent")} />
                 );
                 case "adRatio": return <KpiCard key={key} label="广告费比" value={`${latest.adRatio.toFixed(1)}%`} sub={skuWow ? deltaArrow(skuWow.adRatioDelta, true) : `阈值 ${config?.adRatioThreshold ?? 10}%`} icon="ri-megaphone-line" tone={latest.adRatio > (config?.adRatioThreshold ?? 10) * 2 ? "danger" : latest.adRatio > (config?.adRatioThreshold ?? 10) ? "warn" : "accent"} />;
                 case "refundFee": return <KpiCard key={key} label="退款费" value={`${returnFee.toFixed(2)}`} sub="近30天估算" icon="ri-refund-2-line" />;
@@ -478,12 +645,64 @@ export default function SkuDetail() {
             })}
           </div>
           )}
+
+          {/* 自然订单 / 广告订单占比 */}
+          {visibleKeys.includes("kpiCards") && (() => {
+            const ad = latest.adRatio;
+            const organic = Math.max(0, Math.min(100, 100 - ad));
+            return (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <KpiCard
+                  label="自然订单占比"
+                  value={`${organic.toFixed(1)}%`}
+                  sub={`广告占比 ${ad.toFixed(1)}% · 基于广告费比推导`}
+                  icon="ri-leaf-line"
+                  tone={organic > 70 ? "accent" : organic > 40 ? "primary" : "warn"}
+                  tooltip="近似推导：自然订单占比 ≈ 100% − 广告费比（adRatio）。实际效果受转化归因影响，供趋势参考。"
+                />
+                <KpiCard
+                  label="广告订单占比"
+                  value={`${ad.toFixed(1)}%`}
+                  sub={`自然占比 ${organic.toFixed(1)}% · 阈值 ${config?.adRatioThreshold ?? 10}%`}
+                  icon="ri-megaphone-line"
+                  tone={ad > (config?.adRatioThreshold ?? 10) * 2 ? "danger" : ad > (config?.adRatioThreshold ?? 10) ? "warn" : "accent"}
+                  tooltip="近似推导：广告订单占比 ≈ 广告费比（adRatio），即广告投入 / 总营收。"
+                />
+                <div className="rounded-[14px] border border-background-200/70 bg-background-50/60 p-3 flex flex-col justify-center">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-semibold text-foreground-500 tracking-wide uppercase">订单结构可视化</span>
+                    <span className="text-[11px] text-foreground-400">自然 vs 广告</span>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full bg-background-200 overflow-hidden flex">
+                    <div
+                      className="h-full transition-all"
+                      style={{ width: `${organic}%`, background: "linear-gradient(90deg,#0ea5e9,#22c55e)" }}
+                      title={`自然订单 ${organic.toFixed(1)}%`}
+                    />
+                    <div
+                      className="h-full transition-all"
+                      style={{ width: `${Math.max(0, 100 - organic)}%`, background: "linear-gradient(90deg,#f59e0b,#ef4444)" }}
+                      title={`广告订单 ${ad.toFixed(1)}%`}
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[11px]">
+                    <span className="inline-flex items-center gap-1 text-foreground-500">
+                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: "#22c55e" }} />自然 {organic.toFixed(0)}%
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-foreground-500">
+                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: "#f59e0b" }} />广告 {ad.toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </>
       )}
 
       {/* ═══════ 运营数据编辑 ═══════ */}
       {visibleKeys.includes("editData") && (
-      <div className="rounded-xl border border-background-200/70 bg-background-100/50 p-4">
+      <div className="rounded-[14px] border border-background-200/70 bg-background-100/50 p-4">
         <button
           type="button"
           onClick={() => { setEditOpen(!editOpen); setEditMsg(null); }}
@@ -539,43 +758,34 @@ export default function SkuDetail() {
                   const newReturnRate = Number(fd.get("returnRate")) || latestForEdit.returnRate;
                   const newRefundRate = Number(fd.get("refundRate")) || (latestForEdit.refundRate ?? 0);
 
-                  // 自动计算餀爆公式：如果运营表单没有直接改指则部分，就从字段反推
-                  const costFob = sku.costFob ?? 0;
-                  const costShipping = sku.costShipping ?? 0;
-                  const costDelivery = sku.costDelivery ?? 0;
-                  const costStorage = sku.costStorage ?? 0;
-                  const coupon = sku.coupon ?? 0;
-
-                  // 成本项优先用SKU主档字段，如果为空则用运营指标反推
-                  const costAd = (sku.costAd ?? 0) > 0 ? (sku.costAd ?? 0) : (newAdRatio / 100) * sku.price;
-                  const costReturn = (sku.costReturn ?? 0) > 0 ? (sku.costReturn ?? 0) : (newReturnRate / 100) * sku.price;
-                  const costCommission = (sku.costCommission ?? 0) > 0 ? (sku.costCommission ?? 0) : sku.price * 0.15;
-
-                  const totalCostCalc = costFob + costShipping + costDelivery + costCommission + costStorage + costAd + costReturn + coupon;
-
-                  // 如果用户手动填了利润率则优先用手动值，否则自动计算
-                  const rawProfit = Number(fd.get("profit"));
-                  const rawMargin = Number(fd.get("profitMargin"));
-                  const newProfit = (rawProfit !== 0) ? rawProfit : sku.price > 0 ? sku.price - totalCostCalc : latestForEdit.profit;
-                  const newMargin = (rawMargin !== 0) ? rawMargin : sku.price > 0 ? (newProfit / sku.price) * 100 : latestForEdit.profitMargin;
-
-                  const updated: DailySnapshot = {
-                    date: latestForEdit.date,
-                    sku: latestForEdit.sku,
+                  // 用统一计算引擎 computeAll 得到总成本（优惠券已计入总成本，口径一致）
+                  const editSnap: DailySnapshot = {
+                    ...latestForEdit,
                     dailySales7d: newDailySales7d,
                     monthlySales: newMonthlySales,
                     stockOnHand: newStockOnHand,
                     stockInTransit: newStockInTransit,
                     adSpend: newAdSpend,
                     adRatio: newAdRatio,
-                    profit: newProfit,
-                    profitMargin: newMargin,
-                    totalCost: totalCostCalc,
                     rating: newRating,
                     returnRate: newReturnRate,
                     refundRate: newRefundRate,
-                    daysOfCoverOnHand: newDailySales7d > 0 ? Number((newStockOnHand / newDailySales7d).toFixed(1)) : 999,
-                    daysOfCoverWithTransit: newDailySales7d > 0 ? Number(((newStockOnHand + newStockInTransit) / newDailySales7d).toFixed(1)) : 999,
+                    daysOfCoverOnHand: newDailySales7d > 0 ? Number((newStockOnHand / newDailySales7d).toFixed(1)) : Infinity,
+                    daysOfCoverWithTransit: newDailySales7d > 0 ? Number(((newStockOnHand + newStockInTransit) / newDailySales7d).toFixed(1)) : Infinity,
+                  };
+                  const editCalc = computeAll({ sku, snap: editSnap, inv });
+                  const totalCostCalc = editCalc.totalCost;
+
+                  // 利润/利润率一律由系统联动计算，不采用人工输入值
+                  const newProfit = sku.price > 0 ? sku.price - totalCostCalc : latestForEdit.profit;
+                  const newMargin = sku.price > 0 ? (newProfit / sku.price) * 100 : latestForEdit.profitMargin;
+
+                  const updated: DailySnapshot = {
+                    ...editSnap,
+                    totalCost: totalCostCalc,
+                    profit: newProfit,
+                    profitMargin: newMargin,
+                    profitSource: editCalc.profitSource,
                   };
 
                   // ── 读取区域库存字段 ──
@@ -664,15 +874,34 @@ export default function SkuDetail() {
                   </>
                 )}
                 <EditableField label="广告费(30天) $" name="adSpend" defaultValue={latestForEdit.adSpend} step="0.01" />
-                <EditableField label="广告费比 %" name="adRatio" defaultValue={latestForEdit.adRatio} step="0.1" />
-                <EditableField label="单件利润 $ (可自动算)" name="profit" defaultValue={latestForEdit.profit} step="0.01" />
-                <EditableField label="利润率 % (可自动算)" name="profitMargin" defaultValue={latestForEdit.profitMargin} step="0.1" />
+                <EditableField
+                  label="广告费比 %（改后自动重算利润）"
+                  name="adRatio"
+                  defaultValue={latestForEdit.adRatio}
+                  step="0.1"
+                  onCommit={(v) => commitRateEdit("adRatio", v)}
+                />
+                {/* 利润/利润率由系统联动计算，不手填 */}
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-foreground-500">单件利润 $（自动算）</span>
+                  <div className="w-full rounded-md border border-background-200 bg-background-100 px-2 py-1.5 text-[12px] text-foreground-900">{grossProfit.toFixed(2)}</div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-foreground-500">利润率 %（自动算）</span>
+                  <div className="w-full rounded-md border border-background-200 bg-background-100 px-2 py-1.5 text-[12px] text-foreground-900">{grossMargin.toFixed(1)}%</div>
+                </div>
                 <EditableField label="评分" name="rating" defaultValue={latestForEdit.rating} step="0.1" />
                 {(sku.fulfillment === "FBA" || sku.fulfillment === "mixed") && (
                   <EditableField label="退货率 % (FBA)" name="returnRate" defaultValue={latestForEdit.returnRate} step="0.1" />
                 )}
                 {(sku.fulfillment === "FBM" || sku.fulfillment === "mixed") && (
-                  <EditableField label="退款率 % (FBM)" name="refundRate" defaultValue={latestForEdit.refundRate ?? 0} step="0.1" />
+                  <EditableField
+                    label="退款率 % (FBM，改后自动重算利润)"
+                    name="refundRate"
+                    defaultValue={latestForEdit.refundRate ?? 0}
+                    step="0.1"
+                    onCommit={(v) => commitRateEdit("refundRate", v)}
+                  />
                 )}
               </div>
 
@@ -714,7 +943,7 @@ export default function SkuDetail() {
                 <button
                   type="submit"
                   disabled={editSaving}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-primary-500 px-4 py-2 text-[13px] font-semibold text-background-50 hover:bg-primary-600 disabled:opacity-60 cursor-pointer whitespace-nowrap"
+                  className="inline-flex items-center gap-1.5 rounded-[9px] bg-primary-500 px-4 py-2 text-[13px] font-semibold text-background-50 hover:bg-primary-600 disabled:opacity-60 cursor-pointer whitespace-nowrap"
                 >
                   <i className={editSaving ? "ri-loader-4-line animate-spin" : "ri-save-line"} aria-hidden />
                   {editSaving ? "保存中..." : "保存修改"}
@@ -734,9 +963,15 @@ export default function SkuDetail() {
       {/* ═══════ 3. 盈利分析 ═══════ */}
       {visibleKeys.includes("profitAnalysis") && (
       <Section title="盈利分析" icon="ri-funds-box-line" subtitle="正常售价 vs 折扣售价 · 全部成本一目了然">
+        {costMissing && (
+          <div className="mb-3 rounded-[12px] border border-secondary-200 bg-secondary-50/60 px-3.5 py-2.5 text-[12px] text-foreground-600">
+            <i className="ri-information-line text-secondary-700 mr-1" aria-hidden />
+            成本字段（FOB/头程/配送/佣金/仓储/广告/退货费）全部缺失，利润率与退货率无法计算，当前显示「成本缺失 / 缺失」为占位、非真实值。要得真实利润率与退货率，请在 SKU 主档或「SKU 标识符」导入中补全成本：退货率需填 costReturn，FBM 退款率需在「运营数据」导入带退款率列。
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* ── 正常盈利 ── */}
-          <div className="rounded-xl border border-background-200/70 bg-background-50 p-4">
+          <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
             <div className="mb-3 flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary-100 text-[14px] text-primary-700">
                 <i className="ri-price-tag-3-line" aria-hidden />
@@ -753,25 +988,25 @@ export default function SkuDetail() {
               <ProfitRow label="佣金" value={`-$${costCommission.toFixed(2)}`} inferred={isCommissionInferred} />
               <ProfitRow label="仓租" value={`-$${(sku.costStorage ?? 0).toFixed(2)}`} />
               <ProfitRow label="广告费" value={`-$${costAd.toFixed(2)}`} inferred={isAdInferred} />
-              <ProfitRow label="退货费" value={`-$${costReturn.toFixed(2)}`} inferred={isReturnInferred} />
+              <ProfitRow label="退货损失" value={`-$${costRefundLoss.toFixed(2)}`} />
               {costCoupon > 0 && <ProfitRow label="优惠券(历史)" value={`($${costCoupon.toFixed(2)})`} />}
               {costPromo > 0 && <ProfitRow label="促销成本(手动)" value={`-$${costPromo.toFixed(2)}`} />}
               {weekPromoCost.count > 0 && (
-                <div className="text-[11px] text-accent-600 italic text-right">{weekPromoCost.count} 条促销 · 含促销 ¥{costPromo.toFixed(2)}</div>
+                <div className="text-[11px] text-accent-600 italic text-right">{weekPromoCost.count} 条促销 · 含促销 ${costPromo.toFixed(2)}</div>
               )}
               <div className="my-1.5 h-px bg-background-200/50" />
               <ProfitRow label="总成本" value={`$${totalCost.toFixed(2)}`} bold />
               <ProfitRow label="单件净利" value={`$${grossProfit.toFixed(2)}`} bold tone={grossProfit < 0 ? "text-red-600" : "text-accent-700"} />
-              <ProfitRow label="净利率" value={`${grossMargin.toFixed(1)}%`} bold tone={grossMargin < 0 ? "text-red-600" : grossMargin < 5 ? "text-secondary-700" : "text-accent-700"} />
+              <ProfitRow label="净利率" value={costMissing ? "成本缺失" : `${grossMargin.toFixed(1)}%`} bold tone={costMissing ? "text-foreground-400" : (grossMargin < 0 ? "text-red-600" : grossMargin < 5 ? "text-secondary-700" : "text-accent-700")} />
               <div className="my-1.5 h-px bg-background-200/50" />
               <ProfitRow label="广告费比" value={`${latest ? latest.adRatio.toFixed(1) : "0"}%`} />
-              <ProfitRow label="退货率" value={`${calcReturnRate.toFixed(1)}%`} />
-              <ProfitRow label="退款率" value={`${calcRefundRate.toFixed(1)}%`} />
+              <ProfitRow label="退货率" value={costMissing ? "缺失" : `${calcReturnRate.toFixed(1)}%`} />
+              <ProfitRow label="退款率" value={refundMissing ? "缺失" : `${calcRefundRate.toFixed(1)}%`} />
             </div>
           </div>
 
           {/* ── 折扣盈利 ── */}
-          <div className="rounded-xl border border-background-200/70 bg-background-50 p-4">
+          <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
             <div className="mb-3 flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-100 text-[14px] text-accent-700">
                 <i className="ri-coupon-3-line" aria-hidden />
@@ -796,12 +1031,12 @@ export default function SkuDetail() {
                 <ProfitRow label="折扣佣金" value={`-$${discountCostCommission.toFixed(2)}`} inferred={isCommissionInferred} />
                 <ProfitRow label="仓租" value={`-$${(sku.costStorage ?? 0).toFixed(2)}`} />
                 <ProfitRow label="折扣广告费" value={`-$${discountCostAd.toFixed(2)}`} inferred={isDiscountAdInferred} />
-                <ProfitRow label="折扣退货费" value={`-$${discountCostReturn.toFixed(2)}`} inferred={isDiscountReturnInferred} />
-                <ProfitRow label="优惠券" value={`-$${costCoupon.toFixed(2)}`} />
+                <ProfitRow label="折扣退货损失" value={`-$${discountCostRefundLoss.toFixed(2)}`} />
+                <ProfitRow label="优惠券" value={`(${discountCostCoupon.toFixed(2)})`} />
                 <div className="my-1.5 h-px bg-background-200/50" />
                 <ProfitRow label="折扣总成本" value={`$${discountTotalCost.toFixed(2)}`} bold />
                 <ProfitRow label="折扣净利" value={`$${discountProfit.toFixed(2)}`} bold tone={discountProfit < 0 ? "text-red-600" : "text-accent-700"} />
-                <ProfitRow label="折扣利润率" value={`${discountMargin.toFixed(1)}%`} bold tone={discountMargin < 0 ? "text-red-600" : discountMargin < 5 ? "text-secondary-700" : "text-accent-700"} />
+                <ProfitRow label="折扣利润率" value={costMissing ? "成本缺失" : `${discountMargin.toFixed(1)}%`} bold tone={costMissing ? "text-foreground-400" : (discountMargin < 0 ? "text-red-600" : discountMargin < 5 ? "text-secondary-700" : "text-accent-700")} />
                 <div className="my-1.5 h-px bg-background-200/50" />
                 <ProfitRow label="折扣费比" value={`${latest ? latest.adRatio.toFixed(1) : "0"}%`} />
                 <ProfitRow label="折扣广告费(估)" value={`$${discountAdEstimated.toFixed(2)}`} />
@@ -822,16 +1057,17 @@ export default function SkuDetail() {
       {/* ═══════ 4. 成本结构瀑布 ═══════ */}
       {visibleKeys.includes("costWaterfall") && (
       <Section title="成本结构瀑布" icon="ri-water-flash-line" subtitle="售价 → 逐项扣减 → 净利">
-        <div className="rounded-xl border border-background-200/70 bg-background-50 p-4">
+        <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
           <div className="space-y-3">
             <CostWaterfall label="售价" value={sku.price} color="bg-primary-500" isStart />
-            {sku.costFob ? <CostWaterfall label="FOB (产品成本)" value={-sku.costFob} color="bg-secondary-400" /> : null}
-            {sku.costShipping ? <CostWaterfall label="头程费" value={-sku.costShipping} color="bg-secondary-400" /> : null}
-            {sku.costDelivery ? <CostWaterfall label="尾程(配送费)" value={-sku.costDelivery} color="bg-secondary-400" /> : null}
-            {sku.costCommission ? <CostWaterfall label="佣金" value={-sku.costCommission} color="bg-secondary-400" /> : null}
-            {sku.costStorage ? <CostWaterfall label="仓租" value={-sku.costStorage} color="bg-secondary-300" /> : null}
+            {costFob ? <CostWaterfall label="FOB (产品成本)" value={-costFob} color="bg-secondary-400" /> : null}
+            {costShipping ? <CostWaterfall label="头程费" value={-costShipping} color="bg-secondary-400" /> : null}
+            {costDelivery ? <CostWaterfall label="尾程(配送费)" value={-costDelivery} color="bg-secondary-400" /> : null}
+            {costCommission > 0 ? <CostWaterfall label="佣金" value={-costCommission} color="bg-secondary-400" /> : null}
+            {costStorage > 0 ? <CostWaterfall label="仓租" value={-costStorage} color="bg-secondary-300" /> : null}
             {costAd > 0 ? <CostWaterfall label="广告费" value={-costAd} color="bg-secondary-300" /> : null}
-            {sku.costReturn ? <CostWaterfall label="退货费" value={-sku.costReturn} color="bg-secondary-300" /> : null}
+            {costRefundLoss > 0 ? <CostWaterfall label="退货损失" value={-costRefundLoss} color="bg-secondary-300" /> : null}
+            {costPromo > 0 ? <CostWaterfall label="促销成本(手动)" value={-costPromo} color="bg-secondary-300" /> : null}
             {costCoupon > 0 ? <CostWaterfall label="优惠券" value={-costCoupon} color="bg-secondary-300" /> : null}
             <div className="my-2 h-px bg-background-200/70" />
             <CostWaterfall label="单件净利" value={grossProfit} color={grossProfit >= 0 ? "bg-accent-500" : "bg-red-500"} isEnd />
@@ -905,7 +1141,7 @@ export default function SkuDetail() {
             <div className="grid grid-cols-2 gap-3">
               <DataTile label="建议数量" value={skuShipment.suggestQty.toLocaleString()} />
               <DataTile label="最晚发货日" value={skuShipment.latestShipDate} />
-              <DataTile label="当前覆盖" value={`${skuShipment.daysOfCoverWithTransit.toFixed(0)} 天`} sub={`目标 ${skuShipment.targetCoverDays} 天`} />
+              <DataTile label="当前覆盖" value={`${formatCoverDays(skuShipment.daysOfCoverWithTransit)} 天`} sub={`目标 ${skuShipment.targetCoverDays} 天`} />
               <DataTile label="原因" value={skuShipment.reason} />
             </div>
             {skuShipment.campaignBoost && <Badge tone="warn" className="mt-2">{skuShipment.campaignBoost}</Badge>}
@@ -919,7 +1155,7 @@ export default function SkuDetail() {
         <Section title="混卖补货建议" icon="ri-truck-line" subtitle="FBA / FBM 独立计算安全库存和建议补货量">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {fbaReplenish && (
-              <div className="rounded-xl border border-background-200/70 bg-background-50 p-4">
+              <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
                 <div className="mb-3 flex items-center gap-2">
                   <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary-100 text-[14px] text-primary-700">
                     <i className="ri-archive-drawer-line" aria-hidden />
@@ -933,7 +1169,7 @@ export default function SkuDetail() {
                   <DataTile label="在途库存" value={fbaReplenish.stockInTransit.toLocaleString()} />
                   <DataTile label="Lead Time" value={fbaReplenish.leadTimeDays + " 天"} />
                   <DataTile label="安全库存" value={fbaReplenish.safetyStockDays + " 天"} sub={`≈ ${fbaReplenish.safetyStock.toFixed(0)} 件`} />
-                  <DataTile label="在库覆盖" value={fbaReplenish.coverDays.toFixed(0) + " 天"} />
+                  <DataTile label="在库覆盖" value={formatCoverDays(fbaReplenish.coverDays) + " 天"} />
                 </div>
                 <div className="mt-3 rounded-lg border border-accent-200/70 bg-accent-50/60 p-3">
                   <span className="text-[12px] font-semibold text-foreground-700">建议补货量</span>
@@ -943,7 +1179,7 @@ export default function SkuDetail() {
               </div>
             )}
             {fbmReplenish && (
-              <div className="rounded-xl border border-background-200/70 bg-background-50 p-4">
+              <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
                 <div className="mb-3 flex items-center gap-2">
                   <div className="flex h-7 w-7 items-center justify-center rounded-md bg-secondary-100 text-[14px] text-secondary-700">
                     <i className="ri-box-3-line" aria-hidden />
@@ -957,7 +1193,7 @@ export default function SkuDetail() {
                   <DataTile label="在途库存" value={fbmReplenish.stockInTransit.toLocaleString()} />
                   <DataTile label="Lead Time" value={fbmReplenish.leadTimeDays + " 天"} />
                   <DataTile label="安全库存" value={fbmReplenish.safetyStockDays + " 天"} sub={`≈ ${fbmReplenish.safetyStock.toFixed(0)} 件`} />
-                  <DataTile label="在库覆盖" value={fbmReplenish.coverDays.toFixed(0) + " 天"} />
+                  <DataTile label="在库覆盖" value={formatCoverDays(fbmReplenish.coverDays) + " 天"} />
                 </div>
                 <div className="mt-3 rounded-lg border border-secondary-200/70 bg-secondary-50/60 p-3">
                   <span className="text-[12px] font-semibold text-foreground-700">建议补货量</span>
@@ -1009,23 +1245,12 @@ export default function SkuDetail() {
             <div className="text-[11px] text-foreground-500">在库{allStock} + 在途{allTransit}</div>
           </div>
         </div>
-        {/* 富运数据: 兼容旧字段展示 */}
-        {(fbaStock + fbmStock + factoryStock > 0) && (
-          <div className="mt-3 rounded-lg border border-background-200/70 bg-background-50 p-3">
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-foreground-500">旧数据 - FBA/FBM/工厂</div>
-            <div className="grid grid-cols-3 gap-3">
-              <WarehouseCell label="FBA 在库" qty={fbaStock} />
-              <WarehouseCell label="FBM 在库" qty={fbmStock} />
-              <WarehouseCell label="工厂库存" qty={factoryStock} />
-            </div>
-          </div>
-        )}
         {latest && (
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <DataTile label="7天销量" value={latest.dailySales7d.toFixed(1)} sub="日均" />
             <DataTile label="30天销量" value={latest.monthlySales.toLocaleString()} />
             <DataTile label="存销比" value={String(stockSalesRatio)} />
-            <DataTile label="在库可售天数" value={`${coverOnHandDays} 天`} />
+            <DataTile label="在库可售天数" value={`${formatCoverDays(daysOfCoverOnHand)} 天`} />
           </div>
         )}
       </Section>
@@ -1043,7 +1268,7 @@ export default function SkuDetail() {
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {/* ── 产品信息（可编辑） ── */}
-          <div className="rounded-xl border border-background-200/70 bg-background-50 p-4">
+          <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary-100 text-[14px] text-primary-700"><i className="ri-id-card-line" aria-hidden /></div>
@@ -1154,7 +1379,17 @@ export default function SkuDetail() {
               <div className="space-y-1 text-[13px]">
                 <InfoRow label="SKU" value={sku.sku} />
                 <InfoRow label="品名" value={sku.name} />
-                <InfoRow label="MSKU" value={sku.msku ?? "-"} />
+                <InfoRow label="MSKU" value={
+                  sku.msku
+                    ? sku.msku.split(/[,\s，、·]+/).map((m) => m.trim()).filter(Boolean).map((m) => (
+                        <span key={m}
+                          className={`mono-num mr-1 inline-block rounded-[8px] px-2 py-0.5 text-[12px] text-foreground-600 ${focusMsku && m === focusMsku ? "bg-primary-50 ring-2 ring-primary-400" : "bg-background-100"}`}>
+                          {m}
+                          <span className="ml-1 text-[10px] text-foreground-400">{mskuStoreOf(sku, m)}</span>
+                        </span>
+                      ))
+                    : "-"
+                } />
                 <InfoRow label="ASIN" value={sku.asin ?? "-"} />
                 <InfoRow label="UPC" value={sku.upc ?? "-"} />
                 <InfoRow label="父体 ASIN" value={sku.parentAsin ?? "-"} />
@@ -1174,7 +1409,7 @@ export default function SkuDetail() {
           </div>
 
           {/* ── 包裹参数（可编辑） ── */}
-          <div className="rounded-xl border border-background-200/70 bg-background-50 p-4">
+          <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-100 text-[14px] text-accent-700"><i className="ri-box-3-line" aria-hidden /></div>
@@ -1239,7 +1474,7 @@ export default function SkuDetail() {
           </div>
 
           {/* ── Listing 优化（可编辑） ── */}
-          <div className="rounded-xl border border-background-200/70 bg-background-50 p-4">
+          <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-secondary-100 text-[14px] text-secondary-700"><i className="ri-image-edit-line" aria-hidden /></div>
@@ -1292,7 +1527,7 @@ export default function SkuDetail() {
                 <InfoRow label="透明计划" value={sku.transparentPlan ?? "-"} />
                 {sku.productUrl && (
                   <div className="pt-1">
-                    <a href={sku.productUrl} target="_blank" rel="nofollow noopener noreferrer" className="inline-flex items-center gap-1.5 text-[12px] text-primary-700 hover:underline cursor-pointer break-all">
+                    <a href={safeHref(sku.productUrl)} target="_blank" rel="nofollow noopener noreferrer" className="inline-flex items-center gap-1.5 text-[12px] text-primary-700 hover:underline cursor-pointer break-all">
                       <i className="ri-external-link-line shrink-0" aria-hidden /> 产品链接
                     </a>
                   </div>
@@ -1301,7 +1536,7 @@ export default function SkuDetail() {
                   <div className="space-y-1 pt-1">
                     <span className="text-[12px] text-foreground-500">竞品链接</span>
                     {sku.competitorUrls.map((url, i) => (
-                      <a key={i} href={url} target="_blank" rel="nofollow noopener noreferrer" className="block truncate text-[12px] text-primary-700 hover:underline cursor-pointer">
+                      <a key={i} href={safeHref(url)} target="_blank" rel="nofollow noopener noreferrer" className="block truncate text-[12px] text-primary-700 hover:underline cursor-pointer">
                         竞品 {i + 1} · {url.slice(0, 50)}...
                       </a>
                     ))}
@@ -1319,7 +1554,7 @@ export default function SkuDetail() {
               type="button"
               onClick={saveSkuEdit}
               disabled={skuSaving}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary-500 px-4 py-2 text-[13px] font-semibold text-background-50 hover:bg-primary-600 disabled:opacity-60 cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 rounded-[9px] bg-primary-500 px-4 py-2 text-[13px] font-semibold text-background-50 hover:bg-primary-600 disabled:opacity-60 cursor-pointer whitespace-nowrap"
             >
               <i className={skuSaving ? "ri-loader-4-line animate-spin" : "ri-save-line"} aria-hidden />
               {skuSaving ? "保存中..." : "保存修改"}
@@ -1336,7 +1571,7 @@ export default function SkuDetail() {
 
       {/* ═══════ 8. 上期对比 ═══════ */}
       {visibleKeys.includes("weekOverWeek") && skuWow && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-background-200/70 bg-background-100/60 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3 rounded-[14px] border border-background-200/70 bg-background-100/60 px-4 py-3">
           <span className="text-[12px] font-semibold text-foreground-700">上期对比</span>
           <div className="flex items-center gap-1.5 text-[12px] text-foreground-600"><span>日均销量</span>{deltaArrow(skuWow.dailySalesDelta)}</div>
           <span className="text-foreground-300">·</span>
@@ -1355,7 +1590,7 @@ export default function SkuDetail() {
         <Section title="本周 vs 上周环比" icon="ri-bar-chart-grouped-line" subtitle="近7天数据对比">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             {/* 周销量对比 */}
-            <div className="rounded-xl border border-background-200/70 bg-background-50 p-4">
+            <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
               <div className="mb-3 flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary-100 text-[14px] text-primary-700">
                   <i className="ri-shopping-cart-2-line" aria-hidden />
@@ -1384,7 +1619,7 @@ export default function SkuDetail() {
             </div>
 
             {/* 周利润对比 */}
-            <div className="rounded-xl border border-background-200/70 bg-background-50 p-4">
+            <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
               <div className="mb-3 flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-100 text-[14px] text-accent-700">
                   <i className="ri-funds-line" aria-hidden />
@@ -1410,7 +1645,7 @@ export default function SkuDetail() {
             </div>
 
             {/* 利润率 & 费比 */}
-            <div className="rounded-xl border border-background-200/70 bg-background-50 p-4">
+            <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
               <div className="mb-3 flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-secondary-100 text-[14px] text-secondary-700">
                   <i className="ri-percent-line" aria-hidden />
@@ -1449,7 +1684,7 @@ export default function SkuDetail() {
           </div>
         </Section>
       ) : (
-        <div className="rounded-xl border border-background-200/70 bg-background-100/60 px-4 py-6 text-center text-[13px] text-foreground-500">
+        <div className="rounded-[14px] border border-background-200/70 bg-background-100/60 px-4 py-6 text-center text-[13px] text-foreground-500">
           <i className="ri-bar-chart-grouped-line mb-2 block text-[28px] text-foreground-300" aria-hidden />
           暂无上周数据，下次上传后可查看周环比
         </div>
@@ -1472,7 +1707,7 @@ export default function SkuDetail() {
               icon="ri-checkbox-blank-circle-line"
               title="暂无关联待办"
               desc="在『我的待办』中新增待办并关联此 SKU"
-              action={<Link to="/todo" className="rounded-md bg-primary-500 px-3 py-1.5 text-[12px] font-medium text-background-50 hover:bg-primary-600 cursor-pointer whitespace-nowrap">去添加待办</Link>}
+              action={<Link to="/todo" className="rounded-[9px] bg-primary-500 px-3 py-1.5 text-[12px] font-medium text-background-50 hover:bg-primary-600 cursor-pointer whitespace-nowrap">去添加待办</Link>}
             />
           ) : (
             <div className="space-y-2">
@@ -1505,6 +1740,59 @@ export default function SkuDetail() {
               })}
             </div>
           )}
+        </Section>
+      )}
+
+      {/* ======= 异常原因拆解 ======= */}
+      {skuDiagnoses.length > 0 && (
+        <Section title="异常原因拆解" icon="ri-search-eye-line" subtitle={`共 ${skuDiagnoses.length} 条活跃告警`}>
+          <div className="space-y-4">
+            {skuDiagnoses.map(({ alert, result }) => (
+              <div key={alert.id} className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    alert.severity === "critical" ? "bg-red-50 text-red-600" : "bg-secondary-100 text-secondary-700"
+                  }`}>{alert.severity === "critical" ? "紧急" : "关注"}</span>
+                  <span className="text-[13px] font-semibold text-foreground-900">{alert.title}</span>
+                  <Link to={`/diagnosis?type=${DIAGNOSIS_GROUP[alert.type] ?? alert.type}&sku=${encodeURIComponent(alert.sku)}`} className="ml-auto text-[11px] font-medium text-primary-600 hover:underline cursor-pointer">
+                    去诊断页 →
+                  </Link>
+                </div>
+                <p className="mt-2 text-[13px] leading-relaxed text-foreground-700">{result.summary}</p>
+                <DiagnosisFactorsInline result={result} />
+                {result.suggestion && (
+                  <div className="mt-3 flex items-start gap-2 rounded-[10px] bg-accent-50/50 px-3 py-2">
+                    <i className="ri-lightbulb-line mt-0.5 text-[14px] text-accent-700" aria-hidden />
+                    <span className="text-[12px] text-foreground-700"><span className="font-semibold">建议动作：</span>{result.suggestion}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* ======= 历史变化表 ======= */}
+      {historyCompare && (
+        <Section title="历史变化" icon="ri-history-line" subtitle={`${historyCompare.prev.date} → ${historyCompare.latest.date}`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground-400">
+                  <th className="border-b border-background-200 px-3 py-2.5">指标</th>
+                  <th className="border-b border-background-200 px-3 py-2.5">上期</th>
+                  <th className="border-b border-background-200 px-3 py-2.5">最新</th>
+                  <th className="border-b border-background-200 px-3 py-2.5">变化</th>
+                </tr>
+              </thead>
+              <tbody>
+                <HistoryRow label="日均销量" prev={historyCompare.prev.dailySales7d} cur={historyCompare.latest.dailySales7d} unit="" digits={1} goodDir="up" />
+                <HistoryRow label="库存(总)" prev={historyCompare.prevCalc.inStockTotal} cur={historyCompare.latestCalc.inStockTotal} unit="" digits={0} goodDir="up" />
+                <HistoryRow label="利润率" prev={historyCompare.prevCalc.grossMargin} cur={historyCompare.latestCalc.grossMargin} unit="%" digits={1} goodDir="up" />
+                <HistoryRow label="评分" prev={historyCompare.prev.rating} cur={historyCompare.latest.rating} unit="" digits={1} goodDir="up" />
+              </tbody>
+            </table>
+          </div>
         </Section>
       )}
 
@@ -1580,7 +1868,7 @@ export default function SkuDetail() {
                   type="button"
                   onClick={handleAddLog}
                   disabled={!newLogAction || !newLogDetail}
-                  className="shrink-0 rounded-md bg-primary-500 px-4 py-1.5 text-[12px] font-medium text-white hover:bg-primary-600 disabled:opacity-40 cursor-pointer"
+                  className="shrink-0 rounded-[9px] bg-primary-500 px-4 py-1.5 text-[12px] font-medium text-white hover:bg-primary-600 disabled:opacity-40 cursor-pointer"
                 >
                   记录
                 </button>
@@ -1673,12 +1961,75 @@ function DataTile({ label, value, sub }: { label: string; value: string; sub?: s
   );
 }
 
-function WarehouseCell({ label, qty }: { label: string; qty: number }) {
+/* ────────── 诊断因子拆解（复用诊断引擎结果） ────────── */
+function DiagnosisFactorsInline({ result }: { result: DiagnosisResult }) {
+  if (result.factors.length === 0) {
+    return <div className="mt-3 text-[12px] text-foreground-400">暂无结构化拆解。</div>;
+  }
+  const impactMeta = (impact?: string) => {
+    if (impact === "up_bad" || impact === "down_bad") return "text-red-600";
+    if (impact === "up_good" || impact === "down_good") return "text-accent-600";
+    return "text-foreground-500";
+  };
   return (
-    <div className="rounded-lg border border-background-200/70 bg-background-100/50 p-3">
-      <div className="text-[11px] uppercase tracking-[0.08em] text-foreground-500">{label}</div>
-      <div className="mono-num mt-1 font-heading text-[18px] font-bold text-foreground-900">{qty.toLocaleString()}</div>
+    <div className="mt-3 overflow-x-auto">
+      <table className="w-full text-[12px]">
+        <thead>
+          <tr className="text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground-400">
+            <th className="border-b border-background-200 px-2 py-1.5">归因项</th>
+            <th className="border-b border-background-200 px-2 py-1.5 text-right">上期</th>
+            <th className="border-b border-background-200 px-2 py-1.5 text-right">本期</th>
+            <th className="border-b border-background-200 px-2 py-1.5 text-right">变化</th>
+          </tr>
+        </thead>
+        <tbody>
+          {result.factors.map((f) => {
+            const deltaText =
+              f.delta != null
+                ? `${f.delta > 0 ? "↑" : f.delta < 0 ? "↓" : "→"}${Math.abs(f.delta)}${f.unit ?? ""}`
+                : f.after != null && f.before == null
+                ? `${f.after}`
+                : "—";
+            return (
+              <tr key={f.key} className="align-top">
+                <td className="border-b border-background-200/50 px-2 py-2 font-medium text-foreground-800">
+                  {f.label}
+                  {f.note && <div className="mt-0.5 text-[10px] font-normal text-foreground-400">{f.note}</div>}
+                </td>
+                <td className="mono-num border-b border-background-200/50 px-2 py-2 text-right text-foreground-500">{f.before ?? "—"}</td>
+                <td className="mono-num border-b border-background-200/50 px-2 py-2 text-right text-foreground-900">{f.after ?? "—"}</td>
+                <td className={`mono-num border-b border-background-200/50 px-2 py-2 text-right font-semibold ${impactMeta(f.impact)}`}>{deltaText}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
+  );
+}
+
+/* ────────── 历史变化行 ────────── */
+function HistoryRow({ label, prev, cur, unit, digits, goodDir }: {
+  label: string;
+  prev: number;
+  cur: number;
+  unit: string;
+  digits: number;
+  goodDir: "up" | "down";
+}) {
+  const fmt = (v: number) => (digits === 0 ? Math.round(v).toLocaleString() : v.toFixed(digits));
+  const same = prev === cur;
+  const up = cur > prev;
+  const good = goodDir === "up" ? up : !up;
+  const color = same ? "text-foreground-400" : good ? "text-accent-600" : "text-red-500";
+  const arrow = same ? "→" : up ? "↑" : "↓";
+  return (
+    <tr>
+      <td className="border-b border-background-200/50 px-3 py-2.5 text-[12px] font-medium text-foreground-600">{label}</td>
+      <td className="mono-num border-b border-background-200/50 px-3 py-2.5 text-foreground-700">{fmt(prev)}{unit}</td>
+      <td className="mono-num border-b border-background-200/50 px-3 py-2.5 font-semibold text-foreground-900">{fmt(cur)}{unit}</td>
+      <td className={`mono-num border-b border-background-200/50 px-3 py-2.5 font-semibold ${color}`}>{arrow} {fmt(Math.abs(cur - prev))}{unit}</td>
+    </tr>
   );
 }
 
@@ -1701,6 +2052,14 @@ function CostWaterfall({ label, value, color, isStart, isEnd }: { label: string;
       </div>
     </div>
   );
+}
+
+/** 仅允许 http/https 协议的链接，其他（javascript:/data:/file: 等）一律返回 '#'，防存储型 XSS。 */
+function safeHref(url: string): string {
+  if (!url) return "#";
+  const lower = url.trim().toLowerCase();
+  if (lower.startsWith("http://") || lower.startsWith("https://")) return url;
+  return "#";
 }
 
 /* ────────── 周对比柱状图组件 ────────── */
@@ -1777,12 +2136,14 @@ function EditableField({
   defaultValue,
   step = "1",
   disabled,
+  onCommit,
 }: {
   label: string;
   name: string;
   defaultValue: number;
   step?: string;
   disabled?: boolean;
+  onCommit?: (value: number) => void;
 }) {
   return (
     <label className="flex flex-col gap-1">
@@ -1793,6 +2154,7 @@ function EditableField({
         step={step}
         defaultValue={defaultValue}
         disabled={disabled}
+        onBlur={(e) => { if (onCommit) { const v = Number(e.target.value); onCommit(Number.isFinite(v) ? v : 0); } }}
         className={`w-full rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] text-foreground-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200 ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
       />
     </label>

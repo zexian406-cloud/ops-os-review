@@ -1,8 +1,8 @@
-import { useMemo, useState, useEffect, useCallback, useRef } from "react";
-import { Link } from "react-router-dom";
+import { useMemo, useState, useEffect, useCallback, useRef, type DragEvent } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
 import { db, getAllShops } from "@/domain/db";
-import { computeAll, computeWarehouseTotals } from "@/domain/calculator";
+import { computeAll, computeWarehouseTotals, isCostFullyMissing, isReturnRateMissing } from "@/domain/calculator";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
@@ -22,9 +22,14 @@ const saleStatusLabel: Record<string, string> = {
   discontinued: "停售",
 };
 
+interface SkuGroupChild extends SkuMaster {
+  /** 视图层合成的虚拟 MSKU 子项（来自父记录逗号拼接的 msku），非数据库记录 */
+  isVirtualMsku?: boolean;
+}
+
 interface SkuGroup {
   parent: SkuMaster;
-  children: SkuMaster[];
+  children: SkuGroupChild[];
   totalChildren: number;
 }
 
@@ -49,6 +54,18 @@ function returnRateColorClass(rate: number): string {
   if (rate > 8) return "text-red-600";
   if (rate > 5) return "text-secondary-700";
   return "text-accent-700";
+}
+
+/**
+ * 解析子项（虚拟/真实 MSKU）展示与筛选用的店铺：
+ * 优先取 MSKU 级 mskuStores（导入时按行保留的各 MSKU 店铺），
+ * 缺失则回退父级 store。向后兼容：旧数据无 mskuStores 时一律用父级 store。
+ */
+function resolveChildStore(child: SkuGroupChild): string {
+  if (child.mskuStores && child.msku && child.mskuStores[child.msku]) {
+    return child.mskuStores[child.msku];
+  }
+  return child.store;
 }
 
 /* ────────── 新建 SKU 表单默认值 ────────── */
@@ -108,7 +125,8 @@ function saveMskuOrder(order: Record<string, string[]>) {
 
 export default function SkuList() {
   const { loading, skuMaster, latestSnapshot, latestInventory, promotions, reload } = useOpsData();
-  const [keyword, setKeyword] = useState("");
+  const [searchParams] = useSearchParams();
+  const [keyword, setKeyword] = useState(() => searchParams.get("q") ?? "");
   const [store, setStore] = useState("all");
   const [status, setStatus] = useState("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -331,6 +349,28 @@ export default function SkuList() {
           if (gs) return gs === groupSku;
           return s.sku === groupSku;
         });
+        // 真实子记录（排除父记录自身）
+        const realChildren = children.filter((c) => c.sku !== parent.sku);
+        // 无真实子记录、且父记录 msku 为逗号拼接多值时，
+        // 在「视图层」合成虚拟 MSKU 子项（不写数据库；库存/销量仍以家族 sku 为主键关联）。
+        if (realChildren.length === 0) {
+          const seen = new Set<string>();
+          const tokens = (parent.msku ?? "")
+            .split(",")
+            .map((m) => m.trim())
+            .filter(Boolean)
+            .filter((m) => (seen.has(m) ? false : (seen.add(m), true)));
+          if (tokens.length >= 2) {
+            const virtualChildren: SkuGroupChild[] = tokens.map((m) => ({
+              ...parent,
+              sku: m,
+              msku: m,
+              groupSku: parent.sku,
+              isVirtualMsku: true,
+            }));
+            return { parent, children: virtualChildren, totalChildren: virtualChildren.length };
+          }
+        }
         return { parent, children, totalChildren: children.length };
       })
       .filter((g): g is SkuGroup => g !== null);
@@ -364,7 +404,7 @@ export default function SkuList() {
     dragSkuRef.current = sku;
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent, sku: string) => {
+  const handleDragOver = useCallback((e: DragEvent, sku: string) => {
     e.preventDefault();
     setDragOverSku(sku);
   }, []);
@@ -374,15 +414,20 @@ export default function SkuList() {
     return groups
       .map((group) => {
         const filteredChildren = group.children.filter((child) => {
-          if (store !== "all" && child.store !== storeId) return false;
+          if (store !== "all" && resolveChildStore(child) !== storeId) return false;
           if (status !== "all" && child.saleStatus !== status) return false;
           if (keyword.trim()) {
             const kw = keyword.trim().toLowerCase();
-            return (
+            const childHit =
               child.sku.toLowerCase().includes(kw) ||
               child.name.toLowerCase().includes(kw) ||
               (child.msku ?? "").toLowerCase().includes(kw) ||
-              (child.asin ?? "").toLowerCase().includes(kw)
+              (child.asin ?? "").toLowerCase().includes(kw);
+            if (childHit) return true;
+            // 家族 SKU / 品名命中 → 整组保留（虚拟 MSKU 项也随之可检索）
+            const p = group.parent;
+            return (
+              p.sku.toLowerCase().includes(kw) || p.name.toLowerCase().includes(kw)
             );
           }
           return true;
@@ -400,7 +445,7 @@ export default function SkuList() {
         if (bi >= 0) return 1;
         return 0;
       });
-  }, [groups, store, status, keyword, parentOrder]);
+  }, [groups, store, status, keyword, parentOrder, shopMap]);
 
   const stores = useMemo(() => {
     // Build a map of shopId -> shopName
@@ -409,6 +454,12 @@ export default function SkuList() {
     const rawStores = new Set<string>();
     skuMaster.forEach((s) => {
       if (s.store) rawStores.add(s.store);
+      // 纳入各 MSKU 独立店铺，使其可在筛选下拉中出现
+      if (s.mskuStores) {
+        for (const st of Object.values(s.mskuStores)) {
+          if (st && st !== "-") rawStores.add(st);
+        }
+      }
     });
     // For each raw store value, try to find the shop name, otherwise use the raw value
     const result = new Set<string>();
@@ -436,6 +487,16 @@ export default function SkuList() {
 
   const totalMskus = useMemo(
     () => filteredGroups.reduce((sum, g) => sum + g.children.length, 0),
+    [filteredGroups]
+  );
+
+  // 可单独勾选/删除的真实子记录数（虚拟 MSKU 项不可单独删除，不计入）
+  const totalSelectable = useMemo(
+    () =>
+      filteredGroups.reduce(
+        (sum, g) => sum + g.children.filter((c) => !c.isVirtualMsku).length,
+        0,
+      ),
     [filteredGroups]
   );
 
@@ -536,7 +597,7 @@ export default function SkuList() {
           <button
             type="button"
             onClick={openCreate}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary-500 px-4 py-2.5 text-sm font-semibold text-background-50 hover:bg-primary-600 cursor-pointer whitespace-nowrap transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 rounded-[9px] bg-primary-500 px-4 py-2.5 text-sm font-semibold text-background-50 hover:bg-primary-600 cursor-pointer whitespace-nowrap transition-colors shadow-sm"
           >
             <i className="ri-add-line" aria-hidden />
             新建 SKU
@@ -555,7 +616,11 @@ export default function SkuList() {
                 onClick={() => {
                   setSelectionMode(true);
                   const all = new Set<string>();
-                  filteredGroups.forEach((g) => g.children.forEach((c) => all.add(c.sku)));
+                  filteredGroups.forEach((g) =>
+                    g.children.forEach((c) => {
+                      if (!c.isVirtualMsku) all.add(c.sku);
+                    }),
+                  );
                   setSelectedSkus(all);
                   setExpanded(new Set(filteredGroups.map((g) => g.parent.sku)));
                 }}
@@ -567,13 +632,17 @@ export default function SkuList() {
               <label className="flex items-center gap-1.5 text-[12px] text-foreground-500 cursor-pointer select-none hover:text-foreground-700">
                 <input
                   type="checkbox"
-                  checked={selectedSkus.size > 0 && selectedSkus.size === totalMskus}
+                  checked={selectedSkus.size > 0 && selectedSkus.size === totalSelectable}
                   onChange={() => {
-                    if (selectedSkus.size === totalMskus) {
+                    if (selectedSkus.size === totalSelectable) {
                       setSelectedSkus(new Set());
                     } else {
                       const all = new Set<string>();
-                      filteredGroups.forEach((g) => g.children.forEach((c) => all.add(c.sku)));
+                      filteredGroups.forEach((g) =>
+                        g.children.forEach((c) => {
+                          if (!c.isVirtualMsku) all.add(c.sku);
+                        }),
+                      );
                       setSelectedSkus(all);
                     }
                   }}
@@ -636,7 +705,7 @@ export default function SkuList() {
                 <button
                   type="button"
                   onClick={handleBatchDelete}
-                  className="rounded-md bg-red-500 px-3 py-1 text-[12px] font-semibold text-white hover:bg-red-600 cursor-pointer transition-colors"
+                  className="rounded-[9px] bg-red-500 px-3 py-1 text-[12px] font-semibold text-white hover:bg-red-600 cursor-pointer transition-colors"
                 >
                   批量删除
                 </button>
@@ -672,16 +741,16 @@ export default function SkuList() {
                 promotions={promotions}
                 onDeleteGroup={(sku, name) => setDeleteConfirm({ open: true, type: "group", sku, name })}
                 onDeleteMsku={(sku, name, parentSku) => setDeleteConfirm({ open: true, type: "msku", sku, name, parentSku })}
-                onMoveGroupUp={moveGroup}
-                onMoveGroupDown={moveGroup}
+                onMoveGroupUp={(sku) => moveGroup(sku, "up")}
+                onMoveGroupDown={(sku) => moveGroup(sku, "down")}
                 mskuOrder={mskuOrder[group.parent.sku] || []}
                 onMoveChild={moveChild}
                 getShopName={getShopName}
                 selectedSkus={selectedSkus}
                 onToggleSelect={toggleSelect}
-                onSelectAll={() => selectAllInGroup(group.parent.sku, group.children.map((c) => c.sku))}
-                onDeselectAll={() => deselectAllInGroup(group.children.map((c) => c.sku))}
-                allSelected={allSelectedInGroup(group.children.map((c) => c.sku))}
+                onSelectAll={() => selectAllInGroup(group.parent.sku, group.children.filter((c) => !c.isVirtualMsku).map((c) => c.sku))}
+                onDeselectAll={() => deselectAllInGroup(group.children.filter((c) => !c.isVirtualMsku).map((c) => c.sku))}
+                allSelected={allSelectedInGroup(group.children.filter((c) => !c.isVirtualMsku).map((c) => c.sku))}
               />
             ))}
           </div>
@@ -911,7 +980,7 @@ export default function SkuList() {
                       <button
                         type="button"
                         onClick={() => updateCreateField({ [k]: "todo" } as any)}
-                        className={["rounded-md px-3 py-1.5 text-xs font-semibold cursor-pointer transition-colors", (createForm as any)[k] === "todo" ? "bg-warn-500 text-background-50" : "bg-background-100 text-foreground-500"].join(" ")}
+                        className={["rounded-md px-3 py-1.5 text-xs font-semibold cursor-pointer transition-colors", (createForm as any)[k] === "todo" ? "bg-secondary-100 text-secondary-800" : "bg-background-100 text-foreground-500"].join(" ")}
                       >
                         <i className="ri-time-line mr-1" aria-hidden />未完成
                       </button>
@@ -946,7 +1015,7 @@ export default function SkuList() {
                   取消
                 </button>
                 <button type="button" onClick={handleCreate} disabled={createSaving}
-                  className="rounded-lg bg-primary-500 px-5 py-2 text-sm font-semibold text-background-50 hover:bg-primary-600 disabled:opacity-60 cursor-pointer whitespace-nowrap transition-colors shadow-sm">
+                  className="rounded-[9px] bg-primary-500 px-5 py-2 text-sm font-semibold text-background-50 hover:bg-primary-600 disabled:opacity-60 cursor-pointer whitespace-nowrap transition-colors shadow-sm">
                   <i className={createSaving ? "ri-loader-4-line animate-spin" : "ri-add-circle-line"} aria-hidden />
                   {createSaving ? "创建中..." : "创建 SKU"}
                 </button>
@@ -991,7 +1060,7 @@ export default function SkuList() {
               <button
                 type="button"
                 onClick={handleDeleteConfirm}
-                className="flex-1 rounded-lg bg-red-500 py-2 text-[13px] font-semibold text-white hover:bg-red-600 cursor-pointer whitespace-nowrap"
+                className="flex-1 rounded-[9px] bg-red-500 py-2 text-[13px] font-semibold text-white hover:bg-red-600 cursor-pointer whitespace-nowrap"
               >
                 确认删除
               </button>
@@ -1065,38 +1134,50 @@ function SkuGroupCard({
     return sorted;
   }, [rawChildren, mskuOrder]);
 
-  // Total stock: use 4-region warehouse totals for all children
-  const totalStock = children.reduce((sum, c) => {
-    const inv = latestInventory.get(c.sku);
-    const wh = computeWarehouseTotals(inv);
-    return sum + wh.total;
-  }, 0);
+  // 虚拟MSKU项（来自父记录逗号拼接 msku）没有独立库存/快照，
+  // 一律回退到家族(父)记录；合计时只计一次，避免重复累加。
+  const isVirtualGroup =
+    children.length > 0 && children.every((c) => c.isVirtualMsku);
+  const resolveInv = (c: SkuGroupChild): InventoryLayer | undefined =>
+    c.isVirtualMsku ? latestInventory.get(parent.sku) : latestInventory.get(c.sku);
+  const resolveSnap = (c: SkuGroupChild): DailySnapshot | undefined =>
+    c.isVirtualMsku ? latestSnapshot.get(parent.sku) : latestSnapshot.get(c.sku);
 
-  // Monthly sales: for multi-link SKUs, show the main (first) link's monthly sales, not the sum
-  // Summing can overflow if child data has inconsistencies
-  const mainChild = children[0];
-  const totalMonthlySales = isMultiChild
-    ? (latestSnapshot.get(mainChild.sku)?.monthlySales ?? 0)
+  // Total stock: use 4-region warehouse totals
+  const totalStock = isVirtualGroup
+    ? computeWarehouseTotals(latestInventory.get(parent.sku)).total
     : children.reduce((sum, c) => {
-        const snap = latestSnapshot.get(c.sku);
-        return sum + (snap?.monthlySales ?? 0);
+        const wh = computeWarehouseTotals(resolveInv(c));
+        return sum + wh.total;
       }, 0);
 
-  const totalDailySales7d = children.reduce((sum, c) => {
-    const snap = latestSnapshot.get(c.sku);
-    return sum + (snap?.dailySales7d ?? 0);
-  }, 0);
+  // Monthly sales: for multi-link groups, show the main (first) link's monthly sales, not the sum
+  const mainChild = children[0];
+  const totalMonthlySales = isVirtualGroup
+    ? (resolveSnap(mainChild)?.monthlySales ?? 0)
+    : isMultiChild
+      ? (latestSnapshot.get(mainChild.sku)?.monthlySales ?? 0)
+      : children.reduce((sum, c) => sum + (resolveSnap(c)?.monthlySales ?? 0), 0);
 
-  const ratings = children
-    .map((c) => latestSnapshot.get(c.sku)?.rating ?? 0)
-    .filter((r) => r > 0);
+  const totalDailySales7d = isVirtualGroup
+    ? (resolveSnap(mainChild)?.dailySales7d ?? 0)
+    : children.reduce((sum, c) => sum + (resolveSnap(c)?.dailySales7d ?? 0), 0);
+
+  const ratings = isVirtualGroup
+    ? (() => {
+        const r = latestSnapshot.get(parent.sku)?.rating ?? 0;
+        return r > 0 ? [r] : [];
+      })()
+    : children
+        .map((c) => resolveSnap(c)?.rating ?? 0)
+        .filter((r) => r > 0);
   const avgRating =
     ratings.length > 0
       ? ratings.reduce((a, b) => a + b, 0) / ratings.length
       : 0;
 
   return (
-    <div className="rounded-xl border border-background-200/70 overflow-hidden">
+    <div className="rounded-[14px] border border-background-200/70 overflow-hidden">
       <div
         className={`flex items-center justify-between px-4 py-3 ${
           isMultiChild
@@ -1118,6 +1199,7 @@ function SkuGroupCard({
             <button
               type="button"
               onClick={onToggle}
+              aria-label={expanded ? "收起产品组" : "展开产品组"}
               className="flex h-6 w-6 items-center justify-center rounded hover:bg-background-200 cursor-pointer shrink-0"
             >
               <i
@@ -1265,9 +1347,11 @@ function SkuGroupCard({
                   <ChildRow
                     key={child.sku}
                     child={child}
+                    parentSku={parent.sku}
                     selectionMode={selectionMode}
-                    snap={latestSnapshot.get(child.sku)}
-                    inv={latestInventory.get(child.sku)}
+                    snap={resolveSnap(child)}
+                    inv={resolveInv(child)}
+                    isVirtualMsku={child.isVirtualMsku}
                     promotions={promotions}
                     onDelete={(sku, name, parentSku) => onDeleteMsku?.(sku, name, parentSku)}
                     isFirst={idx === 0}
@@ -1293,6 +1377,7 @@ function SkuGroupCard({
 
 function ChildRow({
   child,
+  parentSku,
   snap,
   inv,
   promotions,
@@ -1306,8 +1391,10 @@ function ChildRow({
   selected,
   onToggleSelect,
   selectionMode,
+  isVirtualMsku,
 }: {
-  child: SkuMaster;
+  child: SkuGroupChild;
+  parentSku?: string;
   snap: DailySnapshot | undefined;
   inv: InventoryLayer | undefined;
   promotions: Promotion[];
@@ -1321,8 +1408,31 @@ function ChildRow({
   selected: boolean;
   onToggleSelect: () => void;
   selectionMode: boolean;
+  isVirtualMsku?: boolean;
 }) {
-  const { profit, margin, adRatio, returnRate, refundRate } = computeMskuProfit(child, snap, inv);
+  // FIX: 虚拟 MSKU 子项优先使用 mskuMetrics 中的独立指标
+  //      （修复"展开列表显示相同数据"——各 MSKU 的退款率/退货率/广告费比/星级差异化展示）
+  const mskuMetric = child.isVirtualMsku && child.msku ? child.mskuMetrics?.[child.msku] : undefined;
+  const mskuSnap: DailySnapshot | undefined = mskuMetric && snap ? {
+    ...snap,
+    rating: mskuMetric.rating ?? snap.rating,
+    reviewCount: mskuMetric.reviewCount ?? snap.reviewCount,
+    adRatio: mskuMetric.adRatio ?? snap.adRatio,
+    returnRate: mskuMetric.returnRate ?? snap.returnRate,
+    refundRate: mskuMetric.refundRate ?? snap.refundRate,
+    dailySales7d: mskuMetric.sales7d ?? snap.dailySales7d,
+    dailySales30d: mskuMetric.sales30d ?? snap.dailySales30d,
+    monthlySales: mskuMetric.sales30d ?? snap.monthlySales,
+  } : snap;
+  const { profit, margin, adRatio, returnRate, refundRate } = computeMskuProfit(child, mskuSnap, inv);
+  // 成本全缺失 → 利润率失真（算成 100%），应标注「成本缺失」而非 0
+  const costMissing = isCostFullyMissing(child);
+  // 退货率/退款率底层数据缺失 → 标注「缺失」而非误导性的 0%
+  const rateMissing = isReturnRateMissing({
+    fulfillment: child.fulfillment,
+    costMissing,
+    refundRate: mskuSnap?.refundRate,
+  });
   const childPromos = promotions.filter((p) => p.sku === child.sku);
   const activeOrUpcoming = childPromos.find(
     (p) => p.status === "active" || p.status === "upcoming"
@@ -1332,12 +1442,21 @@ function ChildRow({
     <tr className={`hover:bg-background-100/50 ${selected ? 'bg-primary-50/50' : ''}`}>
       {selectionMode && (
         <td className="px-2 py-2 border-b border-background-200/40 w-8">
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={onToggleSelect}
-            className="h-3.5 w-3.5 rounded border-background-300 cursor-pointer accent-primary-500"
-          />
+          {isVirtualMsku ? (
+            <input
+              type="checkbox"
+              disabled
+              title="虚拟MSKU（视图展开）不可单独勾选"
+              className="h-3.5 w-3.5 rounded border-background-300 cursor-not-allowed opacity-40"
+            />
+          ) : (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={onToggleSelect}
+              className="h-3.5 w-3.5 rounded border-background-300 cursor-pointer accent-primary-500"
+            />
+          )}
         </td>
       )}
       <td className="px-3 py-2 border-b border-background-200/40">
@@ -1355,7 +1474,7 @@ function ChildRow({
       </td>
       <td className="px-3 py-2 border-b border-background-200/40">
         <div className="flex items-center gap-1">
-          {canMove && (
+          {canMove && !isVirtualMsku && (
             <div className="flex flex-col -space-y-px mr-0.5 shrink-0">
               <button
                 type="button"
@@ -1381,21 +1500,30 @@ function ChildRow({
               </button>
             </div>
           )}
-          <Link
-            to={`/sku/${encodeURIComponent(child.sku)}`}
-            className="font-medium text-foreground-900 hover:text-primary-700 cursor-pointer whitespace-nowrap"
-          >
-            {child.msku || child.sku}
-          </Link>
+          {isVirtualMsku ? (
+            <Link
+              to={`/sku/${encodeURIComponent(parentSku ?? child.groupSku ?? child.sku)}?focus=${encodeURIComponent(child.msku || child.sku)}`}
+              className="font-medium text-foreground-900 hover:text-primary-700 cursor-pointer whitespace-nowrap"
+            >
+              {child.msku || child.sku}
+            </Link>
+          ) : (
+            <Link
+              to={`/sku/${encodeURIComponent(child.sku)}`}
+              className="font-medium text-foreground-900 hover:text-primary-700 cursor-pointer whitespace-nowrap"
+            >
+              {child.msku || child.sku}
+            </Link>
+          )}
         </div>
       </td>
       <td className="px-3 py-2 border-b border-background-200/40 text-foreground-600 whitespace-nowrap">
-        {getShopName(child.store)}
+        {getShopName(resolveChildStore(child))}
       </td>
       <td className="px-3 py-2 border-b border-background-200/40 text-right whitespace-nowrap">
-        {snap && snap.rating > 0 ? (
+        {mskuSnap && mskuSnap.rating > 0 ? (
           <span className="flex items-center justify-end gap-1">
-            <span className="mono-num font-medium">{snap.rating.toFixed(1)}</span>
+            <span className="mono-num font-medium">{mskuSnap.rating.toFixed(1)}</span>
             <i
               className="ri-star-fill text-[10px] text-accent-500"
               aria-hidden
@@ -1420,11 +1548,15 @@ function ChildRow({
         </span>
       </td>
       <td className="px-3 py-2 border-b border-background-200/40 text-right whitespace-nowrap">
-        <span
-          className={`mono-num font-medium ${marginColorClass(margin)}`}
-        >
-          {margin.toFixed(1)}%
-        </span>
+        {costMissing ? (
+          <span className="rounded-full bg-secondary-100 px-2 py-0.5 text-[11px] font-medium text-secondary-700">成本缺失</span>
+        ) : (
+          <span
+            className={`mono-num font-medium ${marginColorClass(margin)}`}
+          >
+            {margin.toFixed(1)}%
+          </span>
+        )}
       </td>
       <td className="px-3 py-2 border-b border-background-200/40 text-center whitespace-nowrap">
         {activeOrUpcoming ? (
@@ -1452,19 +1584,21 @@ function ChildRow({
       </td>
       <td className="px-3 py-2 border-b border-background-200/40 text-right whitespace-nowrap">
         {snap ? (
-          <span
-            className={`mono-num font-medium ${returnRateColorClass(
-              child.fulfillment === "FBM" ? refundRate : returnRate
-            )}`}
-          >
-            {(child.fulfillment === "FBM" ? refundRate : returnRate).toFixed(1)}%
-          </span>
+          rateMissing ? (
+            <span className="rounded-full bg-secondary-100 px-2 py-0.5 text-[11px] font-medium text-secondary-700">缺失</span>
+          ) : (
+            <span
+              className={`mono-num font-medium ${returnRateColorClass(refundRate)}`}
+            >
+              {refundRate.toFixed(1)}%
+            </span>
+          )
         ) : (
           <span className="text-foreground-400">-</span>
         )}
       </td>
       <td className="px-3 py-2 border-b border-background-200/40 text-center whitespace-nowrap">
-        {onDelete && (
+        {!isVirtualMsku && onDelete && (
           <button
             type="button"
             onClick={() => onDelete(child.sku, child.msku || child.sku, child.groupSku)}
