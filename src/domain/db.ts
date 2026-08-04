@@ -602,3 +602,17 @@ export async function reapplyWarehouseMappings(): Promise<number> {
   }
   return updated;
 }
+
+/**
+ * 按店铺名查找已有店铺，不存在则自动创建，返回 shopId。
+ * 用于导入时自动匹配/创建店铺，与 addShop 逻辑一致。
+ */
+export async function getOrCreateShopByName(name: string): Promise<string> {
+  const trimmed = name.trim();
+  if (!trimmed) return "-";
+  const all = await db.shops.toArray();
+  const existing = all.find(s => s.name === trimmed);
+  if (existing) return existing.id;
+  const shop = await addShop(trimmed);
+  return shop.id;
+}
