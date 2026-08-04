@@ -51,7 +51,8 @@ export const DEFAULT_SECTIONS: Record<PageId, string[]> = {
   settings: [],
   import: [],
   promoCenter: [
-    "summaryCards", "addForm", "promoList", "manualCost", "timeline",
+    "summaryCards", "activityTab", "costTab", "timelineTab",
+    "activityForm", "activityList", "costKpi", "costForm", "costList",
   ],
 };
 
@@ -119,10 +120,14 @@ export const SECTION_LABELS: Record<string, Record<string, string>> = {
   },
   promoCenter: {
     summaryCards: "汇总统计",
-    addForm: "新增促销",
-    promoList: "促销列表",
-    manualCost: "手动成本",
-    timeline: "促销时间线",
+    activityTab: "活动管理",
+    costTab: "促销成本",
+    timelineTab: "促销时间线",
+    activityForm: "新增活动",
+    activityList: "活动列表",
+    costKpi: "成本KPI",
+    costForm: "成本录入",
+    costList: "成本列表",
   },
 };
 
