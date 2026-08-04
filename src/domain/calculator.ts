@@ -570,7 +570,9 @@ export function computeAll(params: {
 
 /** 获取指定日期所在周的周一 */
 export function getWeekStart(dateStr: string): string {
+  if (!dateStr) dateStr = new Date().toISOString().slice(0, 10);
   const d = new Date(dateStr + "T00:00:00");
+  if (isNaN(d.getTime())) return new Date().toISOString().slice(0, 10);
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   const mon = new Date(d);
@@ -685,7 +687,7 @@ export function aggregateWeeklyCosts(
   manualPromotions: ManualPromotion[],
   skuMasterMap: Map<string, SkuMaster>,
   snapMap: Map<string, DailySnapshot>,
-  today: string,
+  today: string = new Date().toISOString().slice(0, 10),
   weeksBack: number = 8,
 ): WeeklyCostBucket[] {
   const buckets: WeeklyCostBucket[] = [];
