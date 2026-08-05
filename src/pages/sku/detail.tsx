@@ -436,13 +436,18 @@ export default function SkuDetail() {
           <h1 className="mt-1 font-heading text-[28px] font-bold leading-tight text-foreground-950">{sku.name}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[12px]">
             <span className="mono-num rounded-[10px] bg-background-100 px-2.5 py-0.5 text-foreground-700">{sku.sku}</span>
-            {sku.msku && sku.msku !== sku.sku && sku.msku.split(/[,\s，、·]+/).map((m) => m.trim()).filter(Boolean).map((m) => (
-              <span key={m} id={`msku-${m}`}
-                className={`mono-num rounded-[10px] px-2.5 py-0.5 text-foreground-500 ${focusMsku && m === focusMsku ? "bg-primary-50 ring-2 ring-primary-400" : "bg-background-100"}`}>
-                MSKU: {m}
-                <span className="ml-1 text-[10px] text-foreground-400">{mskuStoreOf(sku, m)}</span>
-              </span>
-            ))}
+            {sku.msku && sku.msku !== sku.sku && (() => {
+              const allMs = sku.msku.split(/[,\s，、·]+/).map((m) => m.trim()).filter(Boolean);
+              // 当 focus=MSKU 时，仅展示焦点 MSKU，避免一长串无关 MSKU 干扰
+              const list = focusMsku ? allMs.filter((m) => m === focusMsku) : allMs;
+              return list.map((m) => (
+                <span key={m} id={`msku-${m}`}
+                  className={`mono-num rounded-[10px] px-2.5 py-0.5 text-foreground-500 ${focusMsku && m === focusMsku ? "bg-primary-50 ring-2 ring-primary-400" : "bg-background-100"}`}>
+                  MSKU: {m}
+                  <span className="ml-1 text-[10px] text-foreground-400">{mskuStoreOf(sku, m)}</span>
+                </span>
+              ));
+            })()}
             {sku.asin && <span className="mono-num text-foreground-500">{sku.asin}</span>}
             {sku.marketplace && <Badge tone="secondary">{sku.marketplace}</Badge>}
             <Badge tone="primary">{sku.store}</Badge>
@@ -1396,13 +1401,17 @@ export default function SkuDetail() {
                 <InfoRow label="品名" value={sku.name} />
                 <InfoRow label="MSKU" value={
                   sku.msku
-                    ? sku.msku.split(/[,\s，、·]+/).map((m) => m.trim()).filter(Boolean).map((m) => (
-                        <span key={m}
-                          className={`mono-num mr-1 inline-block rounded-[8px] px-2 py-0.5 text-[12px] text-foreground-600 ${focusMsku && m === focusMsku ? "bg-primary-50 ring-2 ring-primary-400" : "bg-background-100"}`}>
-                          {m}
-                          <span className="ml-1 text-[10px] text-foreground-400">{mskuStoreOf(sku, m)}</span>
-                        </span>
-                      ))
+                    ? (() => {
+                        const allMs = sku.msku.split(/[,\s，、·]+/).map((m) => m.trim()).filter(Boolean);
+                        const list = focusMsku ? allMs.filter((m) => m === focusMsku) : allMs;
+                        return list.map((m) => (
+                          <span key={m}
+                            className={`mono-num mr-1 inline-block rounded-[8px] px-2 py-0.5 text-[12px] text-foreground-600 ${focusMsku && m === focusMsku ? "bg-primary-50 ring-2 ring-primary-400" : "bg-background-100"}`}>
+                            {m}
+                            <span className="ml-1 text-[10px] text-foreground-400">{mskuStoreOf(sku, m)}</span>
+                          </span>
+                        ));
+                      })()
                     : "-"
                 } />
                 <InfoRow label="ASIN" value={sku.asin ?? "-"} />

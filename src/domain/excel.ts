@@ -232,6 +232,8 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
     const mskuToSku = new Map<string, string>();
     // FIX: 构建 ASIN → 子记录 sku 映射（MSKU 为空时按 ASIN 关联独立指标）
     const asinToChildSku = new Map<string, string>();
+    // FIX: 构建 SKU|店铺 → MSKU 映射（MSKU为空时用店铺匹配，这是最可靠的匹配方式）
+    const skuShopToMsku = new Map<string, string>();
     for (const s of skuMaster) {
       if (s.msku) {
         for (const m of s.msku.split(",")) {
@@ -242,6 +244,15 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       // 子记录（有 groupSku 或 sku 与父级不同）的 ASIN 映射
       if (s.asin) {
         asinToChildSku.set(s.asin, s.sku);
+      }
+      // FIX: 从 mskuStores 构建 SKU+店铺→MSKU 映射
+      // mskuStores 格式: { mskuName: shopName }
+      if (s.mskuStores) {
+        for (const [mskuName, shopName] of Object.entries(s.mskuStores)) {
+          if (shopName) {
+            skuShopToMsku.set(`${s.sku}|${shopName}`, mskuName);
+          }
+        }
       }
     }
     // FIX: 按 sku 聚合多 MSKU 行的指标（家族级快照仍取平均，保证向后兼容），
@@ -313,17 +324,29 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       agg.returnRate.push(returnRate);
       agg.refundRate.push(refundRate);
       // FIX: 按 MSKU 行保留独立指标（不取平均）——这是修复"展开列表显示相同数据"的关键
-      // 当 MSKU 为空时，尝试用 ASIN 查找子记录 SKU 作为键
-      let mskuKey = msku;
-      if (!mskuKey) {
-        const asinVal = str(pickCell(row, c.asin));
-        if (asinVal && asinToChildSku.has(asinVal)) {
-          mskuKey = asinToChildSku.get(asinVal)!;
+      // MSKU 列可能是逗号分隔多值（如 "BFRS258,BFRS258-GM"），需拆分后分别记录
+      // 当 MSKU 为空时，按优先级查找：SKU+店铺 → ASIN → 不记录
+      let mskuTokens: string[] = [];
+      if (msku) {
+        mskuTokens = msku.split(/[,\s，、·]+/).map((t) => t.trim()).filter(Boolean);
+      } else {
+        // 优先用 SKU+店铺 匹配（最可靠，因为每个MSKU对应唯一店铺）
+        const storeVal = str(pickCell(row, c.store));
+        if (storeVal && skuShopToMsku.has(`${sku}|${storeVal}`)) {
+          mskuTokens = [skuShopToMsku.get(`${sku}|${storeVal}`)!];
+        } else {
+          // 次选用 ASIN 查找子记录 SKU（适用于子记录有独立ASIN的情况）
+          const asinVal = str(pickCell(row, c.asin));
+          if (asinVal && asinToChildSku.has(asinVal)) {
+            mskuTokens = [asinToChildSku.get(asinVal)!];
+          }
         }
       }
-      if (mskuKey && mskuKey !== sku) {
-        if (!mskuMetricsAgg.has(sku)) mskuMetricsAgg.set(sku, {});
-        mskuMetricsAgg.get(sku)![mskuKey] = {
+      if (!mskuMetricsAgg.has(sku)) mskuMetricsAgg.set(sku, {});
+      const skuMetricsMap = mskuMetricsAgg.get(sku)!;
+      for (const mskuKey of mskuTokens) {
+        if (!mskuKey || mskuKey === sku) continue;
+        skuMetricsMap[mskuKey] = {
           rating: rating > 0 ? Math.round(rating * 10) / 10 : undefined,
           reviewCount: reviewCount > 0 ? Math.round(reviewCount) : undefined,
           adRatio: adRatio > 0 ? Math.round(adRatio * 100) / 100 : undefined,
