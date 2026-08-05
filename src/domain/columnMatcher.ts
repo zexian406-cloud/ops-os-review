@@ -19,7 +19,7 @@
 /** 逻辑字段 → 常见列名别名（含领星 / Amazon 后台常见写法） */
 export const SYNONYMS: Record<string, string[]> = {
   // ── 关键标识 ──
-  sku: ["SKU", "sku", "SKU码", "产品SKU", "父SKU"],
+  sku: ["SKU", "sku", "SKU码", "产品SKU", "父SKU", "asin", "ASIN", "Asin"],
   msku: ["MSKU", "msku", "子SKU", "变体SKU", "MSKU码", "产品MSKU", "卖家SKU", "Seller SKU", "seller-sku"],
   asin: ["asin", "ASIN", "Asin", "父体ASIN", "父ASIN"],
   name: ["品名", "商品名称", "产品名称", "name", "标题", "商品标题"],
@@ -35,8 +35,11 @@ export const SYNONYMS: Record<string, string[]> = {
   price: ["售价", "售价（总价）", "售价总价", "单价", "价格"],
   costStorage: ["仓租", "仓储费", "仓储成本", "仓库租金", "costStorage", "仓租费"],
   // 头程费：覆盖 "头程成本"（不会误归到 fob，因为 fob 的 "成本" 是整词精确）
-  shipping: ["头程费", "头程", "头程成本", "costShipping", "头程运费", "头程费用"],
+  // 注意：移除 "头程运费" 避免与收入侧 "运费"(shippingFee) 模糊匹配冲突
+  shipping: ["头程费", "头程", "头程成本", "costShipping", "头程费用"],
   delivery: ["配送费", "costDelivery", "配送", "delivery", "尾程费", "尾程配送费"],
+  // 收入侧运费（买家支付的运费），与成本侧头程/尾程区分；"运费" 走整词匹配
+  shippingFee: ["运费", "shippingFee", "shipping fee", "运费收入"],
 
   // ── 销量（7 天 / 30 天分开，避免日均与周期总量混淆）──
   sales7d: ["7天销量", "近7天销量", "近七天销量", "周销量", "日销量", "日销（近七天）", "近7天日均", "dailySales7d"],
@@ -103,6 +106,8 @@ const EXACT_ONLY = new Set<string>([
   "成本",
   // price：兜底 "价格" 仅整词命中，避免 "出厂价格" 被归到售价
   "价格",
+  // shippingFee：兜底 "运费" 仅整词命中，避免 "头程运费" 被归到收入侧运费
+  "运费",
   // fbaStock：兜底 "库存" 仅整词命中（仓库明细的库存是另一含义）
   "库存",
   // qty：兜底 "数量" 仅整词命中，避免 "下单总量" 被归到件数

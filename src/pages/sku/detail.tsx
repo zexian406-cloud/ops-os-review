@@ -986,8 +986,13 @@ export default function SkuDetail() {
               <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary-100 text-[14px] text-primary-700">
                 <i className="ri-price-tag-3-line" aria-hidden />
               </div>
-              <span className="text-[13px] font-semibold text-foreground-900">正常售价</span>
-              <span className="ml-auto mono-num text-[13px] font-bold text-foreground-950">${sku.price.toFixed(2)}</span>
+              <span className="text-[13px] font-semibold text-foreground-900">销售总价</span>
+              <span className="ml-auto flex flex-col items-end leading-tight">
+                <span className="mono-num text-[13px] font-bold text-foreground-950">${(sku.listPrice ?? sku.price).toFixed(2)}</span>
+                {sku.listPrice != null && sku.listPrice > sku.price && (
+                  <span className="mono-num text-[10px] text-foreground-400">${sku.price.toFixed(2)} + ${(sku.listPrice - sku.price).toFixed(2)}</span>
+                )}
+              </span>
             </div>
             <div className="space-y-1 text-[13px]">
               <ProfitRow label="售价" value={`$${sku.price.toFixed(2)}`} highlight />
@@ -1372,7 +1377,7 @@ export default function SkuDetail() {
                     <input type="date" className={inputCls} value={editSku.launchDate ?? ""} onChange={(e) => updateEditSku({ launchDate: e.target.value })} />
                   </div>
                   <div>
-                    <label className={labelCls}>List Price</label>
+                    <label className={labelCls}>销售总价</label>
                     <input type="number" step="0.01" className={inputCls} value={editSku.listPrice ?? ""} onChange={(e) => updateEditSku({ listPrice: Number(e.target.value) })} />
                   </div>
                   <div>
@@ -1412,7 +1417,7 @@ export default function SkuDetail() {
                 <InfoRow label="生命周期" value={sku.lifecycle ? lifecycleLabel[sku.lifecycle] : "-"} />
                 <InfoRow label="品类" value={sku.category ?? "-"} />
                 <InfoRow label="上架日期" value={sku.launchDate ?? "-"} />
-                <InfoRow label="List Price" value={sku.listPrice != null ? `$${sku.listPrice.toFixed(2)}` : "-"} />
+                <InfoRow label="销售总价" value={sku.listPrice != null ? `$${sku.listPrice.toFixed(2)}` : "-"} />
                 <InfoRow label="优惠券" value={sku.coupon != null ? `$${sku.coupon.toFixed(2)}` : "-"} />
               </div>
             )}

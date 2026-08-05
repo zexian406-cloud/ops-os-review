@@ -77,19 +77,19 @@ const downloadTemplate = (name: string, headers: string[], exampleRow: (string |
 
 /* ────────── 略 ────────── */
 
-const tmplSales = () => downloadTemplate("周销量导入", ["ASIN", "SKU", "品名", "MSKU", "店铺", "7天销量", "30天销量", "评分", "评论数", "广告费比", "退货率", "退款率", "产品链接", "竞品链接"], ["B0GC3HFWHP", "BFRS258", "BF卡式炉", "BFRS258-GM", "BIFULISAN Store", 24, 102, 4.2, 156, 12.5, 3.2, 5.1, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX\nhttps://www.amazon.com/dp/B0YYYYYYYY"]);
+const tmplSales = () => downloadTemplate("周销量导入", ["ASIN", "SKU", "品名", "MSKU", "店铺", "7天销量", "30天销量", "评分", "评论数", "广告费比", "退货率", "退款率"], ["B0GC3HFWHP", "BFRS258", "BF卡式炉", "BFRS258-GM", "BIFULISAN Store", 24, 102, 4.2, 156, 12.5, 3.2, 5.1]);
 const tmplFba = () => downloadTemplate("FBA库存明细", ["ASIN", "SKU", "FBA库存"], ["B0GC3HFWHP", "BFRS258", 186]);
 const tmplWarehouse = () => downloadTemplate("仓库明细(FBM)", ["SKU", "仓库", "库存"], ["BFRS258", "美西", 180]);
 const tmplTransitDetail = () => downloadTemplate("在途明细", ["SKU", "承运商", "目的仓", "件数", "预计到仓"], ["BFRS258", "乐歌", "美西", 80, "2026-08-05"]);
 const tmplFactory = () => downloadTemplate("工厂明细", ["SKU", "工厂名", "件数", "交期", "状态"], ["BFRS258", "东莞美联", 120, "2026-08-25", "producing"]);
-const tmplShipping = () => downloadTemplate("头程更新", ["SKU", "MSKU", "头程费", "配送费"], ["BFRS258", "BFRS258-GM", 12.3, 4.56]);
+const tmplShipping = () => downloadTemplate("头程尾程更新", ["SKU", "头程费", "配送费"], ["BFRS258", 12.3, 4.56]);
 
 const tmplBundle = () => {
   const wb = XLSX.utils.book_new();
 
-  // Sheet 1: 销量导入（合并原运营数据导入字段：品名/产品链接/竞品链接 + MSKU级指标）
-  const s1Headers = ["ASIN", "SKU", "品名", "MSKU", "店铺", "7天销量", "30天销量", "评分", "评论数", "广告费比", "退货率", "退款率", "产品链接", "竞品链接"];
-  const s1 = XLSX.utils.aoa_to_sheet([s1Headers, ["B0GC3HFWHP", "BFRS258", "BF卡式炉", "BFRS258-GM", "BIFULISAN Store", 24, 102, 4.2, 156, 12.5, 3.2, 5.1, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX\nhttps://www.amazon.com/dp/B0YYYYYYYY"]]);
+  // Sheet 1: 销量导入（合并原运营数据导入字段：品名 + MSKU级指标）
+  const s1Headers = ["ASIN", "SKU", "品名", "MSKU", "店铺", "7天销量", "30天销量", "评分", "评论数", "广告费比", "退货率", "退款率"];
+  const s1 = XLSX.utils.aoa_to_sheet([s1Headers, ["B0GC3HFWHP", "BFRS258", "BF卡式炉", "BFRS258-GM", "BIFULISAN Store", 24, 102, 4.2, 156, 12.5, 3.2, 5.1]]);
   s1["!cols"] = autoCols(s1Headers);
   XLSX.utils.book_append_sheet(wb, s1, "销量导入");
 
@@ -113,15 +113,15 @@ const tmplBundle = () => {
   s6["!cols"] = autoCols(["SKU", "工厂名", "件数", "交期", "状态"]);
   XLSX.utils.book_append_sheet(wb, s6, "工厂明细");
 
-  // Sheet 6: 头程更新
-  const s7 = XLSX.utils.aoa_to_sheet([["SKU", "MSKU", "头程费", "配送费"], ["BFRS258", "BFRS258-GM", 12.3, 4.56]]);
-  s7["!cols"] = autoCols(["SKU", "MSKU", "头程费", "配送费"]);
-  XLSX.utils.book_append_sheet(wb, s7, "头程更新");
+  // Sheet 6: 头程尾程更新
+  const s7 = XLSX.utils.aoa_to_sheet([["SKU", "头程费", "配送费"], ["BFRS258", 12.3, 4.56]]);
+  s7["!cols"] = autoCols(["SKU", "头程费", "配送费"]);
+  XLSX.utils.book_append_sheet(wb, s7, "头程尾程更新");
 
   // Sheet 7: SKU标识符(一次性迁移)（含产品链接 + 竞品链接）
-  const s8Headers = ["店铺", "SKU", "品名", "MSKU", "ASIN", "UPC", "品类", "上架日期", "售价（总价）", "FOB", "仓租", "发货方式", "包裹长cm", "包裹宽cm", "包裹高cm", "包裹重kg", "单箱数", "产品链接", "竞品链接"];
-  const s8 = XLSX.utils.aoa_to_sheet([s8Headers, ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", "4901234567890", "户外炉具", "2026-01-15", 39.99, 28.5, 0.8, "FBA", 30, 25, 20, 1.2, 10, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX\nhttps://www.amazon.com/dp/B0YYYYYYYY"]]);
-  s8["!dataValidations"] = [{ type: "list", formula1: '"FBA,FBM,混发"', sqref: "L2:L101" }];
+  const s8Headers = ["店铺", "SKU", "品名", "MSKU", "ASIN", "UPC", "品类", "上架日期", "售价", "运费", "FOB", "仓租", "发货方式", "包裹长cm", "包裹宽cm", "包裹高cm", "包裹重kg", "单箱数", "产品链接", "竞品链接"];
+  const s8 = XLSX.utils.aoa_to_sheet([s8Headers, ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", "4901234567890", "户外炉具", "2026-01-15", 39.99, 0, 28.5, 0.8, "FBA", 30, 25, 20, 1.2, 10, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX\nhttps://www.amazon.com/dp/B0YYYYYYYY"]]);
+  s8["!dataValidations"] = [{ type: "list", formula1: '"FBA,FBM,混发"', sqref: "M2:M101" }];
   s8["!cols"] = autoCols(s8Headers);
   XLSX.utils.book_append_sheet(wb, s8, "SKU标识符");
 
@@ -129,8 +129,8 @@ const tmplBundle = () => {
 };
 
 const tmplBundleCsv = () => {
-  const headers = ["SKU", "MSKU", "近7天日均", "近30天销量", "评分", "评论数", "广告费比", "退货率", "退款率", "FBA在库", "仓库", "FBM库存", "承运商", "目的仓", "件数", "预计到仓", "工厂名", "交期", "状态", "FOB", "头程费", "配送费", "店铺", "ASIN", "售价（总价）", "产品链接", "竞品链接"];
-  const example = ["BFRS258", "BFRS258-GM", 3.42, 102, 4.2, 156, 12.5, 3.2, 5.1, 186, "美西", 180, "乐歌", "美西", 80, "2026-08-05", "东莞美联", "2026-08-25", "producing", 28.5, 12.3, 4.56, "BIFULISAN Store", "B0GC3HFWHP", 39.99, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX"];
+  const headers = ["SKU", "MSKU", "近7天日均", "近30天销量", "评分", "评论数", "广告费比", "退货率", "退款率", "FBA在库", "仓库", "FBM库存", "承运商", "目的仓", "件数", "预计到仓", "工厂名", "交期", "状态", "FOB", "头程费", "配送费", "店铺", "ASIN", "售价", "运费"];
+  const example = ["BFRS258", "BFRS258-GM", 3.42, 102, 4.2, 156, 12.5, 3.2, 5.1, 186, "美西", 180, "乐歌", "美西", 80, "2026-08-05", "东莞美联", "2026-08-25", "producing", 28.5, 12.3, 4.56, "BIFULISAN Store", "B0GC3HFWHP", 39.99, 5.99];
   const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
   sheet["!cols"] = autoCols(headers);
   const wb = XLSX.utils.book_new();
@@ -139,8 +139,8 @@ const tmplBundleCsv = () => {
 };
 
 const tmplIdentifiers = () =>
-  downloadTemplate("SKU标识符(一次性迁移)", ["店铺", "SKU", "品名", "MSKU", "ASIN", "UPC", "品类", "上架日期", "售价（总价）", "FOB", "仓租", "发货方式", "包裹长cm", "包裹宽cm", "包裹高cm", "包裹重kg", "单箱数", "产品链接", "竞品链接"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", "4901234567890", "户外炉具", "2026-01-15", 39.99, 28.5, 0.8, "FBA", 30, 25, 20, 1.2, 10, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX\nhttps://www.amazon.com/dp/B0YYYYYYYY"], [
-    { type: "list", formula1: '"FBA,FBM,混发"', sqref: "L2:L101" },
+  downloadTemplate("SKU标识符(一次性迁移)", ["店铺", "SKU", "品名", "MSKU", "ASIN", "UPC", "品类", "上架日期", "售价", "运费", "FOB", "仓租", "发货方式", "包裹长cm", "包裹宽cm", "包裹高cm", "包裹重kg", "单箱数", "产品链接", "竞品链接"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", "4901234567890", "户外炉具", "2026-01-15", 39.99, 5.99, 28.5, 0.8, "FBA", 30, 25, 20, 1.2, 10, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX\nhttps://www.amazon.com/dp/B0YYYYYYYY"], [
+    { type: "list", formula1: '"FBA,FBM,混发"', sqref: "M2:M101" },
   ]);
 
 /* ────────── 标签页配置 ────────── */

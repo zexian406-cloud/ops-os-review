@@ -1333,9 +1333,7 @@ function SkuGroupCard({
                   <th className="px-3 py-2 whitespace-nowrap">MSKU</th>
                   <th className="px-3 py-2 whitespace-nowrap">店铺</th>
                   <th className="px-3 py-2 text-right whitespace-nowrap">星级</th>
-                  <th className="px-3 py-2 text-right whitespace-nowrap">单价</th>
-                  <th className="px-3 py-2 text-right whitespace-nowrap">运费</th>
-                  <th className="px-3 py-2 text-right whitespace-nowrap">Listing价</th>
+                  <th className="px-3 py-2 text-right whitespace-nowrap">销售总价</th>
                   <th className="px-3 py-2 text-right whitespace-nowrap">净利</th>
                   <th className="px-3 py-2 text-right whitespace-nowrap">净利率</th>
                   <th className="px-3 py-2 text-center whitespace-nowrap">促销</th>
@@ -1536,19 +1534,16 @@ function ChildRow({
         )}
       </td>
       <td className="px-3 py-2 border-b border-background-200/40 text-right whitespace-nowrap">
-        <span className="mono-num font-medium">
-          ${child.price.toFixed(2)}
-        </span>
-      </td>
-      <td className="px-3 py-2 border-b border-background-200/40 text-right whitespace-nowrap">
-        <span className="mono-num font-medium text-foreground-600">
-          ${((child.costDelivery ?? 0) + (child.costShipping ?? 0)).toFixed(2)}
-        </span>
-      </td>
-      <td className="px-3 py-2 border-b border-background-200/40 text-right whitespace-nowrap">
-        <span className="mono-num font-semibold text-primary-700">
-          ${(child.price + (child.costDelivery ?? 0) + (child.costShipping ?? 0)).toFixed(2)}
-        </span>
+        <div className="flex flex-col items-end leading-tight">
+          <span className="mono-num font-semibold text-foreground-900">
+            ${(child.listPrice ?? child.price).toFixed(2)}
+          </span>
+          {child.listPrice != null && child.listPrice > child.price && (
+            <span className="mono-num text-[10px] text-foreground-400">
+              ${child.price.toFixed(2)} + ${(child.listPrice - child.price).toFixed(2)}
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-3 py-2 border-b border-background-200/40 text-right whitespace-nowrap">
         <span
