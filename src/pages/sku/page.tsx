@@ -1410,9 +1410,11 @@ function ChildRow({
   selectionMode: boolean;
   isVirtualMsku?: boolean;
 }) {
-  // FIX: 虚拟 MSKU 子项优先使用 mskuMetrics 中的独立指标
-  //      （修复"展开列表显示相同数据"——各 MSKU 的退款率/退货率/广告费比/星级差异化展示）
-  const mskuMetric = child.isVirtualMsku && child.msku ? child.mskuMetrics?.[child.msku] : undefined;
+  // FIX: 所有子项（真实/虚拟 MSKU）均优先使用 mskuMetrics 中的独立指标
+  //      修复"展开列表显示相同数据"——各 MSKU 的退款率/退货率/广告费比/星级差异化展示
+  const mskuMetricByMsku = child.msku ? child.mskuMetrics?.[child.msku] : undefined;
+  const mskuMetricByAsin = !mskuMetricByMsku && child.asin ? child.mskuMetrics?.[child.asin] : undefined;
+  const mskuMetric = mskuMetricByMsku || mskuMetricByAsin;
   const mskuSnap: DailySnapshot | undefined = mskuMetric && snap ? {
     ...snap,
     rating: mskuMetric.rating ?? snap.rating,
