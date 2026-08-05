@@ -222,14 +222,29 @@ export default function GuidePage() {
         <p>在「SKU 标识符」或「运营数据导入」表中填写。产品链接为当前 Listing 的 Amazon URL；竞品链接支持多个，用换行符分隔。导入后可在 SKU 详情页直接点击跳转。</p>
         <SubTitle>自然订单 / 广告订单占比</SubTitle>
         <p>系统基于广告费比（adRatio）自动推导自然订单与广告订单占比：广告订单占比 ≈ 广告费比；自然订单占比 ≈ 100% - 广告费比。该指标展示在促销时间线和 SKU 详情页中，含可视化进度条。</p>
-        <SubTitle>导入模板字段一览（新增）</SubTitle>
-        <ul className="list-disc pl-5 space-y-1 text-[13px]">
-          <li><strong>销量导入</strong>新增列：MSKU、评分、评论数、广告费比、退货率、退款率</li>
-          <li><strong>运营数据导入</strong>新增列：MSKU、产品链接、竞品链接</li>
-          <li><strong>SKU 标识符</strong>新增列：产品链接、竞品链接</li>
-          <li><strong>CSV 综合表</strong>新增列：MSKU、评分、评论数、广告费比、退货率、退款率、产品链接、竞品链接</li>
-          <li className="text-foreground-500">所有新增列均为可选，留空不影响导入；填写后对应功能自动展示</li>
-        </ul>
+        <SubTitle>导入模板匹配口径说明</SubTitle>
+        <div className="rounded-lg border border-background-200 bg-background-50 p-3 text-[13px] text-foreground-700">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="border-b border-background-200">
+                <th className="py-1.5 pr-3 text-left font-semibold">导入类型</th>
+                <th className="py-1.5 pr-3 text-left font-semibold">匹配口径</th>
+                <th className="py-1.5 text-left font-semibold">说明</th>
+              </tr>
+            </thead>
+            <tbody className="text-foreground-600">
+              <tr className="border-b border-background-100"><td className="py-1.5 pr-3 font-medium">销量导入</td><td className="py-1.5 pr-3 text-primary-600 font-semibold">ASIN</td><td className="py-1.5">以 ASIN 为口径，自动匹配对应 SKU</td></tr>
+              <tr className="border-b border-background-100"><td className="py-1.5 pr-3 font-medium">运营数据导入</td><td className="py-1.5 pr-3 text-primary-600 font-semibold">ASIN / MSKU</td><td className="py-1.5">支持以 ASIN 或 MSKU 为口径匹配</td></tr>
+              <tr className="border-b border-background-100"><td className="py-1.5 pr-3 font-medium">FBA库存明细</td><td className="py-1.5 pr-3 text-primary-600 font-semibold">ASIN</td><td className="py-1.5">以 ASIN 为口径，自动匹配对应 SKU</td></tr>
+              <tr className="border-b border-background-100"><td className="py-1.5 pr-3 font-medium">仓库明细(FBM)</td><td className="py-1.5 pr-3 text-accent-600 font-semibold">SKU</td><td className="py-1.5">以 SKU 为口径直接匹配</td></tr>
+              <tr className="border-b border-background-100"><td className="py-1.5 pr-3 font-medium">在途明细</td><td className="py-1.5 pr-3 text-accent-600 font-semibold">SKU</td><td className="py-1.5">以 SKU 为口径直接匹配</td></tr>
+              <tr className="border-b border-background-100"><td className="py-1.5 pr-3 font-medium">工厂明细</td><td className="py-1.5 pr-3 text-accent-600 font-semibold">SKU</td><td className="py-1.5">以 SKU 为口径直接匹配</td></tr>
+              <tr className="border-b border-background-100"><td className="py-1.5 pr-3 font-medium">头程更新</td><td className="py-1.5 pr-3 text-accent-600 font-semibold">SKU</td><td className="py-1.5">以 SKU 为口径，同时更新 MSKU</td></tr>
+              <tr><td className="py-1.5 pr-3 font-medium">SKU标识符</td><td className="py-1.5 pr-3 text-secondary-600 font-semibold">ASIN + MSKU</td><td className="py-1.5">用于建立 ASIN/MSKU/SKU 对应关系</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-[12px] text-foreground-500">注：以 ASIN 为口径的导入类型，需先通过「SKU标识符」导入建立 ASIN→SKU 的对应关系。系统会自动查找对应的 SKU 进行数据关联。</p>
         <SubTitle>列名智能匹配</SubTitle>
         <ul className="list-disc pl-5 space-y-1 text-[13px]">
           <li>退款率 / refund_rate / Refund Rate 均可识别</li>
