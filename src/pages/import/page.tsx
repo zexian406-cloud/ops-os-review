@@ -459,16 +459,42 @@ export default function ImportPage() {
       const today = new Date().toISOString().slice(0, 10);
       let skuCreated = 0;
       let skuUpdated = 0;
-      const cm = buildColumnMap(["sku", "asin", "store", "name", "rating", "reviewCount", "adRatio", "returnRate", "refundRate"], headersOf(rows));
-      if (!cm.sku) {
-        setImportMsg({ tone: "err", msg: "未识别到 SKU 列，已阻断导入。请检查表头（SKU / 产品SKU / SKU码 均可识别）。" });
+      const cm = buildColumnMap(["sku", "asin", "msku", "store", "name", "rating", "reviewCount", "adRatio", "returnRate", "refundRate"], headersOf(rows));
+      if (!cm.sku && !cm.asin && !cm.msku) {
+        setImportMsg({ tone: "err", msg: "未识别到 SKU / ASIN / MSKU 列，已阻断导入。运营数据导入支持以 ASIN 或 MSKU 为口径匹配。" });
         setImporting(null);
         return;
       }
       const snapshots: Omit<DailySnapshot, "id">[] = [];
 
+      // ASIN → SKU / MSKU → SKU 查找表
+      const asinToSkuMap = new Map<string, string>();
+      const mskuToSkuMap = new Map<string, string>();
+      if (!cm.sku) {
+        const allSkus = await db.skuMaster.toArray();
+        for (const s of allSkus) {
+          if (s.asin) asinToSkuMap.set(s.asin, s.sku);
+          if (s.msku) mskuToSkuMap.set(s.msku, s.sku);
+          if (s.mskuStores) {
+            for (const ms of s.mskuStores) {
+              if (ms.msku) mskuToSkuMap.set(ms.msku, s.sku);
+            }
+          }
+        }
+      }
+
       for (const row of rows) {
-        const sku = str(pickCell(row, cm.sku));
+        let sku = cm.sku ? str(pickCell(row, cm.sku)) : "";
+        // 以 ASIN 为口径
+        if (!sku && cm.asin) {
+          const asinVal = str(pickCell(row, cm.asin));
+          sku = asinToSkuMap.get(asinVal) ?? "";
+        }
+        // 以 MSKU 为口径
+        if (!sku && cm.msku) {
+          const mskuVal = str(pickCell(row, cm.msku));
+          sku = mskuToSkuMap.get(mskuVal) ?? "";
+        }
         if (!sku) continue;
         const existing = await db.skuMaster.get(sku);
         const storeName = str(pickCell(row, cm.store));
@@ -551,15 +577,27 @@ export default function ImportPage() {
     try {
       const rows = await parseExcelFile(file);
       const today = new Date().toISOString().slice(0, 10);
-      const cm = buildColumnMap(["sku", "fbaStock"], headersOf(rows));
-      if (!cm.sku) {
-        setImportMsg({ tone: "err", msg: "未识别到 SKU 列，已阻断导入。请检查表头（SKU / 产品SKU / SKU码 均可识别）。" });
+      const cm = buildColumnMap(["sku", "asin", "fbaStock"], headersOf(rows));
+      if (!cm.sku && !cm.asin) {
+        setImportMsg({ tone: "err", msg: "未识别到 SKU 或 ASIN 列，已阻断导入。FBA库存明细以 ASIN 为口径匹配。" });
         setImporting(null);
         return;
       }
+      // ASIN → SKU 查找表
+      const asinToSkuMap = new Map<string, string>();
+      if (cm.asin && !cm.sku) {
+        const allSkus = await db.skuMaster.toArray();
+        for (const s of allSkus) {
+          if (s.asin) asinToSkuMap.set(s.asin, s.sku);
+        }
+      }
       const layers: Omit<InventoryLayer, "id">[] = [];
       for (const row of rows) {
-        const sku = str(pickCell(row, cm.sku));
+        let sku = cm.sku ? str(pickCell(row, cm.sku)) : "";
+        if (!sku && cm.asin) {
+          const asinVal = str(pickCell(row, cm.asin));
+          sku = asinToSkuMap.get(asinVal) ?? "";
+        }
         if (!sku) continue;
         const existing = await db.inventoryLayer.where({ sku, date: today }).first();
         layers.push({
@@ -789,7 +827,7 @@ export default function ImportPage() {
     setImporting("shipping");
     try {
       const rows = await parseExcelFile(file);
-      const cm = buildColumnMap(["sku", "shipping", "delivery"], headersOf(rows));
+      const cm = buildColumnMap(["sku", "msku", "shipping", "delivery"], headersOf(rows));
       if (!cm.sku) {
         setImportMsg({ tone: "err", msg: "未识别到 SKU 列，已阻断导入。请检查表头（SKU / 产品SKU / SKU码 均可识别）。" });
         setImporting(null);
@@ -805,8 +843,10 @@ export default function ImportPage() {
         const updates: Partial<SkuMaster> = {};
         const shipping = num(pickCell(row, cm.shipping));
         const delivery = num(pickCell(row, cm.delivery));
+        const mskuVal = cm.msku ? str(pickCell(row, cm.msku)) : "";
         if (shipping > 0) updates.costShipping = shipping;
         if (delivery > 0) updates.costDelivery = delivery;
+        if (mskuVal) updates.msku = mskuVal;
 
         if (Object.keys(updates).length > 0) {
           await db.skuMaster.put({ ...master, ...updates });
