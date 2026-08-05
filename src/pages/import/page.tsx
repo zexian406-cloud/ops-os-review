@@ -82,7 +82,7 @@ const tmplFba = () => downloadTemplate("FBA库存明细", ["ASIN", "SKU", "FBA�
 const tmplWarehouse = () => downloadTemplate("仓库明细(FBM)", ["SKU", "仓库", "库存"], ["BFRS258", "美西", 180]);
 const tmplTransitDetail = () => downloadTemplate("在途明细", ["SKU", "承运商", "目的仓", "件数", "预计到仓"], ["BFRS258", "乐歌", "美西", 80, "2026-08-05"]);
 const tmplFactory = () => downloadTemplate("工厂明细", ["SKU", "工厂名", "件数", "交期", "状态"], ["BFRS258", "东莞美联", 120, "2026-08-25", "producing"]);
-const tmplShipping = () => downloadTemplate("头程更新", ["SKU", "头程费", "配送费"], ["BFRS258", 12.3, 4.56]);
+const tmplShipping = () => downloadTemplate("头程更新", ["SKU", "MSKU", "头程费", "配送费"], ["BFRS258", "BFRS258-GM", 12.3, 4.56]);
 
 const tmplBundle = () => {
   const wb = XLSX.utils.book_new();
@@ -120,8 +120,8 @@ const tmplBundle = () => {
   XLSX.utils.book_append_sheet(wb, s6, "工厂明细");
 
   // Sheet 7: 头程更新
-  const s7 = XLSX.utils.aoa_to_sheet([["SKU", "头程费", "配送费"], ["BFRS258", 12.3, 4.56]]);
-  s7["!cols"] = autoCols(["SKU", "头程费", "配送费"]);
+  const s7 = XLSX.utils.aoa_to_sheet([["SKU", "MSKU", "头程费", "配送费"], ["BFRS258", "BFRS258-GM", 12.3, 4.56]]);
+  s7["!cols"] = autoCols(["SKU", "MSKU", "头程费", "配送费"]);
   XLSX.utils.book_append_sheet(wb, s7, "头程更新");
 
   // Sheet 8: SKU标识符(一次性迁移)（含产品链接 + 竞品链接）
