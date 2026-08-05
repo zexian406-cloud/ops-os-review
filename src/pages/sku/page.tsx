@@ -1423,7 +1423,8 @@ function ChildRow({
     returnRate: mskuMetric.returnRate ?? snap.returnRate,
     refundRate: mskuMetric.refundRate ?? snap.refundRate,
     dailySales7d: mskuMetric.sales7d ?? snap.dailySales7d,
-    dailySales30d: mskuMetric.sales30d ?? snap.dailySales30d,
+    // sales30d 存的是30天总量 → monthlySales 用总量，dailySales30d 用总量/30
+    dailySales30d: mskuMetric.sales30d != null ? Math.round((mskuMetric.sales30d / 30) * 100) / 100 : snap.dailySales30d,
     monthlySales: mskuMetric.sales30d ?? snap.monthlySales,
   } : snap;
   const { profit, margin, adRatio, returnRate, refundRate } = computeMskuProfit(child, mskuSnap, inv);

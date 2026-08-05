@@ -291,9 +291,9 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       const isWeeklyTotal = c.sales7d != null && !/日均|日销量|daily/i.test(c.sales7d);
       const daily7d = isWeeklyTotal ? Math.round((sales7dRaw / 7) * 100) / 100 : sales7dRaw;
       const monthlyRaw = num(pickCell(row, c.sales30d));
-      // 30天销量类均为周期总量 → 除以 30 得日均（与原 row["30天销量"] 语义一致）
+      // 30天销量导入的是周期总量 → monthlySales 存总量，dailySales30d 存日均
       const isMonthlyTotal = c.sales30d != null;
-      const monthly = isMonthlyTotal ? Math.round((monthlyRaw / 30) * 100) / 100 : monthlyRaw;
+      const monthlyDaily = isMonthlyTotal ? Math.round((monthlyRaw / 30) * 100) / 100 : monthlyRaw;
       // 可选字段：评分、评论数、广告费比、退货率、退款率
       const rating = num(pickCell(row, c.rating));
       const reviewCount = num(pickCell(row, c.reviewCount));
@@ -306,7 +306,7 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       }
       const agg = skuAgg.get(sku)!;
       agg.sales7d.push(daily7d);
-      agg.sales30d.push(monthly);
+      agg.sales30d.push(monthlyRaw);
       agg.rating.push(rating);
       agg.reviewCount.push(reviewCount);
       agg.adRatio.push(adRatio);
@@ -330,7 +330,7 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
           returnRate: returnRate > 0 ? Math.round(returnRate * 100) / 100 : undefined,
           refundRate: refundRate > 0 ? Math.round(refundRate * 100) / 100 : undefined,
           sales7d: daily7d,
-          sales30d: monthly,
+          sales30d: monthlyRaw,
         };
       }
     }
@@ -342,7 +342,8 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
     };
     for (const [sku, agg] of skuAgg) {
       const daily7d = avgArr(agg.sales7d);
-      const monthly = avgArr(agg.sales30d);
+      const monthlyTotal = avgArr(agg.sales30d);
+      const monthlyDaily = monthlyTotal > 0 ? Math.round((monthlyTotal / 30) * 100) / 100 : 0;
       const rating = avgNonZero(agg.rating);
       const reviewCount = avgNonZero(agg.reviewCount);
       const adRatio = avgNonZero(agg.adRatio);
@@ -352,8 +353,8 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
         date: today,
         sku,
         dailySales7d: Math.round(daily7d * 100) / 100,
-        dailySales30d: Math.round(monthly * 100) / 100,
-        monthlySales: Math.round(monthly * 100) / 100,
+        dailySales30d: monthlyDaily,
+        monthlySales: Math.round(monthlyTotal * 100) / 100,
         stockOnHand: 0,
         stockInTransit: 0,
         daysOfCoverOnHand: daily7d > 0 ? Number((0 / daily7d).toFixed(1)) : Infinity,
