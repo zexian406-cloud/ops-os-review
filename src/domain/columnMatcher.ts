@@ -19,7 +19,7 @@
 /** 逻辑字段 → 常见列名别名（含领星 / Amazon 后台常见写法） */
 export const SYNONYMS: Record<string, string[]> = {
   // ── 关键标识 ──
-  sku: ["SKU", "sku", "SKU码", "产品SKU", "父SKU", "asin", "ASIN", "Asin"],
+  sku: ["SKU", "sku", "SKU码", "产品SKU", "父SKU"],
   msku: ["MSKU", "msku", "子SKU", "变体SKU", "MSKU码", "产品MSKU", "卖家SKU", "Seller SKU", "seller-sku"],
   asin: ["asin", "ASIN", "Asin", "父体ASIN", "父ASIN"],
   name: ["品名", "商品名称", "产品名称", "name", "标题", "商品标题"],
