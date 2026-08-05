@@ -214,7 +214,7 @@ export default function PromoCenterPage() {
       )}
 
       {/* ── KPI 汇总卡片 ── */}
-      {visibleKeys.includes("summaryCards") && (
+      {(visibleKeys.length === 0 || visibleKeys.includes("summaryCards")) && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="rounded-[14px] border border-background-200/70 bg-background-100/50 p-4">
             <div className="flex items-center gap-2">
@@ -299,7 +299,7 @@ export default function PromoCenterPage() {
       </div>
 
       {/* ── Tab 1: 活动管理 ── */}
-      {tab === "activity" && visibleKeys.includes("activityTab") && (
+      {tab === "activity" && (visibleKeys.length === 0 || visibleKeys.includes("activityTab")) && (
         <ActivitySection
           promotions={promotions}
           skus={skus}
@@ -316,7 +316,7 @@ export default function PromoCenterPage() {
       )}
 
       {/* ── Tab 2: 促销成本 ── */}
-      {tab === "cost" && visibleKeys.includes("costTab") && (
+      {tab === "cost" && (visibleKeys.length === 0 || visibleKeys.includes("costTab")) && (
         <CostSection
           manualPromotions={manualPromotions}
           promotions={promotions}
@@ -333,7 +333,7 @@ export default function PromoCenterPage() {
       )}
 
       {/* ── Tab 3: 促销时间线 ── */}
-      {tab === "timeline" && visibleKeys.includes("timelineTab") && (
+      {tab === "timeline" && (visibleKeys.length === 0 || visibleKeys.includes("timelineTab")) && (
         <TimelineSection
           buckets={weeklyBuckets}
           promotions={promotions}
@@ -526,7 +526,7 @@ function ActivitySection(props: {
   return (
     <div className="space-y-5">
       {/* 新增/编辑活动 */}
-      {props.visibleKeys.includes("activityForm") && (
+      {(props.visibleKeys.length === 0 || props.visibleKeys.includes("activityForm")) && (
         <Section
           title={editingId ? "编辑活动" : bulkMode ? "批量添加活动" : "新增活动"}
           icon="ri-add-circle-line"
@@ -725,7 +725,7 @@ function ActivitySection(props: {
       )}
 
       {/* 已有活动列表 */}
-      {props.visibleKeys.includes("activityList") && (
+      {(props.visibleKeys.length === 0 || props.visibleKeys.includes("activityList")) && (
         <Section
           title="已有促销活动"
           icon="ri-flashlight-line"
@@ -1104,7 +1104,7 @@ function CostSection(props: {
   return (
     <div className="space-y-5">
       {/* KPI 汇总 */}
-      {props.visibleKeys.includes("costKpi") && (
+      {(props.visibleKeys.length === 0 || props.visibleKeys.includes("costKpi")) && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="rounded-xl border border-background-200/70 bg-background-100/50 p-4">
             <div className="flex items-center gap-2">
@@ -1154,7 +1154,7 @@ function CostSection(props: {
       )}
 
       {/* 新增/编辑表单 */}
-      {props.visibleKeys.includes("costForm") && (
+      {(props.visibleKeys.length === 0 || props.visibleKeys.includes("costForm")) && (
         <Section
           title={editingId ? "编辑促销成本" : "新增促销成本"}
           icon="ri-add-circle-line"
@@ -1256,7 +1256,7 @@ function CostSection(props: {
       )}
 
       {/* 列表 */}
-      {props.visibleKeys.includes("costList") && (
+      {(props.visibleKeys.length === 0 || props.visibleKeys.includes("costList")) && (
         <Section
           title="促销成本记录"
           icon="ri-timeline-view"

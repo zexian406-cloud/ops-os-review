@@ -1334,6 +1334,8 @@ function SkuGroupCard({
                   <th className="px-3 py-2 whitespace-nowrap">店铺</th>
                   <th className="px-3 py-2 text-right whitespace-nowrap">星级</th>
                   <th className="px-3 py-2 text-right whitespace-nowrap">单价</th>
+                  <th className="px-3 py-2 text-right whitespace-nowrap">运费</th>
+                  <th className="px-3 py-2 text-right whitespace-nowrap">Listing价</th>
                   <th className="px-3 py-2 text-right whitespace-nowrap">净利</th>
                   <th className="px-3 py-2 text-right whitespace-nowrap">净利率</th>
                   <th className="px-3 py-2 text-center whitespace-nowrap">促销</th>
@@ -1536,6 +1538,16 @@ function ChildRow({
       <td className="px-3 py-2 border-b border-background-200/40 text-right whitespace-nowrap">
         <span className="mono-num font-medium">
           ${child.price.toFixed(2)}
+        </span>
+      </td>
+      <td className="px-3 py-2 border-b border-background-200/40 text-right whitespace-nowrap">
+        <span className="mono-num font-medium text-foreground-600">
+          ${((child.costDelivery ?? 0) + (child.costShipping ?? 0)).toFixed(2)}
+        </span>
+      </td>
+      <td className="px-3 py-2 border-b border-background-200/40 text-right whitespace-nowrap">
+        <span className="mono-num font-semibold text-primary-700">
+          ${(child.price + (child.costDelivery ?? 0) + (child.costShipping ?? 0)).toFixed(2)}
         </span>
       </td>
       <td className="px-3 py-2 border-b border-background-200/40 text-right whitespace-nowrap">

@@ -15,7 +15,6 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: "/", label: "运营一览", sub: "今日第一眼", icon: "ri-dashboard-3-line" },
       { to: "/diagnosis", label: "异常诊断", sub: "原因拆解", icon: "ri-search-eye-line" },
       { to: "/history", label: "历史对比", sub: "本周 vs 上周", icon: "ri-exchange-line" },
-      { to: "/data-health", label: "数据健康", sub: "导入质量检查", icon: "ri-heart-pulse-line" },
       { to: "/shipment", label: "发货决策", sub: "自动补货建议", icon: "ri-truck-line" },
       { to: "/risk", label: "风险中心", sub: "全站异常", icon: "ri-error-warning-line" },
     ],
@@ -41,6 +40,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "数据",
     items: [
       { to: "/import", label: "数据导入", sub: "Excel & 云端", icon: "ri-file-excel-2-line" },
+      { to: "/data-health", label: "数据健康", sub: "导入质量检查", icon: "ri-heart-pulse-line" },
       { to: "/shop-management", label: "店铺管理", sub: "新增/编辑/删除", icon: "ri-store-2-line" },
       { to: "/settings", label: "参数中心", sub: "供应链 / 活动", icon: "ri-settings-3-line" },
     ],
