@@ -77,7 +77,7 @@ const downloadTemplate = (name: string, headers: string[], exampleRow: (string |
 
 /* ────────── 略 ────────── */
 
-const tmplSales = () => downloadTemplate("周销量导入", ["ASIN", "SKU", "MSKU", "店铺", "7天销量", "30天销量", "评分", "评论数", "广告费比", "退货率", "退款率"], ["B0GC3HFWHP", "BFRS258", "BFRS258-GM", "BIFULISAN Store", 24, 102, 4.2, 156, 12.5, 3.2, 5.1]);
+const tmplSales = () => downloadTemplate("周销量导入", ["ASIN", "SKU", "品名", "MSKU", "店铺", "7天销量", "30天销量", "评分", "评论数", "广告费比", "退货率", "退款率", "产品链接", "竞品链接"], ["B0GC3HFWHP", "BFRS258", "BF卡式炉", "BFRS258-GM", "BIFULISAN Store", 24, 102, 4.2, 156, 12.5, 3.2, 5.1, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX\nhttps://www.amazon.com/dp/B0YYYYYYYY"]);
 const tmplFba = () => downloadTemplate("FBA库存明细", ["ASIN", "SKU", "FBA库存"], ["B0GC3HFWHP", "BFRS258", 186]);
 const tmplWarehouse = () => downloadTemplate("仓库明细(FBM)", ["SKU", "仓库", "库存"], ["BFRS258", "美西", 180]);
 const tmplTransitDetail = () => downloadTemplate("在途明细", ["SKU", "承运商", "目的仓", "件数", "预计到仓"], ["BFRS258", "乐歌", "美西", 80, "2026-08-05"]);
@@ -87,44 +87,38 @@ const tmplShipping = () => downloadTemplate("头程更新", ["SKU", "MSKU", "头
 const tmplBundle = () => {
   const wb = XLSX.utils.book_new();
 
-  // Sheet 1: 销量导入（含 MSKU 级指标：评分/评论数/广告费比/退货率/退款率）
-  const s1Headers = ["ASIN", "SKU", "MSKU", "店铺", "7天销量", "30天销量", "评分", "评论数", "广告费比", "退货率", "退款率"];
-  const s1 = XLSX.utils.aoa_to_sheet([s1Headers, ["B0GC3HFWHP", "BFRS258", "BFRS258-GM", "BIFULISAN Store", 24, 102, 4.2, 156, 12.5, 3.2, 5.1]]);
+  // Sheet 1: 销量导入（合并原运营数据导入字段：品名/产品链接/竞品链接 + MSKU级指标）
+  const s1Headers = ["ASIN", "SKU", "品名", "MSKU", "店铺", "7天销量", "30天销量", "评分", "评论数", "广告费比", "退货率", "退款率", "产品链接", "竞品链接"];
+  const s1 = XLSX.utils.aoa_to_sheet([s1Headers, ["B0GC3HFWHP", "BFRS258", "BF卡式炉", "BFRS258-GM", "BIFULISAN Store", 24, 102, 4.2, 156, 12.5, 3.2, 5.1, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX\nhttps://www.amazon.com/dp/B0YYYYYYYY"]]);
   s1["!cols"] = autoCols(s1Headers);
   XLSX.utils.book_append_sheet(wb, s1, "销量导入");
 
-  // Sheet 2: 运营数据导入（含 MSKU 级指标 + 产品链接 + 竞品链接）
-  const s2Headers = ["ASIN", "店铺", "品名", "SKU", "MSKU", "退款率", "评分", "评论数", "退货率", "ACoAS", "产品链接", "竞品链接"];
-  const s2 = XLSX.utils.aoa_to_sheet([s2Headers, ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", "BFRS258-GM", 0.05, 4.2, 156, 0.08, 0.12, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX\nhttps://www.amazon.com/dp/B0YYYYYYYY"]]);
-  s2["!cols"] = autoCols(s2Headers);
-  XLSX.utils.book_append_sheet(wb, s2, "运营数据导入");
-
-  // Sheet 3: FBA库存明细
+  // Sheet 2: FBA库存明细
   const s3 = XLSX.utils.aoa_to_sheet([["ASIN", "SKU", "FBA库存"], ["B0GC3HFWHP", "BFRS258", 186]]);
   s3["!cols"] = autoCols(["ASIN", "SKU", "FBA库存"]);
   XLSX.utils.book_append_sheet(wb, s3, "FBA库存明细");
 
-  // Sheet 4: 仓库明细(FBM)
+  // Sheet 3: 仓库明细(FBM)
   const s4 = XLSX.utils.aoa_to_sheet([["SKU", "仓库", "库存"], ["BFRS258", "美西", 180]]);
   s4["!cols"] = autoCols(["SKU", "仓库", "库存"]);
   XLSX.utils.book_append_sheet(wb, s4, "仓库明细(FBM)");
 
-  // Sheet 5: 在途明细
+  // Sheet 4: 在途明细
   const s5 = XLSX.utils.aoa_to_sheet([["SKU", "承运商", "目的仓", "件数", "预计到仓"], ["BFRS258", "乐歌", "美西", 80, "2026-08-05"]]);
   s5["!cols"] = autoCols(["SKU", "承运商", "目的仓", "件数", "预计到仓"]);
   XLSX.utils.book_append_sheet(wb, s5, "在途明细");
 
-  // Sheet 6: 工厂明细
+  // Sheet 5: 工厂明细
   const s6 = XLSX.utils.aoa_to_sheet([["SKU", "工厂名", "件数", "交期", "状态"], ["BFRS258", "东莞美联", 120, "2026-08-25", "producing"]]);
   s6["!cols"] = autoCols(["SKU", "工厂名", "件数", "交期", "状态"]);
   XLSX.utils.book_append_sheet(wb, s6, "工厂明细");
 
-  // Sheet 7: 头程更新
+  // Sheet 6: 头程更新
   const s7 = XLSX.utils.aoa_to_sheet([["SKU", "MSKU", "头程费", "配送费"], ["BFRS258", "BFRS258-GM", 12.3, 4.56]]);
   s7["!cols"] = autoCols(["SKU", "MSKU", "头程费", "配送费"]);
   XLSX.utils.book_append_sheet(wb, s7, "头程更新");
 
-  // Sheet 8: SKU标识符(一次性迁移)（含产品链接 + 竞品链接）
+  // Sheet 7: SKU标识符(一次性迁移)（含产品链接 + 竞品链接）
   const s8Headers = ["店铺", "SKU", "品名", "MSKU", "ASIN", "UPC", "品类", "上架日期", "售价（总价）", "FOB", "仓租", "发货方式", "包裹长cm", "包裹宽cm", "包裹高cm", "包裹重kg", "单箱数", "产品链接", "竞品链接"];
   const s8 = XLSX.utils.aoa_to_sheet([s8Headers, ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", "4901234567890", "户外炉具", "2026-01-15", 39.99, 28.5, 0.8, "FBA", 30, 25, 20, 1.2, 10, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX\nhttps://www.amazon.com/dp/B0YYYYYYYY"]]);
   s8["!dataValidations"] = [{ type: "list", formula1: '"FBA,FBM,混发"', sqref: "L2:L101" }];
@@ -144,8 +138,6 @@ const tmplBundleCsv = () => {
   XLSX.writeFile(wb, "【模板】综合运营表.csv", { bookType: "csv" });
 };
 
-const tmplSalesRating = () => downloadTemplate("运营数据导入", ["ASIN", "店铺", "品名", "SKU", "MSKU", "退款率", "评分", "评论数", "退货率", "ACoAS", "产品链接", "竞品链接"], ["B0GC3HFWHP", "BIFULISAN Store", "BF卡式炉", "BFRS258", "BFRS258-GM", 0.05, 4.2, 156, 0.08, 0.12, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX\nhttps://www.amazon.com/dp/B0YYYYYYYY"]);
-
 const tmplIdentifiers = () =>
   downloadTemplate("SKU标识符(一次性迁移)", ["店铺", "SKU", "品名", "MSKU", "ASIN", "UPC", "品类", "上架日期", "售价（总价）", "FOB", "仓租", "发货方式", "包裹长cm", "包裹宽cm", "包裹高cm", "包裹重kg", "单箱数", "产品链接", "竞品链接"], ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", "4901234567890", "户外炉具", "2026-01-15", 39.99, 28.5, 0.8, "FBA", 30, 25, 20, 1.2, 10, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX\nhttps://www.amazon.com/dp/B0YYYYYYYY"], [
     { type: "list", formula1: '"FBA,FBM,混发"', sqref: "L2:L101" },
@@ -153,7 +145,7 @@ const tmplIdentifiers = () =>
 
 /* ────────── 标签页配置 ────────── */
 const tabDefs = [
-  { key: "bundle", label: "\u7efc\u5408\u8fd0\u8425\u8868", icon: "ri-file-excel-2-line", freq: "\u9996\u6b21", desc: "\u4e00\u952e\u4e0b\u8f7d\u5168\u90e8 8 \u4e2a Sheet \u00b7 \u8fd0\u8425\u6570\u636e / \u5468\u9500\u91cf / FBA / \u4ed3\u5e93 / \u5728\u9014 / \u5de5\u5382 / \u5934\u7a0b / SKU", tmpl: tmplBundle },
+  { key: "bundle", label: "\u7efc\u5408\u8fd0\u8425\u8868", icon: "ri-file-excel-2-line", freq: "\u9996\u6b21", desc: "\u4e00\u952e\u4e0b\u8f7d\u5168\u90e8 7 \u4e2a Sheet \u00b7 \u5468\u9500\u91cf(\u542b\u54c1\u540d/\u94fe\u63a5) / FBA / \u4ed3\u5e93 / \u5728\u9014 / \u5de5\u5382 / \u5934\u7a0b / SKU", tmpl: tmplBundle },
   { key: "warehouse_mapping", label: "\u4ed3\u5e93\u6620\u5c04", icon: "ri-map-2-line", freq: "\u914d\u7f6e", desc: "\u4ed3\u5e93\u540d\u79f0 \u2192 \u533a\u57df\u6620\u5c04\uff08\u7f8e\u4e1c/\u7f8e\u897f/\u4e1c\u5357/\u4e2d\u5357\uff09\uff0c\u5bfc\u5165\u65f6\u81ea\u52a8\u5339\u914d" },
 ] as const;
 
@@ -371,19 +363,21 @@ export default function ImportPage() {
     }
   };
 
-  /* ────────── 周销量导入 ────────── */
+  /* ────────── 周销量导入（合并原运营数据导入功能：品名/店铺/ASIN/链接）────────── */
   const handleSalesImport = async (file: File) => {
     setImportMsg(null);
     setImporting("sales");
     try {
       const rows = await parseExcelFile(file);
       const today = new Date().toISOString().slice(0, 10);
+      // 合并原运营数据导入字段：msku/asin/store/name/productUrl/competitorUrls
       const cm = buildColumnMap(
-        ["sku", "sales7d", "sales30d", "rating", "reviewCount", "adRatio", "returnRate", "refundRate"],
+        ["sku", "msku", "asin", "store", "name", "sales7d", "sales30d", "rating", "reviewCount", "adRatio", "returnRate", "refundRate", "productUrl", "competitorUrls"],
         headersOf(rows),
       );
-      if (!cm.sku) {
-        setImportMsg({ tone: "err", msg: "未识别到 SKU 列，已阻断导入。请检查表头（SKU / 产品SKU / SKU码 均可识别）。" });
+      // 匹配口径：支持 SKU 或 ASIN 或 MSKU（与综合运营表 Step 2 一致）
+      if (!cm.sku && !cm.asin && !cm.msku) {
+        setImportMsg({ tone: "err", msg: "未识别到 SKU / ASIN / MSKU 列，已阻断导入。销量导入支持以 ASIN 或 MSKU 为口径匹配。" });
         setImporting(null);
         return;
       }
@@ -393,13 +387,85 @@ export default function ImportPage() {
         return;
       }
       const snapshots: Omit<DailySnapshot, "id">[] = [];
+      let skuCreated = 0;
+      let skuUpdated = 0;
+
+      // ASIN → SKU / MSKU → SKU 查找表（当表中无直接 SKU 列时用）
+      const asinToSkuMap = new Map<string, string>();
+      const mskuToSkuMap = new Map<string, string>();
+      if (!cm.sku) {
+        const allSkus = await db.skuMaster.toArray();
+        for (const s of allSkus) {
+          if (s.asin) asinToSkuMap.set(s.asin, s.sku);
+          if (s.msku) {
+            for (const m of s.msku.split(",")) {
+              const trimmed = m.trim();
+              if (trimmed) mskuToSkuMap.set(trimmed, s.sku);
+            }
+          }
+          if (s.mskuStores) {
+            for (const ms of s.mskuStores) {
+              if (ms.msku) mskuToSkuMap.set(ms.msku, s.sku);
+            }
+          }
+        }
+      }
 
       for (const row of rows) {
-        const sku = str(pickCell(row, cm.sku));
+        let sku = cm.sku ? str(pickCell(row, cm.sku)) : "";
+        // 以 ASIN 为口径
+        if (!sku && cm.asin) {
+          const asinVal = str(pickCell(row, cm.asin));
+          sku = asinToSkuMap.get(asinVal) ?? "";
+        }
+        // 以 MSKU 为口径
+        if (!sku && cm.msku) {
+          const mskuVal = str(pickCell(row, cm.msku));
+          sku = mskuToSkuMap.get(mskuVal) ?? "";
+        }
         if (!sku) continue;
 
         const existing = await db.skuMaster.get(sku);
         const prevSnapshot = existing ? await db.dailySnapshot.where({ sku }).reverse().first() : undefined;
+
+        // 合并原运营数据导入：品名/店铺/ASIN/链接 → 更新或创建 SkuMaster
+        const storeName = str(pickCell(row, cm.store));
+        const storeVal = storeName ? await getOrCreateShopByName(storeName) : (existing?.store || selectedShopId || "-");
+        const nameVal = str(pickCell(row, cm.name)) || sku;
+        const asinVal = str(pickCell(row, cm.asin));
+        const productUrlRaw = str(pickCell(row, cm.productUrl)) || undefined;
+        const compRaw = str(pickCell(row, cm.competitorUrls));
+        const compUrls = compRaw ? compRaw.split(/[\n;；|]+/).map((s) => s.trim()).filter(Boolean) : undefined;
+
+        // 更新/创建 SkuMaster（first-wins 策略，新建时填值，已存在时仅补空）
+        if (existing) {
+          const updates: Partial<SkuMaster> = {};
+          if (storeVal && storeVal !== "-") updates.store = storeVal;
+          if (nameVal && nameVal !== sku && !existing.name) updates.name = nameVal;
+          if (asinVal && !existing.asin) updates.asin = asinVal;
+          if (!existing.productUrl && productUrlRaw) updates.productUrl = productUrlRaw;
+          if ((!existing.competitorUrls || existing.competitorUrls.length === 0) && compUrls && compUrls.length > 0) {
+            updates.competitorUrls = compUrls;
+          }
+          if (Object.keys(updates).length > 0) {
+            await db.skuMaster.put({ ...existing, ...updates });
+            skuUpdated++;
+          }
+        } else {
+          const master: SkuMaster = {
+            sku,
+            name: nameVal || sku,
+            store: storeVal,
+            price: 0,
+            saleStatus: "active",
+            fulfillment: "FBM",
+            asin: asinVal || undefined,
+            productUrl: productUrlRaw,
+            competitorUrls: compUrls && compUrls.length > 0 ? compUrls : undefined,
+          };
+          await db.skuMaster.put(master);
+          skuCreated++;
+        }
 
         // 支持"7天销量"(周期总量)自动算日均，也兼容"近7天日均"(直接日均值)
         const sales7dRaw = num(pickCell(row, cm.sales7d));
@@ -441,122 +507,6 @@ export default function ImportPage() {
       }
 
       await upsertSnapshots(snapshots);
-      setImportMsg({ tone: "ok", msg: `导入成功 · ${snapshots.length} 条销量快照（${today}）` });
-      setImportCounts((prev) => ({ ...prev, snapshots: (prev.snapshots ?? 0) + snapshots.length }));
-    } catch (err) {
-      setImportMsg({ tone: "err", msg: err instanceof Error ? err.message : String(err) });
-    } finally {
-      setImporting(null);
-    }
-  };
-
-  /* ────────── 运营数据导入 ────────── */
-  const handleOperationDataImport = async (file: File) => {
-    setImportMsg(null);
-    setImporting("operation_data");
-    try {
-      const rows = await parseExcelFile(file);
-      const today = new Date().toISOString().slice(0, 10);
-      let skuCreated = 0;
-      let skuUpdated = 0;
-      const cm = buildColumnMap(["sku", "asin", "msku", "store", "name", "rating", "reviewCount", "adRatio", "returnRate", "refundRate"], headersOf(rows));
-      if (!cm.sku && !cm.asin && !cm.msku) {
-        setImportMsg({ tone: "err", msg: "未识别到 SKU / ASIN / MSKU 列，已阻断导入。运营数据导入支持以 ASIN 或 MSKU 为口径匹配。" });
-        setImporting(null);
-        return;
-      }
-      const snapshots: Omit<DailySnapshot, "id">[] = [];
-
-      // ASIN → SKU / MSKU → SKU 查找表
-      const asinToSkuMap = new Map<string, string>();
-      const mskuToSkuMap = new Map<string, string>();
-      if (!cm.sku) {
-        const allSkus = await db.skuMaster.toArray();
-        for (const s of allSkus) {
-          if (s.asin) asinToSkuMap.set(s.asin, s.sku);
-          if (s.msku) mskuToSkuMap.set(s.msku, s.sku);
-          if (s.mskuStores) {
-            for (const ms of s.mskuStores) {
-              if (ms.msku) mskuToSkuMap.set(ms.msku, s.sku);
-            }
-          }
-        }
-      }
-
-      for (const row of rows) {
-        let sku = cm.sku ? str(pickCell(row, cm.sku)) : "";
-        // 以 ASIN 为口径
-        if (!sku && cm.asin) {
-          const asinVal = str(pickCell(row, cm.asin));
-          sku = asinToSkuMap.get(asinVal) ?? "";
-        }
-        // 以 MSKU 为口径
-        if (!sku && cm.msku) {
-          const mskuVal = str(pickCell(row, cm.msku));
-          sku = mskuToSkuMap.get(mskuVal) ?? "";
-        }
-        if (!sku) continue;
-        const existing = await db.skuMaster.get(sku);
-        const storeName = str(pickCell(row, cm.store));
-        const store = storeName ? await getOrCreateShopByName(storeName) : (existing?.store || selectedShopId || "-");
-        const name = str(pickCell(row, cm.name)) || sku;
-        const asin = str(pickCell(row, cm.asin));
-
-        // 更新/创建 SkuMaster
-        if (existing) {
-          const updates: Partial<SkuMaster> = {};
-          if (store) updates.store = store;
-          if (name && name !== sku) updates.name = name;
-          if (asin) updates.asin = asin;
-          if (Object.keys(updates).length > 0) {
-            await db.skuMaster.put({ ...existing, ...updates });
-            skuUpdated++;
-          }
-        } else {
-          const master: SkuMaster = {
-            sku,
-            name,
-            store,
-            price: 0,
-            saleStatus: "active",
-            fulfillment: "FBM",
-            asin: asin || undefined,
-          };
-          await db.skuMaster.put(master);
-          skuCreated++;
-        }
-
-        // 评分/评论数/退款率/退货率/ACoAS
-        const rating = num(pickCell(row, cm.rating));
-        const reviewCount = num(pickCell(row, cm.reviewCount));
-        const adRatio = num(pickCell(row, cm.adRatio));
-        const returnRate = num(pickCell(row, cm.returnRate));
-        const refundRate = num(pickCell(row, cm.refundRate));
-
-        const prevSnapshot = await db.dailySnapshot.where({ sku }).reverse().first();
-        const snap: Omit<DailySnapshot, "id"> = {
-          date: today,
-          sku,
-          dailySales7d: 0,
-          monthlySales: 0,
-          stockOnHand: prevSnapshot?.stockOnHand ?? 0,
-          stockInTransit: prevSnapshot?.stockInTransit ?? 0,
-          daysOfCoverOnHand: Infinity,
-          daysOfCoverWithTransit: Infinity,
-          adSpend: prevSnapshot?.adSpend ?? 0,
-          adRatio: adRatio || (prevSnapshot?.adRatio ?? 0),
-          profit: prevSnapshot?.profit ?? 0,
-          profitMargin: prevSnapshot?.profitMargin ?? 0,
-          totalCost: prevSnapshot?.totalCost ?? 0,
-          rating: rating || (prevSnapshot?.rating ?? 0),
-          reviewCount: reviewCount > 0 ? reviewCount : prevSnapshot?.reviewCount,
-          returnRate: returnRate || (prevSnapshot?.returnRate ?? 0),
-          refundRate: refundRate > 0 ? refundRate : prevSnapshot?.refundRate,
-        };
-        snapshots.push(snap);
-      }
-
-      await upsertSnapshots(snapshots);
       const parts = [];
       if (skuCreated > 0) parts.push(`新建SKU ${skuCreated} 个`);
       if (skuUpdated > 0) parts.push(`更新SKU ${skuUpdated} 个`);
@@ -577,27 +527,15 @@ export default function ImportPage() {
     try {
       const rows = await parseExcelFile(file);
       const today = new Date().toISOString().slice(0, 10);
-      const cm = buildColumnMap(["sku", "asin", "fbaStock"], headersOf(rows));
-      if (!cm.sku && !cm.asin) {
-        setImportMsg({ tone: "err", msg: "未识别到 SKU 或 ASIN 列，已阻断导入。FBA库存明细以 ASIN 为口径匹配。" });
+      const cm = buildColumnMap(["sku", "fbaStock"], headersOf(rows));
+      if (!cm.sku) {
+        setImportMsg({ tone: "err", msg: "未识别到 SKU 列，已阻断导入。请检查表头（SKU / 产品SKU / SKU码 均可识别）。" });
         setImporting(null);
         return;
       }
-      // ASIN → SKU 查找表
-      const asinToSkuMap = new Map<string, string>();
-      if (cm.asin && !cm.sku) {
-        const allSkus = await db.skuMaster.toArray();
-        for (const s of allSkus) {
-          if (s.asin) asinToSkuMap.set(s.asin, s.sku);
-        }
-      }
       const layers: Omit<InventoryLayer, "id">[] = [];
       for (const row of rows) {
-        let sku = cm.sku ? str(pickCell(row, cm.sku)) : "";
-        if (!sku && cm.asin) {
-          const asinVal = str(pickCell(row, cm.asin));
-          sku = asinToSkuMap.get(asinVal) ?? "";
-        }
+        const sku = str(pickCell(row, cm.sku));
         if (!sku) continue;
         const existing = await db.inventoryLayer.where({ sku, date: today }).first();
         layers.push({
@@ -827,7 +765,7 @@ export default function ImportPage() {
     setImporting("shipping");
     try {
       const rows = await parseExcelFile(file);
-      const cm = buildColumnMap(["sku", "msku", "shipping", "delivery"], headersOf(rows));
+      const cm = buildColumnMap(["sku", "shipping", "delivery"], headersOf(rows));
       if (!cm.sku) {
         setImportMsg({ tone: "err", msg: "未识别到 SKU 列，已阻断导入。请检查表头（SKU / 产品SKU / SKU码 均可识别）。" });
         setImporting(null);
@@ -843,10 +781,8 @@ export default function ImportPage() {
         const updates: Partial<SkuMaster> = {};
         const shipping = num(pickCell(row, cm.shipping));
         const delivery = num(pickCell(row, cm.delivery));
-        const mskuVal = cm.msku ? str(pickCell(row, cm.msku)) : "";
         if (shipping > 0) updates.costShipping = shipping;
         if (delivery > 0) updates.costDelivery = delivery;
-        if (mskuVal) updates.msku = mskuVal;
 
         if (Object.keys(updates).length > 0) {
           await db.skuMaster.put({ ...master, ...updates });
@@ -1220,8 +1156,8 @@ export default function ImportPage() {
               },
               {
                 icon: "ri-bar-chart-line",
-                title: "2. 周销量（每周一）",
-                body: "从 Amazon 后台导出近7天日均销量和近30天销量，导入即可。系统会自动创建新的日期快照，上周数据不会覆盖——Dashboard 自动算本周 vs 上周的环比变化。模板已含 MSKU/评分/评论数/广告费比/退货率/退款率列，按 MSKU 行填写可展示各变体独立指标和自然/广告订单占比。",
+                title: "2. 周销量（每周一，合并原运营数据导入）",
+                body: "从 Amazon 后台导出近7天日均销量和近30天销量，导入即可。系统会自动创建新的日期快照，上周数据不会覆盖——Dashboard 自动算本周 vs 上周的环比变化。模板已含 ASIN/品名/MSKU/店铺/评分/评论数/广告费比/退货率/退款率/产品链接/竞品链接，按 MSKU 行填写可展示各变体独立指标和自然/广告订单占比；不写 SKU 时可直接以 ASIN 或 MSKU 匹配；品名/店铺/链接等信息会自动写入 SKU 主档（已存在则仅补空），竞品链接多个用换行分隔。",
               },
               {
                 icon: "ri-archive-line",
@@ -1269,7 +1205,7 @@ export default function ImportPage() {
               <li><strong>周一上午：</strong>依次导入「周销量」「FBA 库存明细」「仓库明细」「在途明细」（各点一次上传即可）</li>
               <li><strong>周销量模板已含 MSKU 级指标：</strong>同一 SKU 的不同 MSKU 各占一行，填写各自的评分/广告费比/退货率/退款率，系统自动按 MSKU 独立存储，不再串用</li>
               <li><strong>每月初或头程变动时：</strong>导入「头程更新」；FOB 变动请在「SKU 标识符」表里更新</li>
-              <li><strong>产品链接/竞品链接：</strong>在「SKU 标识符」或「运营数据导入」表中填写，竞品链接多个用换行分隔，导入后 SKU 详情页可点击跳转</li>
+              <li><strong>产品链接/竞品链接：</strong>在「SKU 标识符」或「周销量」表中填写，竞品链接多个用换行分隔，导入后 SKU 详情页可点击跳转</li>
               <li><strong>促销报名后：</strong>去「促销运营中心」添加促销活动并录入成本，促销时间线自动生成</li>
               <li><strong>日常：</strong>打开 Dashboard 看今天需要处理的事，风险中心看异常，发货决策中心看补货建议</li>
               <li><strong>需要备份：</strong>在下方 GitHub 配置里点「保存到 GitHub 云端」</li>
@@ -1286,7 +1222,20 @@ export default function ImportPage() {
             icon="ri-file-excel-2-line"
             subtitle="包含「仓库明细」「在途明细」「工厂明细」三个 Sheet，一次性导入全量数据"
           >
-            <div className="flex flex-col items-center rounded-[14px] border-2 border-dashed border-background-300/80 bg-background-100/50 px-6 py-10 text-center">
+            <div
+              className="flex flex-col items-center rounded-[14px] border-2 border-dashed border-background-300/80 bg-background-100/50 px-6 py-10 text-center transition-colors hover:border-primary-400 hover:bg-primary-50/30"
+              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-primary-500", "bg-primary-50/50"); }}
+              onDragLeave={(e) => { e.currentTarget.classList.remove("border-primary-500", "bg-primary-50/50"); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.currentTarget.classList.remove("border-primary-500", "bg-primary-50/50");
+                const f = e.dataTransfer.files?.[0];
+                if (f) {
+                  setPendingFile(f);
+                  setModeModal(true);
+                }
+              }}
+            >
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-100 text-[26px] text-primary-700">
                 <i className="ri-upload-cloud-2-line" aria-hidden />
               </div>
@@ -1417,23 +1366,21 @@ export default function ImportPage() {
             activeTab,
             activeTab === "sales"
               ? handleSalesImport
-              : activeTab === "operation_data"
-                ? handleOperationDataImport
-                : activeTab === "fba"
-                ? handleFbaImport
-                : activeTab === "warehouse"
-                  ? handleWarehouseImport
-                  : activeTab === "transit_detail"
-                    ? handleTransitDetailImport
-                    : activeTab === "factory"
-                      ? handleFactoryImport
-                      : activeTab === "shipping"
-                        ? handleShippingImport
-                        : handleIdentifiersImport,
+              : activeTab === "fba"
+              ? handleFbaImport
+              : activeTab === "warehouse"
+                ? handleWarehouseImport
+                : activeTab === "transit_detail"
+                  ? handleTransitDetailImport
+                  : activeTab === "factory"
+                    ? handleFactoryImport
+                    : activeTab === "shipping"
+                      ? handleShippingImport
+                      : handleIdentifiersImport,
             `上传${currentTab.label} Excel`
           )}
 
-          {activeTab === "sales" || activeTab === "operation_data" && (
+          {activeTab === "sales" && (
             <div className="mt-3 rounded-lg bg-background-100/60 p-3 text-[12px] text-foreground-600">
               <i className="ri-information-line mr-1 text-accent-600" aria-hidden />
               每次导入会创建新的日期快照，历史数据不会覆盖。Dashboard 会自动显示本周 vs 上周的环比变化。
