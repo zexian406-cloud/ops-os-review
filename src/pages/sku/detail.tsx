@@ -230,6 +230,19 @@ export default function SkuDetail() {
     const updated = { ...todo, completed: true, completedAt: new Date().toISOString() };
     await db.todos.put(updated);
     setRelatedTodos((prev) => prev.filter((t) => t.id !== todo.id));
+    // 完成待办 → 自动生成操作记录
+    if (todo.relatedSku || skuId) {
+      const id = await addOpsLog(
+        todo.relatedSku || skuId!,
+        todayStr,
+        "其他",
+        todo.content,
+        undefined,
+        todo.relatedMsku || (focusMsku || undefined),
+        sku?.name,
+      );
+      setOpsLogs((prev) => [{ id, sku: todo.relatedSku || skuId!, msku: todo.relatedMsku || focusMsku || undefined, skuName: sku?.name, date: todayStr, action: "其他", detail: todo.content, createdAt: new Date().toISOString() }, ...prev]);
+    }
   };
 
   // ── 三个可编辑区域的状态 ──

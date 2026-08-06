@@ -441,6 +441,7 @@ export interface TodoItem {
   id: string;
   content: string;             // 必填，文字
   relatedSku?: string;         // 选填，关联SKU
+  relatedMsku?: string;        // 选填，关联MSKU（子链接）
   dueDate?: string;             // 选填，截止日 YYYY-MM-DD
   completed: boolean;           // 完成状态
   createdAt: string;            // 创建时间

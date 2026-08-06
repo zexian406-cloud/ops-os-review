@@ -1,22 +1,38 @@
 import { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { db } from "@/domain/db";
+import { db, addOpsLog } from "@/domain/db";
 import { useOpsData } from "@/domain/store";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import PageLayoutCustomizer from "@/components/layout/PageLayoutCustomizer";
 import { usePageLayout } from "@/hooks/usePageLayout";
-import type { TodoItem } from "@/domain/types";
+import type { TodoItem, SkuMaster } from "@/domain/types";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const todayStr = () => new Date().toISOString().slice(0, 10);
+
+/** 获取某 SKU 下所有 MSKU 选项（从 msku 字段拆分 + mskuMetrics 键） */
+function getMskuOptions(sku?: SkuMaster): string[] {
+  if (!sku) return [];
+  const set = new Set<string>();
+  if (sku.msku) {
+    for (const t of sku.msku.split(/[,\s，、·]+/).map((s) => s.trim()).filter(Boolean)) {
+      set.add(t);
+    }
+  }
+  if (sku.mskuMetrics) {
+    for (const k of Object.keys(sku.mskuMetrics)) set.add(k);
+  }
+  return Array.from(set);
+}
 
 export default function TodoPage() {
   const { skuMaster } = useOpsData();
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [newContent, setNewContent] = useState("");
   const [newSku, setNewSku] = useState("");
+  const [newMsku, setNewMsku] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -31,6 +47,13 @@ export default function TodoPage() {
 
   useEffect(() => { loadTodos(); }, []);
 
+  // 选中 SKU 的对象，用于获取 MSKU 列表
+  const selectedSkuObj = useMemo(
+    () => skuMaster.find((s) => s.sku === newSku),
+    [skuMaster, newSku],
+  );
+  const mskuOptions = useMemo(() => getMskuOptions(selectedSkuObj), [selectedSkuObj]);
+
   const addTodo = async () => {
     const content = newContent.trim();
     if (!content) return;
@@ -38,24 +61,44 @@ export default function TodoPage() {
       id: uid(),
       content,
       relatedSku: newSku || undefined,
+      relatedMsku: newMsku || undefined,
       dueDate: newDueDate || undefined,
       completed: false,
       createdAt: new Date().toISOString(),
     };
     await db.todos.put(item);
-    setNewContent(""); setNewSku(""); setNewDueDate("");
+    setNewContent(""); setNewSku(""); setNewMsku(""); setNewDueDate("");
     setToast({ msg: "已添加待办", ok: true });
     setTimeout(() => setToast(null), 2000);
     loadTodos();
   };
 
   const toggleTodo = async (item: TodoItem) => {
+    const nowIso = new Date().toISOString();
+    const wasCompleted = item.completed;
     const updated: TodoItem = {
       ...item,
-      completed: !item.completed,
-      completedAt: !item.completed ? new Date().toISOString() : undefined,
+      completed: !wasCompleted,
+      completedAt: !wasCompleted ? nowIso : undefined,
     };
     await db.todos.put(updated);
+
+    // 完成待办时 → 自动生成一条操作记录
+    if (!wasCompleted && item.relatedSku) {
+      const skuObj = skuMaster.find((s) => s.sku === item.relatedSku);
+      await addOpsLog(
+        item.relatedSku,
+        todayStr(),
+        "其他",
+        item.content,
+        undefined,
+        item.relatedMsku || undefined,
+        skuObj?.name,
+      );
+      setToast({ msg: "待办已完成，已自动记录到操作记录", ok: true });
+      setTimeout(() => setToast(null), 2500);
+    }
+
     loadTodos();
   };
 
@@ -82,7 +125,7 @@ export default function TodoPage() {
           <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-primary-700">My Tasks</div>
           <h1 className="font-heading text-[26px] font-bold text-foreground-950">我的待办</h1>
           <p className="text-[13px] text-foreground-500">
-            {incompleteCount} 个未完成 · {completedCount} 个已完成 · 轻量记录，不做项目管理
+            {incompleteCount} 个未完成 · {completedCount} 个已完成 · 完成待办自动归档到操作记录
           </p>
         </div>
         <button
@@ -123,12 +166,12 @@ export default function TodoPage() {
               onKeyDown={(e) => { if (e.key === "Enter") addTodo(); }}
             />
           </div>
-          <div className="w-40">
+          <div className="w-44">
             <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-500">关联 SKU (选填)</label>
             <select
               className={inputCls + " cursor-pointer"}
               value={newSku}
-              onChange={(e) => setNewSku(e.target.value)}
+              onChange={(e) => { setNewSku(e.target.value); setNewMsku(""); }}
             >
               <option value="">不关联</option>
               {skuMaster.map((s) => (
@@ -136,6 +179,21 @@ export default function TodoPage() {
               ))}
             </select>
           </div>
+          {mskuOptions.length > 0 && (
+            <div className="w-40">
+              <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-500">关联 MSKU (选填)</label>
+              <select
+                className={inputCls + " cursor-pointer"}
+                value={newMsku}
+                onChange={(e) => setNewMsku(e.target.value)}
+              >
+                <option value="">不指定</option>
+                {mskuOptions.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="w-36">
             <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-500">截止日 (选填)</label>
             <input
@@ -195,12 +253,17 @@ export default function TodoPage() {
                     <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-foreground-500">
                       {item.relatedSku && (
                         <Link
-                          to={`/sku/${encodeURIComponent(item.relatedSku)}`}
+                          to={`/sku/${encodeURIComponent(item.relatedSku)}${item.relatedMsku ? `?focus=${encodeURIComponent(item.relatedMsku)}` : ""}`}
                           className="rounded bg-secondary-100 px-1.5 py-0.5 text-secondary-800 hover:bg-secondary-200 cursor-pointer font-medium whitespace-nowrap"
                         >
                           <i className="ri-price-tag-3-line mr-0.5" aria-hidden />
                           {item.relatedSku}
                         </Link>
+                      )}
+                      {item.relatedMsku && (
+                        <span className="rounded bg-primary-50 px-1.5 py-0.5 text-primary-700 font-medium whitespace-nowrap">
+                          MSKU: {item.relatedMsku}
+                        </span>
                       )}
                       {item.dueDate && (
                         <span className={isOverdue ? "text-red-600 font-medium" : ""}>
