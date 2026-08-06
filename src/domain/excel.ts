@@ -1,4 +1,5 @@
 // SECURITY: xlsx 0.18.5 存在原型污染和 ReDoS 漏洞，仅用于本地 Excel 解析，输入来自用户上传文件，建议后续评估替换为 exceljs
+// build-trigger: force fresh Cloudflare build to include recordMskuPrice/mskuMetrics
 import * as XLSX from "xlsx";
 import type { SkuMaster, DailySnapshot, InventoryLayer, TransitBatch, FactoryBatch } from "./types";
 import { buildColumnMap, headersOf, matchColumn, pickCell } from "./columnMatcher";
