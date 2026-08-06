@@ -993,10 +993,21 @@ export default function SkuDetail() {
               </div>
               <span className="text-[13px] font-semibold text-foreground-900">销售总价</span>
               <span className="ml-auto flex flex-col items-end leading-tight">
-                <span className="mono-num text-[13px] font-bold text-foreground-950">${(sku.listPrice ?? sku.price).toFixed(2)}</span>
-                {sku.listPrice != null && sku.listPrice > sku.price && (
-                  <span className="mono-num text-[10px] text-foreground-400">${sku.price.toFixed(2)} + ${(sku.listPrice - sku.price).toFixed(2)}</span>
-                )}
+                {(() => {
+                  // FIX: focus=MSKU 时优先使用 mskuMetrics 中该 MSKU 自身的售价/运费/销售总价
+                  const mPrice = focusMetric?.price ?? sku.price;
+                  const mListPrice = focusMetric?.listPrice ?? sku.listPrice;
+                  const mShipping = focusMetric?.shippingFee ?? ((mListPrice != null && mPrice != null) ? (mListPrice - mPrice) : 0);
+                  const displayTotal = mListPrice ?? mPrice;
+                  return (
+                    <>
+                      <span className="mono-num text-[13px] font-bold text-foreground-950">${displayTotal.toFixed(2)}</span>
+                      {mShipping > 0 && (
+                        <span className="mono-num text-[10px] text-foreground-400">${mPrice.toFixed(2)} + ${mShipping.toFixed(2)}</span>
+                      )}
+                    </>
+                  );
+                })()}
               </span>
             </div>
             <div className="space-y-1 text-[13px]">

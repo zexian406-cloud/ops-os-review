@@ -72,6 +72,9 @@ groupSku?: string;           // 所属父SKU分组，空/未设置表示自己�
     refundRate?: number;
     sales7d?: number;
     sales30d?: number;
+    price?: number;
+    shippingFee?: number;
+    listPrice?: number;
   }>;
   listPrice?: number;          // List Price
   coupon?: number;             // 优惠券金额

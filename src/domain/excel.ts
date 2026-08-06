@@ -171,6 +171,8 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
         };
         // 父行 MSKU 也按行保留店铺（多 MSKU 场景各店铺不同）
         recordMskuStore(rec, msku, store);
+        // FIX: 父行 MSKU 也记录售价/运费/销售总价，展开子项时各 MSKU 显示自身价格
+        recordMskuPrice(rec, msku, price, shippingFee, listPrice);
         skuMaster.push(rec);
       } else {
         // 再次出现（同一「SKU」系列下的多变体行）→ 合并进首条记录，绝不另建独立主键。
@@ -184,6 +186,8 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
           }
           // 各 MSKU 独立店铺：按行保留到 mskuStores（首次出现为准）
           recordMskuStore(existing, msku, store);
+          // FIX: 各 MSKU 独立售价/运费/销售总价：按行保留到 mskuMetrics（首次出现为准）
+          recordMskuPrice(existing, msku, price, shippingFee, listPrice);
           // 父级 store 回填：首行店铺为空/占位（'-'）时，用后续行的店铺补齐
           if ((!existing.store || existing.store === "-") && store && store !== "-") {
             existing.store = store;
@@ -357,15 +361,17 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
         };
       }
     }
-    // FIX: 按 sku 取平均值生成快照（多 MSKU 的差异化指标取平均，而非只保留最后一条）
-    const avgArr = (arr: number[]) => arr.length > 0 ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+    // FIX: 销量(绝对值)取总和，比率类指标取平均。
+    //   之前 sales7d/sales30d 用 avgArr 会让多 MSKU 的 SKU 月销变小(看起来像日销)。
+    //   修正：dailySales7d = 各 MSKU 日均之和(SKU 总日均)，monthlySales = 各 MSKU 月销之和(SKU 总月销)。
+    const sumArr = (arr: number[]) => arr.length > 0 ? arr.reduce((s, v) => s + v, 0) : 0;
     const avgNonZero = (arr: number[]) => {
       const nonZero = arr.filter((v) => v > 0);
       return nonZero.length > 0 ? nonZero.reduce((s, v) => s + v, 0) / nonZero.length : 0;
     };
     for (const [sku, agg] of skuAgg) {
-      const daily7d = avgArr(agg.sales7d);
-      const monthlyTotal = avgArr(agg.sales30d);
+      const daily7d = sumArr(agg.sales7d);
+      const monthlyTotal = sumArr(agg.sales30d);
       const monthlyDaily = monthlyTotal > 0 ? Math.round((monthlyTotal / 30) * 100) / 100 : 0;
       const rating = avgNonZero(agg.rating);
       const reviewCount = avgNonZero(agg.reviewCount);
@@ -626,6 +632,31 @@ export function recordMskuStore(existing: SkuMaster, mskuRaw: string | undefined
     if (t === existing.sku) continue; // 家族码本身不算 MSKU 变体
     if (!existing.mskuStores) existing.mskuStores = {};
     if (!(t in existing.mskuStores)) existing.mskuStores[t] = storeVal; // first-wins
+  }
+}
+
+/**
+ * 把某行的 MSKU 对应的售价/运费/销售总价记录到父记录的 mskuMetrics。
+ * 这样展开 MSKU 子项时能展示各 MSKU 自身的销售总价，而非共用父级。
+ * first-wins：同一 MSKU 重复出现时首次值为准。
+ */
+export function recordMskuPrice(
+  existing: SkuMaster,
+  mskuRaw: string | undefined,
+  priceVal: number,
+  shippingFeeVal: number,
+  listPriceVal: number | undefined,
+): void {
+  if (!mskuRaw) return;
+  const tokens = mskuRaw.split(/[,\s，、·]+/).map((t) => t.trim()).filter(Boolean);
+  for (const t of tokens) {
+    if (t === existing.sku) continue;
+    if (!existing.mskuMetrics) existing.mskuMetrics = {};
+    if (!existing.mskuMetrics[t]) existing.mskuMetrics[t] = {};
+    const m = existing.mskuMetrics[t];
+    if (m.price == null && priceVal != null) m.price = priceVal;
+    if (m.shippingFee == null && shippingFeeVal != null) m.shippingFee = shippingFeeVal;
+    if (m.listPrice == null && listPriceVal != null) m.listPrice = listPriceVal;
   }
 }
 

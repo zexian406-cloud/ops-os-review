@@ -526,8 +526,8 @@ export function guessRegion(warehouseName: string): import("./types").WarehouseR
   const name = warehouseName.toLowerCase();
   // 美东关键词
   if (/美东|east|nj|newjersey|新泽西|njf|njjw/.test(name)) return "east";
-  // 美西关键词
-  if (/美西|west|ca[^a-z]|cali|洛杉矶|cajw|cap /.test(name)) return "west";
+  // 美西关键词（\bcap\b 匹配独立单词 cap，兼容 "乐歌(新) CAP" 这类无尾随空格的仓库名）
+  if (/美西|west|ca[^a-z]|cali|洛杉矶|cajw|\bcap\b/.test(name)) return "west";
   // 东南关键词
   if (/东南|southeast|sav|savannah|萨凡纳/.test(name)) return "southeast";
   // 中南关键词

@@ -1151,13 +1151,13 @@ function SkuGroupCard({
         return sum + wh.total;
       }, 0);
 
-  // Monthly sales: for multi-link groups, show the main (first) link's monthly sales, not the sum
+  // FIX: 月销/7天日均均显示总销量(各 MSKU/子链接合计)，而非只取主链接。
+  //   虚拟组(父SKU msku逗号拼接)：所有虚拟MSKU回退到父快照，只计一次避免重复累加。
+  //   真实多子链接组：各子链接快照求和，得到 SKU 总月销/总日均。
   const mainChild = children[0];
   const totalMonthlySales = isVirtualGroup
     ? (resolveSnap(mainChild)?.monthlySales ?? 0)
-    : isMultiChild
-      ? (latestSnapshot.get(mainChild.sku)?.monthlySales ?? 0)
-      : children.reduce((sum, c) => sum + (resolveSnap(c)?.monthlySales ?? 0), 0);
+    : children.reduce((sum, c) => sum + (resolveSnap(c)?.monthlySales ?? 0), 0);
 
   const totalDailySales7d = isVirtualGroup
     ? (resolveSnap(mainChild)?.dailySales7d ?? 0)
@@ -1427,7 +1427,11 @@ function ChildRow({
     dailySales30d: mskuMetric.sales30d != null ? Math.round((mskuMetric.sales30d / 30) * 100) / 100 : snap.dailySales30d,
     monthlySales: mskuMetric.sales30d ?? snap.monthlySales,
   } : snap;
-  const { profit, margin, adRatio, returnRate, refundRate } = computeMskuProfit(child, mskuSnap, inv);
+  // FIX: 利润计算用 MSKU 自身售价（若有），否则回退到家族级 price
+  const childForCalc = mskuMetric?.price != null
+    ? { ...child, price: mskuMetric.price, listPrice: mskuMetric.listPrice ?? child.listPrice }
+    : child;
+  const { profit, margin, adRatio, returnRate, refundRate } = computeMskuProfit(childForCalc, mskuSnap, inv);
   // 成本全缺失 → 利润率失真（算成 100%），应标注「成本缺失」而非 0
   const costMissing = isCostFullyMissing(child);
   // 退货率/退款率底层数据缺失 → 标注「缺失」而非误导性的 0%
@@ -1538,14 +1542,25 @@ function ChildRow({
       </td>
       <td className="px-3 py-2 border-b border-background-200/40 text-right whitespace-nowrap">
         <div className="flex flex-col items-end leading-tight">
-          <span className="mono-num font-semibold text-foreground-900">
-            ${(child.listPrice ?? child.price).toFixed(2)}
-          </span>
-          {child.listPrice != null && child.listPrice > child.price && (
-            <span className="mono-num text-[10px] text-foreground-400">
-              ${child.price.toFixed(2)} + ${(child.listPrice - child.price).toFixed(2)}
-            </span>
-          )}
+          {(() => {
+            // FIX: 优先使用 mskuMetrics 中该 MSKU 自身的售价/运费/销售总价
+            const mPrice = mskuMetric?.price ?? child.price;
+            const mListPrice = mskuMetric?.listPrice ?? child.listPrice;
+            const mShipping = mskuMetric?.shippingFee ?? ((mListPrice != null && mPrice != null) ? (mListPrice - mPrice) : 0);
+            const displayTotal = mListPrice ?? mPrice;
+            return (
+              <>
+                <span className="mono-num font-semibold text-foreground-900">
+                  ${displayTotal.toFixed(2)}
+                </span>
+                {mShipping > 0 && (
+                  <span className="mono-num text-[10px] text-foreground-400">
+                    ${mPrice.toFixed(2)} + ${mShipping.toFixed(2)}
+                  </span>
+                )}
+              </>
+            );
+          })()}
         </div>
       </td>
       <td className="px-3 py-2 border-b border-background-200/40 text-right whitespace-nowrap">

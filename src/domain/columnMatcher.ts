@@ -72,7 +72,7 @@ export const SYNONYMS: Record<string, string[]> = {
   // ── 库存 / 仓库 ──
   fbaStock: ["FBA库存", "FBA在库", "fbaStock", "库存"],
   warehouse: ["仓库", "warehouse", "海外仓", "仓库名"],
-  qty: ["件数", "数量", "qty", "quantity"],
+  qty: ["件数", "数量", "qty", "quantity", "库存"],
   totalQty: ["下单总量", "总数量", "totalQty", "订单总量"],
 
   // ── 在途 / 工厂 ──
