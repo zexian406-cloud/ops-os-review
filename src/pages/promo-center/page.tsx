@@ -371,6 +371,8 @@ function ActivitySection(props: {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSkus, setBulkSkus] = useState<Set<string>>(new Set());
+  /** 批量模式下每个 SKU 的独立覆盖项（折扣价/MSKU），key = sku */
+  const [bulkOverrides, setBulkOverrides] = useState<Record<string, { discountPrice?: number; msku?: string }>>({});
 
   const stores = useMemo(() => {
     const shopMap = new Map(props.shops.map((s) => [s.id, s.name]));
@@ -453,6 +455,7 @@ function ActivitySection(props: {
       const rows: Promotion[] = [];
       for (const s of bulkSkus) {
         const sk = skuMap.get(s);
+        const ov = bulkOverrides[s] ?? {};
         rows.push({
           id: uid(),
           sku: s, skuName: sk?.name, store: sk?.store ?? "-",
@@ -461,8 +464,9 @@ function ActivitySection(props: {
           name: form.name?.trim() || `${form.type ?? "BD"} ${s}`,
           startDate: form.startDate!, endDate: form.endDate!,
           status: form.status ?? "upcoming", notes: form.notes,
-          msku: form.msku,
-          multiplier: form.multiplier, discountPrice: form.discountPrice,
+          msku: ov.msku,
+          multiplier: form.multiplier,
+          discountPrice: ov.discountPrice,
           costMode: form.costMode,
           amount: form.costMode === "amount" ? form.amount : undefined,
           rate: form.costMode === "rate" ? form.rate : undefined,
@@ -521,7 +525,14 @@ function ActivitySection(props: {
     else setSelected(new Set(filtered.map((p) => p.id)));
   };
   const toggleBulkSku = (sku: string) => {
-    setBulkSkus((prev) => { const n = new Set(prev); n.has(sku) ? n.delete(sku) : n.add(sku); return n; });
+    setBulkSkus((prev) => {
+      const n = new Set(prev); n.has(sku) ? n.delete(sku) : n.add(sku); return n;
+    });
+    setBulkOverrides((prev) => {
+      const n = { ...prev };
+      if (n[sku]) delete n[sku];
+      return n;
+    });
   };
 
   const statusCounts = useMemo(() => {
@@ -572,6 +583,69 @@ function ActivitySection(props: {
                     </label>
                   ))}
                 </div>
+                {/* 选中 SKU 的独立配置：每个 SKU 可单独填折扣价和选择 MSKU */}
+                {bulkSkus.size > 0 && (
+                  <div className="mt-3 rounded-lg border border-background-200/70 bg-background-50 p-3">
+                    <div className="mb-2 text-[12px] font-medium text-foreground-700">
+                      各 SKU 独立配置（折扣售价、MSKU 可不同）
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-[12px]">
+                        <thead>
+                          <tr className="border-b border-background-200 text-left text-[11px] text-foreground-500">
+                            <th className="py-1.5 pr-2 font-medium">SKU</th>
+                            <th className="py-1.5 pr-2 font-medium">原售价</th>
+                            <th className="py-1.5 pr-2 font-medium">折扣售价</th>
+                            <th className="py-1.5 pr-2 font-medium">MSKU</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Array.from(bulkSkus).map((s) => {
+                            const sk = skuMap.get(s);
+                            const ov = bulkOverrides[s] ?? {};
+                            const mskuKeys = sk?.mskuMetrics ? Object.keys(sk.mskuMetrics) : [];
+                            return (
+                              <tr key={s} className="border-b border-background-200/50">
+                                <td className="py-1.5 pr-2 font-medium text-foreground-800">{s}</td>
+                                <td className="py-1.5 pr-2 text-foreground-500">${sk?.price?.toFixed(2) ?? "-"}</td>
+                                <td className="py-1.5 pr-2">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="可选"
+                                    value={ov.discountPrice ?? ""}
+                                    onChange={(e) => {
+                                      const v = e.target.value ? Number(e.target.value) : undefined;
+                                      setBulkOverrides((prev) => ({ ...prev, [s]: { ...prev[s], discountPrice: v }}));
+                                    }}
+                                    className="w-24 rounded border border-background-300/70 bg-background-50 px-2 py-1 text-[12px] focus:border-primary-500 focus:outline-none"
+                                  />
+                                </td>
+                                <td className="py-1.5 pr-2">
+                                  {mskuKeys.length > 0 ? (
+                                    <select
+                                      value={ov.msku ?? ""}
+                                      onChange={(e) => {
+                                        const v = e.target.value || undefined;
+                                        setBulkOverrides((prev) => ({ ...prev, [s]: { ...prev[s], msku: v }}));
+                                      }}
+                                      className="rounded border border-background-300/70 bg-background-50 px-2 py-1 text-[11px] focus:border-primary-500 focus:outline-none cursor-pointer"
+                                    >
+                                      <option value="">全部</option>
+                                      {mskuKeys.map((m) => (<option key={m} value={m}>{m}</option>))}
+                                    </select>
+                                  ) : (
+                                    <span className="text-foreground-300">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
@@ -640,16 +714,18 @@ function ActivitySection(props: {
                   className="w-full rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] focus:border-primary-500 focus:outline-none"
                 />
               </div>
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-foreground-500">折扣售价 ($)</label>
-                <input
-                  type="number" step="0.01"
-                  value={form.discountPrice ?? ""}
-                  onChange={(e) => setForm({ ...form, discountPrice: Number(e.target.value) || undefined })}
-                  placeholder="19.99"
-                  className="w-full rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] focus:border-primary-500 focus:outline-none"
-                />
-              </div>
+              {!bulkMode && (
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-foreground-500">折扣售价 ($)</label>
+                  <input
+                    type="number" step="0.01"
+                    value={form.discountPrice ?? ""}
+                    onChange={(e) => setForm({ ...form, discountPrice: Number(e.target.value) || undefined })}
+                    placeholder="19.99"
+                    className="w-full rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] focus:border-primary-500 focus:outline-none"
+                  />
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-[11px] font-medium text-foreground-500">开始日期 <span className="text-red-500">*</span></label>
                 <input type="date" value={form.startDate ?? ""} onChange={(e) => setForm({ ...form, startDate: e.target.value })}
