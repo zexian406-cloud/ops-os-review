@@ -338,20 +338,25 @@ export function computeWarehouseTotals(inv?: InventoryLayer): {
   const seT = n(inv?.southeastTransit);
   const scT = n(inv?.southcentralTransit);
 
-  // FBA 区域库存 + FBM 仓库明细汇总
+  // ⚠️ 修复库存重复计算：四仓区域字段(eastStock等) 是通过 reapplyWarehouseMappings 从 warehouseBreakdown 映射出来的，
+  //    两者本质是同一批数据（仓库明细→映射→填充四仓字段），绝不能简单相加，否则会导致 746 → 1492 这样的翻倍错误。
+  //    计算规则（优先级从高到低）：
+  //    1. 有 warehouseBreakdown（仓库明细）→ 直接取其总和（明细最权威，包含了映射到四仓的 + 没映射的其他仓库）
+  //    2. 无 warehouseBreakdown 但有四仓区域字段 → 取四仓之和（FBA库存明细直接填区域的场景）
+  //    3. 两者都无但有 fbaStock 总数 → 取 fbaStock
+  //    4. 都没有 → 0
   const fbaRegionSum = eS + wS + seS + scS;
-  const fbmWarehouseSum = inv?.warehouseBreakdown
+  const fbmWarehouseSum = inv?.warehouseBreakdown?.length
     ? inv.warehouseBreakdown.reduce((s, wb) => s + n(wb.qty), 0)
     : 0;
 
-  let inStock = fbaRegionSum > 0 ? fbaRegionSum + fbmWarehouseSum : fbmWarehouseSum;
-  // 如果 FBA 区域字段没用但 fbaStock 有值，加进来
-  if (fbaRegionSum === 0 && n(inv?.fbaStock) > 0) {
-    inStock = n(inv?.fbaStock) + fbmWarehouseSum;
-  }
-  // 兜底：都没有但 warehouseBreakdown 有数据
-  if (inStock === 0 && inv?.warehouseBreakdown?.length) {
-    inStock = fbmWarehouseSum;
+  let inStock: number;
+  if (fbmWarehouseSum > 0) {
+    inStock = fbmWarehouseSum;  // 明细最权威，已包含映射的四仓和其他独立仓库
+  } else if (fbaRegionSum > 0) {
+    inStock = fbaRegionSum;     // 无明细时用四仓汇总
+  } else {
+    inStock = n(inv?.fbaStock); // 兜底：老数据只有 fbaStock 总数
   }
 
   const inTransit = eT + wT + seT + scT;
