@@ -475,17 +475,49 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       const dest = str(pickCell(row, c.dest));
       const warehouse = provider && dest ? `${provider}-${dest}` : provider || dest || "在途";
       const etaRaw = pickCell(row, c.etaDate);
-      // Excel 日期序列号（如 46233）转 YYYY-MM-DD
-      let etaDate: string;
+      // FIX: 增强预计到仓日期解析，支持用户实际表格的多种格式：
+      //   1. Excel日期序列号：46233 → 2026-08-15
+      //   2. 标准格式：2026-08-15 / 2026/8/15 / 8-15 / 8/15
+      //   3. 件数+日期+状态："56-7/27到港" → 提取 7/27 → 2026-07-27
+      //   4. 中文日期："7月27到港" → 2026-07-27
+      //   5. 多行单元格：逐行扫描取第一个可解析的合法日期
+      let etaDate = "";
+      const parseOne = (raw: string): string => {
+        const s = raw.trim();
+        if (!s) return "";
+        // 2026-08-15 / 2026/8/15
+        const m1 = s.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+        if (m1) {
+          const d = new Date(`${m1[1]}-${String(+m1[2]).padStart(2, "0")}-${String(+m1[3]).padStart(2, "0")}T00:00:00`);
+          if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+        }
+        // 8-15 / 8/15 / 7月27日 / 7月27
+        const m2 = s.match(/(?:^|[^\d])(\d{1,2})[-/.月](\d{1,2})(?:日|号)?/);
+        if (m2) {
+          const mm = String(+m2[1]).padStart(2, "0");
+          const dd = String(+m2[2]).padStart(2, "0");
+          const y = new Date().getFullYear();
+          const d = new Date(`${y}-${mm}-${dd}T00:00:00`);
+          if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+        }
+        return "";
+      };
       if (typeof etaRaw === "number" && etaRaw > 0) {
         const d = new Date(Date.UTC(1899, 11, 30 + Math.floor(etaRaw)));
         etaDate = d.toISOString().slice(0, 10);
       } else {
-        etaDate = str(etaRaw);
-      }
-      if (etaDate && !/^\d{4}-\d{2}-\d{2}$/.test(etaDate)) {
-        const t = new Date(etaDate + "T00:00:00");
-        etaDate = isNaN(t.getTime()) ? "" : t.toISOString().slice(0, 10);
+        const text = str(etaRaw);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+          etaDate = text;
+        } else {
+          // 按换行切分，逐行尝试；无换行时作为整体尝试
+          const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+          for (const line of lines) {
+            const p = parseOne(line);
+            if (p) { etaDate = p; break; }
+          }
+          if (!etaDate) etaDate = parseOne(text);
+        }
       }
       const statusTextVal = str(pickCell(row, c.statusText));
       const batch: TransitBatch = {
