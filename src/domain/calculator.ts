@@ -156,14 +156,14 @@ export function computeTotalCost(
   }
 
   // 退货费(costReturn)：仅用于诊断查看的退货率(returnRate=costReturn/售价)，不再计入成本
+  // ⚠️ 仅用导入的 returnRate 反推，绝不 fallback 到 refundRate！
+  //    之前混用 refundRate 反推 costReturn → computeReturnRate(ret,price) 又反推出 returnRate，
+  //    导致退货率和退款率显示值完全一致，两个指标失去区分意义。
   let ret = n(sku.costReturn);
   let isReturnInferred = false;
-  if (ret === 0 && snap && price > 0) {
-    const rate = snap.refundRate && snap.refundRate > 0 ? snap.refundRate : snap.returnRate;
-    if (rate > 0) {
-      ret = (rate / 100) * price;
-      isReturnInferred = true;
-    }
+  if (ret === 0 && snap && price > 0 && snap.returnRate && snap.returnRate > 0) {
+    ret = (snap.returnRate / 100) * price;
+    isReturnInferred = true;
   }
 
   // 退货损失（计入总成本）：退款率 × 售价，对所有履约方式生效（FBA 也用上传的 refundRate，不再强制 0）
@@ -245,18 +245,14 @@ export function computeDiscountTotalCost(
   }
 
   // 折扣退货费(costReturn/discountReturn)：仅用于诊断查看的退货率，不再计入成本
+  // ⚠️ 仅用导入的 returnRate 反推，绝不 fallback 到 refundRate！避免两个指标显示值完全一致
   let ret: number;
   let isReturnInferred = false;
   if (sku.discountReturn != null) {
     ret = n(sku.discountReturn);
-  } else if (snap && (snap.refundRate || snap.returnRate)) {
-    const rate = snap.refundRate && snap.refundRate > 0 ? snap.refundRate : snap.returnRate;
-    if (rate > 0) {
-      ret = (rate / 100) * dp;
-      isReturnInferred = true;
-    } else {
-      ret = nd.ret;
-    }
+  } else if (snap && snap.returnRate && snap.returnRate > 0) {
+    ret = (snap.returnRate / 100) * dp;
+    isReturnInferred = true;
   } else if (sku.price > 0 && nd.ret > 0 && dp !== sku.price) {
     ret = nd.ret * (dp / sku.price);
     isReturnInferred = true;
