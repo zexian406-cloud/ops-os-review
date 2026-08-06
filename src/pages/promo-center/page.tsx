@@ -423,10 +423,17 @@ function ActivitySection(props: {
   }, [form.costMode, form.sku, form.rate, skuMap, snapMap]);
 
   const submit = async () => {
-    // 批量模式：SKU 由勾选框提供，不校验 form.sku；单条模式：必须填 form.sku
-    const skuOk = bulkMode ? bulkSkus.size > 0 : !!form.sku;
-    if (!skuOk || !form.name || !form.startDate || !form.endDate) {
-      flash(bulkMode ? "请至少勾选一个 SKU，并填写活动名称 / 开始日期 / 结束日期" : "请填写 SKU / 活动名称 / 开始日期 / 结束日期");
+    // 逐项校验，明确提示缺失字段
+    const missing: string[] = [];
+    if (bulkMode) {
+      if (bulkSkus.size === 0) missing.push("至少勾选一个 SKU");
+    } else {
+      if (!form.sku) missing.push("SKU");
+    }
+    if (!form.startDate) missing.push("开始日期");
+    if (!form.endDate) missing.push("结束日期");
+    if (missing.length > 0) {
+      flash(`请填写：${missing.join("、")}`);
       return;
     }
     const sku = skuMap.get(form.sku);
@@ -451,7 +458,8 @@ function ActivitySection(props: {
           sku: s, skuName: sk?.name, store: sk?.store ?? "-",
           type: form.type ?? "BD",
           customTypeName: form.type === "custom" ? form.customTypeName : undefined,
-          name: form.name!, startDate: form.startDate!, endDate: form.endDate!,
+          name: form.name?.trim() || `${form.type ?? "BD"} ${s}`,
+          startDate: form.startDate!, endDate: form.endDate!,
           status: form.status ?? "upcoming", notes: form.notes,
           msku: form.msku,
           multiplier: form.multiplier, discountPrice: form.discountPrice,
@@ -471,7 +479,7 @@ function ActivitySection(props: {
         sku: form.sku!, skuName: sku?.name, store: sku?.store ?? "-",
         type: form.type ?? "BD",
         customTypeName: form.type === "custom" ? form.customTypeName : undefined,
-        name: form.name!, startDate: form.startDate!, endDate: form.endDate!,
+        name: form.name?.trim() || `${form.type ?? "BD"} ${form.sku}`, startDate: form.startDate!, endDate: form.endDate!,
         status: form.status ?? "upcoming", notes: form.notes,
         msku: form.msku,
         multiplier: form.multiplier, discountPrice: form.discountPrice,
@@ -570,7 +578,7 @@ function ActivitySection(props: {
             <div className={`${bulkMode ? "mt-4" : ""} grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7`}>
               {!bulkMode && (
                 <div>
-                  <label className="mb-1 block text-[11px] font-medium text-foreground-500">SKU</label>
+                  <label className="mb-1 block text-[11px] font-medium text-foreground-500">SKU <span className="text-red-500">*</span></label>
                   <select
                     value={form.sku ?? ""}
                     onChange={(e) => {
@@ -643,12 +651,12 @@ function ActivitySection(props: {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-foreground-500">开始日期</label>
+                <label className="mb-1 block text-[11px] font-medium text-foreground-500">开始日期 <span className="text-red-500">*</span></label>
                 <input type="date" value={form.startDate ?? ""} onChange={(e) => setForm({ ...form, startDate: e.target.value })}
                   className="w-full rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] focus:border-primary-500 focus:outline-none" />
               </div>
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-foreground-500">结束日期</label>
+                <label className="mb-1 block text-[11px] font-medium text-foreground-500">结束日期 <span className="text-red-500">*</span></label>
                 <input type="date" value={form.endDate ?? ""} onChange={(e) => setForm({ ...form, endDate: e.target.value })}
                   className="w-full rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] focus:border-primary-500 focus:outline-none" />
               </div>
@@ -1204,12 +1212,12 @@ function CostSection(props: {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-foreground-500">开始日期</label>
+                <label className="mb-1 block text-[11px] font-medium text-foreground-500">开始日期 <span className="text-red-500">*</span></label>
                 <input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })}
                   className="w-full rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] focus:border-primary-500 focus:outline-none" />
               </div>
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-foreground-500">结束日期</label>
+                <label className="mb-1 block text-[11px] font-medium text-foreground-500">结束日期 <span className="text-red-500">*</span></label>
                 <input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })}
                   className="w-full rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] focus:border-primary-500 focus:outline-none" />
               </div>
