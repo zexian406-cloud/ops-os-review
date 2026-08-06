@@ -116,8 +116,18 @@ export default function SkuDetail() {
   // 优先使用 merged 快照（同日多来源导入已合并），避免取到运营导入的 0 值原始记录
   const latest = focusedSnap ?? history.at(-1);
   const prevSnap = (previousSnapshot?.get(skuId ?? "") ?? (parentSkuId ? previousSnapshot?.get(parentSkuId) : undefined));
-  const skuPromos = useMemo(() => promotions.filter((p) => p.sku === skuId), [promotions, skuId]);
-  const skuManualPromos = useMemo(() => manualPromotions.filter((p) => p.sku === skuId), [manualPromotions, skuId]);
+  // 促销活动：按 SKU 过滤；focus=MSKU 时优先匹配带 msku 的促销，无 msku 的促销对所有 MSKU 生效
+  const skuPromos = useMemo(() => {
+    const all = promotions.filter((p) => p.sku === skuId);
+    if (!focusMsku) return all;
+    // focus=MSKU：先找带该 msku 的促销，再加上无 msku 限制的促销（适用所有子链接）
+    return all.filter((p) => !p.msku || p.msku === focusMsku);
+  }, [promotions, skuId, focusMsku]);
+  const skuManualPromos = useMemo(() => {
+    const all = manualPromotions.filter((p) => p.sku === skuId);
+    if (!focusMsku) return all;
+    return all.filter((p) => !p.msku || p.msku === focusMsku);
+  }, [manualPromotions, skuId, focusMsku]);
 
   // Weekly promo cost for current SKU
   const weekPromoCost = useMemo(() => {
@@ -1071,7 +1081,7 @@ export default function SkuDetail() {
                 <div className="my-1.5 h-px bg-background-200/50" />
                 <ProfitRow label="折扣费比" value={`${latest ? latest.adRatio.toFixed(1) : "0"}%`} />
                 <ProfitRow label="折扣广告费(估)" value={`$${discountAdEstimated.toFixed(2)}`} />
-                <ProfitRow label="折扣退款率" value={`${(calcReturnRate ?? 0).toFixed(1)}%`} />
+                <ProfitRow label="折扣退款率" value={`${(calcRefundRate ?? 0).toFixed(1)}%`} />
                 <ProfitRow label="折扣退款费(估)" value={`$${discountReturnFeeEstimated.toFixed(2)}`} />
               </div>
             ) : (
@@ -1122,6 +1132,7 @@ export default function SkuDetail() {
                 <thead>
                   <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground-500">
                     <th className="border-b border-background-200 px-2 py-2">类型</th>
+                    <th className="border-b border-background-200 px-2 py-2">MSKU</th>
                     <th className="border-b border-background-200 px-2 py-2">名称</th>
                     <th className="border-b border-background-200 px-2 py-2">开始</th>
                     <th className="border-b border-background-200 px-2 py-2">结束</th>
@@ -1138,6 +1149,9 @@ export default function SkuDetail() {
                       <tr key={p.id}>
                         <td className="border-b border-background-200/70 px-2 py-2">
                           <Badge tone={p.type === "BD" ? "primary" : p.type === "LD" ? "danger" : p.type === "7DD" ? "warn" : "accent"}>{p.type}</Badge>
+                        </td>
+                        <td className="border-b border-background-200/70 px-2 py-2 text-[11px] text-foreground-600">
+                          {p.msku ? <span className="rounded bg-primary-100 px-1.5 py-0.5 text-primary-700">{p.msku}</span> : <span className="text-foreground-300">全部</span>}
                         </td>
                         <td className="border-b border-background-200/70 px-2 py-2 font-medium text-foreground-900">{p.name}</td>
                         <td className="mono-num border-b border-background-200/70 px-2 py-2 text-[12px]">

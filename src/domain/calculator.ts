@@ -484,9 +484,9 @@ export function computeAll(params: {
   const adRatio = computeAdRatio(normal.detail.ad, sku.price);
   const discountAdRatio = discountPrice ? computeAdRatio(discount.detail.ad, discountPrice) : 0;
 
-  // Step 6: 退货率(returnRate = costReturn/售价) — 仅用于诊断异常查看，不再计入成本
-  const returnRate = computeReturnRate(normal.detail.ret, sku.price);
-  const discountReturnRate = discountPrice ? computeReturnRate(discount.detail.ret, discountPrice) : 0;
+  // Step 6: 退货率 — 优先用导入的 returnRate，避免从 costReturn 反推时 fallback 到 refundRate 导致两者一致
+  const returnRate = snap?.returnRate ?? computeReturnRate(normal.detail.ret, sku.price);
+  const discountReturnRate = snap?.returnRate ?? (discountPrice ? computeReturnRate(discount.detail.ret, discountPrice) : 0);
 
   // 退款率(refundRate)：对所有履约方式生效（FBA 也使用上传的 refundRate，不再强制 0）
   const refundRate = snap?.refundRate ?? 0;
