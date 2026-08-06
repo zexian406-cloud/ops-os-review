@@ -423,12 +423,10 @@ function ActivitySection(props: {
   }, [form.costMode, form.sku, form.rate, skuMap, snapMap]);
 
   const submit = async () => {
-    if (!form.sku || !form.name || !form.startDate || !form.endDate) {
-      flash("请填写 SKU / 活动名称 / 开始日期 / 结束日期");
-      return;
-    }
-    if (bulkMode && bulkSkus.size === 0 && !editingId) {
-      flash("请至少勾选一个 SKU");
+    // 批量模式：SKU 由勾选框提供，不校验 form.sku；单条模式：必须填 form.sku
+    const skuOk = bulkMode ? bulkSkus.size > 0 : !!form.sku;
+    if (!skuOk || !form.name || !form.startDate || !form.endDate) {
+      flash(bulkMode ? "请至少勾选一个 SKU，并填写活动名称 / 开始日期 / 结束日期" : "请填写 SKU / 活动名称 / 开始日期 / 结束日期");
       return;
     }
     const sku = skuMap.get(form.sku);
@@ -440,6 +438,7 @@ function ActivitySection(props: {
           skuName: sku?.name ?? existing.skuName,
           store: sku?.store ?? existing.store,
           customTypeName: form.type === "custom" ? form.customTypeName : undefined,
+          msku: form.msku,
         } as Promotion);
         flash("活动已更新");
       }
@@ -454,6 +453,7 @@ function ActivitySection(props: {
           customTypeName: form.type === "custom" ? form.customTypeName : undefined,
           name: form.name!, startDate: form.startDate!, endDate: form.endDate!,
           status: form.status ?? "upcoming", notes: form.notes,
+          msku: form.msku,
           multiplier: form.multiplier, discountPrice: form.discountPrice,
           costMode: form.costMode,
           amount: form.costMode === "amount" ? form.amount : undefined,
@@ -473,6 +473,7 @@ function ActivitySection(props: {
         customTypeName: form.type === "custom" ? form.customTypeName : undefined,
         name: form.name!, startDate: form.startDate!, endDate: form.endDate!,
         status: form.status ?? "upcoming", notes: form.notes,
+        msku: form.msku,
         multiplier: form.multiplier, discountPrice: form.discountPrice,
         costMode: form.costMode,
         amount: form.costMode === "amount" ? form.amount : undefined,
@@ -574,13 +575,34 @@ function ActivitySection(props: {
                     value={form.sku ?? ""}
                     onChange={(e) => {
                       const s = skus.find((k) => k.sku === e.target.value);
-                      setForm({ ...form, sku: e.target.value, skuName: s?.name, store: s?.store });
+                      setForm({ ...form, sku: e.target.value, skuName: s?.name, store: s?.store, msku: undefined });
                     }}
                     className="w-full rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] focus:border-primary-500 focus:outline-none cursor-pointer"
                   >
                     <option value="">选择 SKU</option>
                     {skus.map((s) => (<option key={s.sku} value={s.sku}>{s.sku} — {s.name}</option>))}
                   </select>
+                  {/* MSKU 子链接选择：仅当选中的 SKU 有 mskuMetrics 时显示 */}
+                  {(() => {
+                    const sku = skus.find((k) => k.sku === form.sku);
+                    const mskuKeys = sku?.mskuMetrics ? Object.keys(sku.mskuMetrics) : [];
+                    if (mskuKeys.length === 0) return null;
+                    return (
+                      <div className="mt-1">
+                        <label className="block text-[10px] font-medium text-foreground-500">MSKU (可选，针对子链接促销)</label>
+                        <select
+                          value={form.msku ?? ""}
+                          onChange={(e) => setForm({ ...form, msku: e.target.value || undefined })}
+                          className="w-full rounded-md border border-background-300/70 bg-background-50 px-2 py-1 text-[11px] focus:border-primary-500 focus:outline-none cursor-pointer"
+                        >
+                          <option value="">全部 (父 SKU)</option>
+                          {mskuKeys.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
               <div>
@@ -779,6 +801,7 @@ function ActivitySection(props: {
                       className="h-3.5 w-3.5 rounded accent-primary-500 cursor-pointer" />
                   </th>
                   <th className="border-b border-background-200 px-2 py-2.5">SKU</th>
+                  <th className="border-b border-background-200 px-2 py-2.5">MSKU</th>
                   <th className="border-b border-background-200 px-2 py-2.5">品名</th>
                   <th className="border-b border-background-200 px-2 py-2.5">类型</th>
                   <th className="border-b border-background-200 px-2 py-2.5">名称</th>
@@ -811,6 +834,9 @@ function ActivitySection(props: {
                       </td>
                       <td className="mono-num border-b border-background-200/70 px-2 py-1.5 text-[11px] text-foreground-600">
                         <Link to={`/sku/${encodeURIComponent(p.sku)}`} className="hover:text-primary-700 hover:underline cursor-pointer">{p.sku}</Link>
+                      </td>
+                      <td className="border-b border-background-200/70 px-2 py-1.5 text-[11px] text-foreground-600">
+                        {p.msku ? <span className="rounded bg-primary-100 px-1.5 py-0.5 text-primary-700">{p.msku}</span> : <span className="text-foreground-300">—</span>}
                       </td>
                       <td className="border-b border-background-200/70 px-2 py-1.5 font-medium text-foreground-900">{p.skuName}</td>
                       <td className="border-b border-background-200/70 px-2 py-1.5">

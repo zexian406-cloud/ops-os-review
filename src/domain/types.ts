@@ -205,6 +205,8 @@ export interface Promotion {
   id: string;
   sku: string;
   skuName?: string;
+  /** 子链接 MSKU：促销针对特定 MSKU（如跟卖链接）而非父 SKU 时填写 */
+  msku?: string;
   store: string;
   type: PromotionType;
   /** 自定义类型名称：type=custom 时必填，其他类型忽略 */

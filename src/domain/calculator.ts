@@ -656,8 +656,14 @@ export function getEffectivePromoCost(
     return promo.amount;
   }
   if (promo.costMode === "rate" && promo.rate != null && promo.rate > 0) {
-    const price = sku?.price ?? 0;
-    const dailySales = snap?.dailySales7d ?? 0;
+    // 若促销指定了 MSKU，优先使用 mskuMetrics 中的 price 和 sales
+    let price = sku?.price ?? 0;
+    let dailySales = snap?.dailySales7d ?? 0;
+    if (promo.msku && sku?.mskuMetrics?.[promo.msku]) {
+      const m = sku.mskuMetrics[promo.msku];
+      if (m.price != null) price = m.price;
+      if (m.sales7d != null) dailySales = m.sales7d;
+    }
     const weeklySales = dailySales * 7;
     if (weeklySales > 0 && price > 0) {
       return Number(((promo.rate / 100) * price * weeklySales).toFixed(2));
