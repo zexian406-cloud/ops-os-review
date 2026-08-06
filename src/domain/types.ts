@@ -330,7 +330,7 @@ export interface WarehouseStock {
 export interface TransitBatch {
   warehouse: string;           // 物流商-目的仓，如"无忧达-美东南"
   qty: number;
-  etaDate: string;               // 预计到仓日期 YYYY-MM-DD
+  etaDate: string;               // 预计到仓（保留原始文本，支持多行/中文/件数前缀等格式）
   shipDate?: string;             // 出港日期
   pickupDate?: string;           // 提柜日期
   arrivalDate?: string;          // 到港/卸船日期
@@ -344,7 +344,7 @@ export interface FactoryBatch {
   factoryName: string;
   qty: number;                   // 当前工厂在产/库存数量
   totalQty?: number;             // 该批次下单总量
-  deliveryDate: string;          // 交期 YYYY-MM-DD
+  deliveryDate: string;          // 交期（保留原始文本）
   status: "producing" | "ready" | "shipped";
 }
 

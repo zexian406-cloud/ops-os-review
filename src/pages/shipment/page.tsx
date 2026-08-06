@@ -537,7 +537,7 @@ function ExpandableRow({ icon, label, qty, tag, tagClass, detailRows }: {
 
 function transitBatchTag(batch: TransitBatch): string {
   if (batch.statusText) return batch.statusText;
-  if (batch.etaDate) { const d = new Date(batch.etaDate); return `${d.getMonth() + 1}/${d.getDate()}到仓`; }
+  if (batch.etaDate) return batch.etaDate;
   return `${batch.qty}`;
 }
 function transitBatchTagClass(batch: TransitBatch): string {
@@ -548,4 +548,4 @@ function transitBatchTagClass(batch: TransitBatch): string {
   }
   return "rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-600";
 }
-function fmtShortDate(iso: string): string { const d = new Date(iso); return `${d.getMonth() + 1}.${d.getDate()}`; }
+function fmtShortDate(iso: string): string { return iso || ""; }
