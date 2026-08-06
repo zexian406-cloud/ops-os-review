@@ -76,7 +76,8 @@ groupSku?: string;           // 所属父SKU分组，空/未设置表示自己�
     shippingFee?: number;
     listPrice?: number;
   }>;
-  listPrice?: number;          // List Price
+  shippingFee?: number;        // 运费
+  listPrice?: number;          // List Price（销售总价 = price + shippingFee）
   coupon?: number;             // 优惠券金额
   packageLength?: number;      // 包裹长 cm
   packageWidth?: number;       // 包裹宽 cm

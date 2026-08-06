@@ -302,6 +302,28 @@ export default function SkuDetail() {
     }
   }, [editSku, reload]);
 
+  // ── 盈利分析编辑 ──
+  const [editProfit, setEditProfit] = useState(false);
+  const [profitEdit, setProfitEdit] = useState<SkuMaster | null>(null);
+  const [profitSaving, setProfitSaving] = useState(false);
+  const [profitMsg, setProfitMsg] = useState<string | null>(null);
+  const profitInputCls = "w-full rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] text-foreground-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200";
+
+  const saveProfitEdit = useCallback(async () => {
+    if (!profitEdit) return;
+    setProfitSaving(true);
+    setProfitMsg(null);
+    try {
+      await db.skuMaster.put(profitEdit);
+      setProfitMsg("已保存，刷新中...");
+      setTimeout(() => { setProfitMsg(null); setEditProfit(false); reload(); }, 600);
+    } catch (err) {
+      setProfitMsg(`保存失败: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setProfitSaving(false);
+    }
+  }, [profitEdit, reload]);
+
   // 费率（广告费比/退款率）改动 → 立即联动重算总成本/利润/利润率并写入 IndexedDB（无需点保存）
   const commitRateEdit = useCallback(async (field: "adRatio" | "refundRate", value: number) => {
     if (!curSnap) return;
@@ -1000,13 +1022,24 @@ export default function SkuDetail() {
 
       {/* ═══════ 3. 盈利分析 ═══════ */}
       {visibleKeys.includes("profitAnalysis") && (
-      <Section title="盈利分析" icon="ri-funds-box-line" subtitle="正常售价 vs 折扣售价 · 全部成本一目了然">
-        {costMissing && (
-          <div className="mb-3 rounded-[12px] border border-secondary-200 bg-secondary-50/60 px-3.5 py-2.5 text-[12px] text-foreground-600">
-            <i className="ri-information-line text-secondary-700 mr-1" aria-hidden />
-            成本字段（FOB/头程/配送/佣金/仓储/广告/退货费）全部缺失，利润率与退货率无法计算，当前显示「成本缺失 / 缺失」为占位、非真实值。要得真实利润率与退货率，请在 SKU 主档或「SKU 标识符」导入中补全成本：退货率需填 costReturn，FBM 退款率需在「运营数据」导入带退款率列。
-          </div>
-        )}
+      <Section title="盈利分析" icon="ri-funds-box-line" subtitle="正常售价 vs 折扣售价 · 全部可编辑">
+        {/* 编辑切换 */}
+        <div className="mb-3 flex items-center justify-between">
+          {costMissing && (
+            <div className="flex-1 mr-3 rounded-[12px] border border-secondary-200 bg-secondary-50/60 px-3.5 py-2.5 text-[12px] text-foreground-600">
+              <i className="ri-information-line text-secondary-700 mr-1" aria-hidden />
+              成本字段全部缺失，利润率与退货率无法计算。点击右侧「编辑」可手动填写成本。
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => { setEditProfit(!editProfit); if (!editProfit && editSku) setProfitEdit({ ...editSku }); }}
+            className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold cursor-pointer transition-colors whitespace-nowrap ${editProfit ? "bg-primary-500 text-background-50" : "border border-background-200 text-foreground-500 hover:text-primary-700"}`}
+          >
+            <i className={editProfit ? "ri-close-line" : "ri-edit-line"} aria-hidden />
+            {editProfit ? "退出编辑" : "编辑"}
+          </button>
+        </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* ── 正常盈利 ── */}
           <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
@@ -1017,46 +1050,108 @@ export default function SkuDetail() {
               <span className="text-[13px] font-semibold text-foreground-900">销售总价</span>
               <span className="ml-auto flex flex-col items-end leading-tight">
                 {(() => {
-                  // FIX: focus=MSKU 时优先使用 mskuMetrics 中该 MSKU 自身的售价/运费/销售总价
-                  const mPrice = focusMetric?.price ?? sku.price;
-                  const mListPrice = focusMetric?.listPrice ?? sku.listPrice;
-                  const mShipping = focusMetric?.shippingFee ?? ((mListPrice != null && mPrice != null) ? (mListPrice - mPrice) : 0);
+                  const mPrice = editProfit ? (profitEdit?.price ?? 0) : (focusMetric?.price ?? sku.price);
+                  const mShipping = editProfit ? (profitEdit?.shippingFee ?? 0) : (focusMetric?.shippingFee ?? ((focusMetric?.listPrice ?? sku.listPrice) != null && mPrice != null) ? ((focusMetric?.listPrice ?? sku.listPrice)! - mPrice) : (sku.shippingFee ?? 0));
+                  const mListPrice = editProfit ? (profitEdit?.listPrice ?? (mPrice + mShipping)) : (focusMetric?.listPrice ?? sku.listPrice ?? mPrice);
                   const displayTotal = mListPrice ?? mPrice;
                   return (
                     <>
                       <span className="mono-num text-[13px] font-bold text-foreground-950">${displayTotal.toFixed(2)}</span>
-                      {mShipping > 0 && (
-                        <span className="mono-num text-[10px] text-foreground-400">${mPrice.toFixed(2)} + ${mShipping.toFixed(2)}</span>
-                      )}
+                      <span className="mono-num text-[10px] text-foreground-400">${mPrice.toFixed(2)} + ${mShipping.toFixed(2)}</span>
                     </>
                   );
                 })()}
               </span>
             </div>
-            <div className="space-y-1 text-[13px]">
-              <ProfitRow label="售价" value={`$${sku.price.toFixed(2)}`} highlight />
-              <div className="my-1.5 h-px bg-background-200/50" />
-              <ProfitRow label="FOB" value={`-$${(sku.costFob ?? 0).toFixed(2)}`} />
-              <ProfitRow label="头程" value={`-$${(sku.costShipping ?? 0).toFixed(2)}`} />
-              <ProfitRow label="尾程(配送费)" value={`-$${(sku.costDelivery ?? 0).toFixed(2)}`} />
-              <ProfitRow label="佣金" value={`-$${costCommission.toFixed(2)}`} inferred={isCommissionInferred} />
-              <ProfitRow label="仓租" value={`-$${(sku.costStorage ?? 0).toFixed(2)}`} />
-              <ProfitRow label="广告费" value={`-$${costAd.toFixed(2)}`} inferred={isAdInferred} />
-              <ProfitRow label="退货损失" value={`-$${costRefundLoss.toFixed(2)}`} />
-              {costCoupon > 0 && <ProfitRow label="优惠券(历史)" value={`($${costCoupon.toFixed(2)})`} />}
-              {costPromo > 0 && <ProfitRow label="促销成本(手动)" value={`-$${costPromo.toFixed(2)}`} />}
-              {weekPromoCost.count > 0 && (
-                <div className="text-[11px] text-accent-600 italic text-right">{weekPromoCost.count} 条促销 · 含促销 ${costPromo.toFixed(2)}</div>
-              )}
-              <div className="my-1.5 h-px bg-background-200/50" />
-              <ProfitRow label="总成本" value={`$${totalCost.toFixed(2)}`} bold />
-              <ProfitRow label="单件净利" value={`$${grossProfit.toFixed(2)}`} bold tone={grossProfit < 0 ? "text-red-600" : "text-accent-700"} />
-              <ProfitRow label="净利率" value={costMissing ? "成本缺失" : `${grossMargin.toFixed(1)}%`} bold tone={costMissing ? "text-foreground-400" : (grossMargin < 0 ? "text-red-600" : grossMargin < 5 ? "text-secondary-700" : "text-accent-700")} />
-              <div className="my-1.5 h-px bg-background-200/50" />
-              <ProfitRow label="广告费比" value={`${latest ? latest.adRatio.toFixed(1) : "0"}%`} />
-              <ProfitRow label="退货率" value={costMissing ? "缺失" : `${calcReturnRate.toFixed(1)}%`} />
-              <ProfitRow label="退款率" value={refundMissing ? "缺失" : `${calcRefundRate.toFixed(1)}%`} />
-            </div>
+
+            {editProfit && profitEdit ? (
+              /* ── 编辑模式 ── */
+              <div className="space-y-2">
+                {/* 售价/运费/总价 */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="mb-0.5 block text-[11px] font-medium text-foreground-500">售价 $</label>
+                    <input type="number" step="0.01" className={profitInputCls} value={profitEdit.price} onChange={(e) => {
+                      const p = Number(e.target.value);
+                      setProfitEdit({ ...profitEdit, price: p, listPrice: p + (profitEdit.shippingFee ?? 0) });
+                    }} />
+                  </div>
+                  <div>
+                    <label className="mb-0.5 block text-[11px] font-medium text-foreground-500">运费 $</label>
+                    <input type="number" step="0.01" className={profitInputCls} value={profitEdit.shippingFee ?? 0} onChange={(e) => {
+                      const s = Number(e.target.value);
+                      setProfitEdit({ ...profitEdit, shippingFee: s, listPrice: (profitEdit.price ?? 0) + s });
+                    }} />
+                  </div>
+                  <div>
+                    <label className="mb-0.5 block text-[11px] font-medium text-foreground-500">销售总价 $</label>
+                    <input type="number" step="0.01" className={profitInputCls + " bg-primary-50 font-semibold"} value={profitEdit.listPrice ?? (profitEdit.price + (profitEdit.shippingFee ?? 0))} onChange={(e) => setProfitEdit({ ...profitEdit, listPrice: Number(e.target.value) })} />
+                  </div>
+                </div>
+                <div className="my-1 h-px bg-background-200/50" />
+                {/* 成本字段 */}
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { k: "costFob" as const, l: "FOB $" },
+                    { k: "costShipping" as const, l: "头程 $" },
+                    { k: "costDelivery" as const, l: "尾程(配送) $" },
+                    { k: "costCommission" as const, l: "佣金 $" },
+                    { k: "costStorage" as const, l: "仓租 $" },
+                    { k: "costReturn" as const, l: "退货费 $" },
+                    { k: "costAd" as const, l: "广告费 $" },
+                    { k: "coupon" as const, l: "优惠券 $" },
+                  ]).map(({ k, l }) => (
+                    <div key={k}>
+                      <label className="mb-0.5 block text-[11px] font-medium text-foreground-500">{l}</label>
+                      <input type="number" step="0.01" className={profitInputCls} value={profitEdit[k] ?? 0} onChange={(e) => setProfitEdit({ ...profitEdit, [k]: Number(e.target.value) })} />
+                    </div>
+                  ))}
+                </div>
+                <div className="my-1 h-px bg-background-200/50" />
+                {/* 佣金率 */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="mb-0.5 block text-[11px] font-medium text-foreground-500">佣金率 %</label>
+                    <input type="number" step="0.1" className={profitInputCls} value={profitEdit.commissionRate ?? 15} onChange={(e) => setProfitEdit({ ...profitEdit, commissionRate: Number(e.target.value) })} />
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <button type="button" onClick={saveProfitEdit} disabled={profitSaving} className="inline-flex items-center gap-1.5 rounded-md bg-primary-500 px-4 py-2 text-[13px] font-semibold text-background-50 hover:bg-primary-600 disabled:opacity-60 cursor-pointer whitespace-nowrap">
+                    <i className={profitSaving ? "ri-loader-4-line animate-spin" : "ri-save-line"} aria-hidden />
+                    {profitSaving ? "保存中..." : "保存"}
+                  </button>
+                  {profitMsg && <span className={`text-[12px] ${profitMsg.includes("失败") ? "text-red-600" : "text-accent-700"}`}>{profitMsg}</span>}
+                </div>
+              </div>
+            ) : (
+              /* ── 只读模式 ── */
+              <div className="space-y-1 text-[13px]">
+                <ProfitRow label="售价" value={`$${sku.price.toFixed(2)}`} highlight />
+                <ProfitRow label="运费" value={`$${(focusMetric?.shippingFee ?? sku.shippingFee ?? 0).toFixed(2)}`} />
+                <ProfitRow label="销售总价" value={`$${(focusMetric?.listPrice ?? sku.listPrice ?? sku.price).toFixed(2)}`} highlight />
+                <div className="my-1.5 h-px bg-background-200/50" />
+                <ProfitRow label="FOB" value={`-$${(sku.costFob ?? 0).toFixed(2)}`} />
+                <ProfitRow label="头程" value={`-$${(sku.costShipping ?? 0).toFixed(2)}`} />
+                <ProfitRow label="尾程(配送费)" value={`-$${(sku.costDelivery ?? 0).toFixed(2)}`} />
+                <ProfitRow label="佣金" value={`-$${costCommission.toFixed(2)}`} inferred={isCommissionInferred} />
+                <ProfitRow label="仓租" value={`-$${(sku.costStorage ?? 0).toFixed(2)}`} />
+                <ProfitRow label="广告费" value={`-$${costAd.toFixed(2)}`} inferred={isAdInferred} />
+                <ProfitRow label="退货损失" value={`-$${costRefundLoss.toFixed(2)}`} />
+                {costCoupon > 0 && <ProfitRow label="优惠券(历史)" value={`($${costCoupon.toFixed(2)})`} />}
+                {costPromo > 0 && <ProfitRow label="促销成本(手动)" value={`-$${costPromo.toFixed(2)}`} />}
+                {weekPromoCost.count > 0 && (
+                  <div className="text-[11px] text-accent-600 italic text-right">{weekPromoCost.count} 条促销 · 含促销 ${costPromo.toFixed(2)}</div>
+                )}
+                <div className="my-1.5 h-px bg-background-200/50" />
+                <ProfitRow label="总成本" value={`$${totalCost.toFixed(2)}`} bold />
+                <ProfitRow label="单件净利" value={`$${grossProfit.toFixed(2)}`} bold tone={grossProfit < 0 ? "text-red-600" : "text-accent-700"} />
+                <ProfitRow label="净利率" value={costMissing ? "成本缺失" : `${grossMargin.toFixed(1)}%`} bold tone={costMissing ? "text-foreground-400" : (grossMargin < 0 ? "text-red-600" : grossMargin < 5 ? "text-secondary-700" : "text-accent-700")} />
+                <div className="my-1.5 h-px bg-background-200/50" />
+                <ProfitRow label="广告费比" value={`${latest ? latest.adRatio.toFixed(1) : "0"}%`} />
+                <ProfitRow label="退货率" value={costMissing ? "缺失" : `${calcReturnRate.toFixed(1)}%`} />
+                <ProfitRow label="退款率" value={refundMissing ? "缺失" : `${calcRefundRate.toFixed(1)}%`} />
+              </div>
+            )}
           </div>
 
           {/* ── 折扣盈利 ── */}
@@ -1420,7 +1515,14 @@ export default function SkuDetail() {
                     <input type="date" className={inputCls} value={editSku.launchDate ?? ""} onChange={(e) => updateEditSku({ launchDate: e.target.value })} />
                   </div>
                   <div>
-                    <label className={labelCls}>销售总价</label>
+                    <label className={labelCls}>运费 $</label>
+                    <input type="number" step="0.01" className={inputCls} value={editSku.shippingFee ?? ""} onChange={(e) => {
+                      const s = Number(e.target.value);
+                      updateEditSku({ shippingFee: s, listPrice: (editSku.price ?? 0) + s });
+                    }} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>销售总价 $</label>
                     <input type="number" step="0.01" className={inputCls} value={editSku.listPrice ?? ""} onChange={(e) => updateEditSku({ listPrice: Number(e.target.value) })} />
                   </div>
                   <div>
@@ -1464,7 +1566,8 @@ export default function SkuDetail() {
                 <InfoRow label="生命周期" value={sku.lifecycle ? lifecycleLabel[sku.lifecycle] : "-"} />
                 <InfoRow label="品类" value={sku.category ?? "-"} />
                 <InfoRow label="上架日期" value={sku.launchDate ?? "-"} />
-                <InfoRow label="销售总价" value={sku.listPrice != null ? `$${sku.listPrice.toFixed(2)}` : "-"} />
+                <InfoRow label="运费" value={sku.shippingFee != null ? `$${sku.shippingFee.toFixed(2)}` : "-"} />
+                <InfoRow label="销售总价" value={sku.listPrice != null ? `$${sku.listPrice.toFixed(2)}` : `$${sku.price.toFixed(2)}`} />
                 <InfoRow label="优惠券" value={sku.coupon != null ? `$${sku.coupon.toFixed(2)}` : "-"} />
               </div>
             )}
