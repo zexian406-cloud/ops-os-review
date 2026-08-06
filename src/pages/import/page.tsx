@@ -1,8 +1,10 @@
-﻿import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import * as XLSX from "xlsx";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
+import HealthReport from "@/components/health/HealthReport";
 import { parseOperationExcel, type ImportResult } from "@/domain/excel";
+import { validateImportData, type ValidationResult } from "@/domain/data-health";
 import { buildColumnMap, headersOf, matchColumn, pickCell } from "@/domain/columnMatcher";
 import { applyIncrementalCostUpdate } from "@/domain/cost-merge";
 import {
@@ -13,6 +15,7 @@ import {
   getAllShops,
   getOrCreateShopByName,
   setCloudConfig,
+  setLatestHealthReport,
   upsertSkuMaster,
   upsertInventoryLayers,
   upsertSnapshots,
@@ -167,6 +170,14 @@ export default function ImportPage() {
   const [modeModal, setModeModal] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
+  /* 数据健康报告（写入 IndexedDB 前的安检，必须由用户「确认并继续」） */
+  const [healthReport, setHealthReport] = useState<ValidationResult | null>(null);
+  const [pendingImport, setPendingImport] = useState<{
+    parsed: ImportResult;
+    validation: ValidationResult;
+  } | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
   const [cloud, setCloud] = useState<CloudConfig | null>(null);
   const [cloudSaving, setCloudSaving] = useState(false);
   const [cloudMsg, setCloudMsg] = useState<{ tone: "ok" | "err"; msg: string } | null>(null);
@@ -248,11 +259,37 @@ export default function ImportPage() {
         return;
       }
 
+      // ── 数据健康校验（写入 IndexedDB 之前） ──
+      // 按 9 条规则逐行校验：错误→跳过 / 警告→自动修正 / 提示→标记
+      // 校验通过后弹出「数据健康报告」面板，用户必须点「确认并继续」才写入
+      const validation = validateImportData(parsed);
+      setHealthReport(validation);
+      setPendingImport({ parsed, validation });
+      setParsing(false);
+      // 不直接写入，等待用户确认
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setParsing(false);
+    }
+  };
+
+  /* ────────── 用户点击「确认并继续」→ 实际写入 IndexedDB ────────── */
+  const confirmImport = async () => {
+    if (!pendingImport) return;
+    const { parsed, validation } = pendingImport;
+    setConfirming(true);
+    setError(null);
+    try {
+      // 使用校验后的有效数据（已自动修正警告项，已过滤错误行）
+      const validSkuMaster = validation.validRows.skuMaster;
+      const validSnapshots = validation.validRows.dailySnapshot;
+      const validInventory = validation.validRows.inventoryLayer;
+
       // ── 店铺联动：综合运营表导入时把「店铺」列自动同步到店铺管理 ──
       // parseOperationExcel 是同步函数，店铺名还是原始字符串，这里统一解析成 shop id
       // （getOrCreateShopByName 会按名查找，不存在则自动创建，与另外两个导入入口一致）
       const storeNameToId = new Map<string, string>();
-      for (const m of parsed.skuMaster) {
+      for (const m of validSkuMaster) {
         const name = (m.store || "").trim();
         // 跳过空值、占位符、以及已经是 shop_xxx id 的情况（避免重复建店铺）
         if (!name || name === "-" || name.startsWith("shop_")) continue;
@@ -261,11 +298,11 @@ export default function ImportPage() {
         }
       }
       if (storeNameToId.size > 0) {
-        parsed.skuMaster = parsed.skuMaster.map((m) => {
-          const name = (m.store || "").trim();
+        for (let i = 0; i < validSkuMaster.length; i++) {
+          const name = (validSkuMaster[i].store || "").trim();
           const id = storeNameToId.get(name);
-          return id ? { ...m, store: id } : m;
-        });
+          if (id) validSkuMaster[i] = { ...validSkuMaster[i], store: id };
+        }
       }
 
       // ── 合并批次数据到 inventoryLayer ──
@@ -273,7 +310,7 @@ export default function ImportPage() {
 
       // 获取仓库映射并自动猜测未映射的仓库
       const regionMap = await getWarehouseRegionMap();
-      for (const layer of parsed.inventoryLayer) {
+      for (const layer of validInventory) {
         if (layer.warehouseBreakdown) {
           for (const wb of layer.warehouseBreakdown) {
             if (!regionMap.has(wb.warehouse)) {
@@ -287,7 +324,7 @@ export default function ImportPage() {
         }
       }
 
-      const mergedLayers = parsed.inventoryLayer.map((layer) => {
+      const mergedLayers = validInventory.map((layer) => {
         const tb = parsed.transitBatches.get(layer.sku);
         const fb = parsed.factoryBatches.get(layer.sku);
         // 按区域汇总在库库存
@@ -314,8 +351,8 @@ export default function ImportPage() {
         };
       });
 
-      // 补充只有批次没有库存的 SKU
-      const coveredSkus = new Set(parsed.inventoryLayer.map((l) => l.sku));
+      // 补充只有批次没有库存的 SKU（仅在未被校验过滤的情况下保留批次数据）
+      const coveredSkus = new Set(validInventory.map((l) => l.sku));
       const allBatchSkus = new Set([...parsed.transitBatches.keys(), ...parsed.factoryBatches.keys()]);
       for (const sku of allBatchSkus) {
         if (!coveredSkus.has(sku)) {
@@ -342,25 +379,45 @@ export default function ImportPage() {
       }
 
       // 保存 SKU 主档
-      if (parsed.skuMaster.length > 0) {
-        await upsertSkuMaster(parsed.skuMaster);
+      if (validSkuMaster.length > 0) {
+        await upsertSkuMaster(validSkuMaster);
       }
       // 增量成本更新：单表「头程更新」场景，skuMaster 为空，
       // 需按 SKU 回写现有 skuMaster 的 costShipping/costDelivery（见 cost-merge.ts）
-      if (parsed.skuMaster.length === 0 && parsed.shippingMap.size > 0) {
+      if (validSkuMaster.length === 0 && parsed.shippingMap.size > 0) {
         await applyIncrementalCostUpdate(parsed.shippingMap);
       }
       // 保存销量快照
-      if (parsed.dailySnapshot.length > 0) {
-        await upsertSnapshots(parsed.dailySnapshot);
+      if (validSnapshots.length > 0) {
+        await upsertSnapshots(validSnapshots);
       }
       // 保存分仓库存
       await upsertInventoryLayers(mergedLayers);
+
+      // 保存数据健康报告（供「数据健康」页查看最近一次导入结果）
+      await setLatestHealthReport(validation);
+
+      // 更新展示结果为实际入库的有效数据
+      setResult({
+        ...parsed,
+        skuMaster: validSkuMaster,
+        dailySnapshot: validSnapshots,
+        inventoryLayer: validInventory,
+      });
+      setHealthReport(null);
+      setPendingImport(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setParsing(false);
+      setConfirming(false);
     }
+  };
+
+  /** 用户点击「取消导入」→ 放弃本次导入 */
+  const cancelImport = () => {
+    setHealthReport(null);
+    setPendingImport(null);
+    setResult(null);
   };
 
   /* ────────── 周销量导入（合并原运营数据导入功能：品名/店铺/ASIN/链接）────────── */
@@ -1616,6 +1673,22 @@ export default function ImportPage() {
                 取消
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 数据健康报告弹窗（不可跳过，必须「确认并继续」） ── */}
+      {healthReport && pendingImport && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" />
+          <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-background-50 p-6 shadow-2xl">
+            <HealthReport
+              result={healthReport}
+              modal
+              confirming={confirming}
+              onConfirm={confirmImport}
+              onCancel={cancelImport}
+            />
           </div>
         </div>
       )}

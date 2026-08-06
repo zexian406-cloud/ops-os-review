@@ -30,17 +30,17 @@ const linkTypeLabel: Record<string, string> = { main: "主链接", follow: "跟�
 const mskuStoreOf = (sku: SkuMaster, m: string): string =>
   (sku.mskuStores && sku.mskuStores[m]) || sku.store;
 
-// 告警类型 → 诊断页分组 key（与诊断页过滤 map / AlertList 对齐）
+// 告警类型 → 诊断页分组 key（与诊断页 tab 类型 profit/sales 对齐）
 const DIAGNOSIS_GROUP: Record<string, string> = {
-  stockout: "stock",
-  low_stock: "stock",
-  overstock: "stock",
+  stockout: "sales",
+  low_stock: "sales",
+  overstock: "sales",
   profit: "profit",
-  ad: "ad",
-  rating: "rating",
-  return: "return",
-  review: "return",
-  listing: "listing",
+  ad: "profit",
+  rating: "sales",
+  return: "sales",
+  review: "sales",
+  listing: "sales",
 };
 
 const deltaArrow = (v: number, inverse = false) => {

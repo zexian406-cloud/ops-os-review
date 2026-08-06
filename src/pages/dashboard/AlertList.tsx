@@ -22,6 +22,17 @@ const typeLabels: Record<AlertType, string> = {
   return: "退货异常",
   review: "差评激增",
   listing: "Listing 待优化",
+  promo_start: "促销即将开始",
+  promo_end: "促销即将到期",
+};
+
+/** 告警类型 → 诊断类型映射（无映射的告警类型不显示诊断按钮） */
+const diagnosisTypeMap: Partial<Record<AlertType, "profit" | "sales">> = {
+  profit: "profit",
+  ad: "profit",
+  stockout: "sales",
+  low_stock: "sales",
+  overstock: "sales",
 };
 
 const severityConfig = {
@@ -55,6 +66,7 @@ export default function AlertList({ alerts }: { alerts: AlertItem[] }) {
     <div className="space-y-2.5">
       {alerts.map((a) => {
         const cfg = severityConfig[a.severity];
+        const diagType = diagnosisTypeMap[a.type];
         return (
           <div
             key={a.id}
@@ -76,6 +88,15 @@ export default function AlertList({ alerts }: { alerts: AlertItem[] }) {
               >
                 [{a.sku}]
               </Link>
+              {diagType && (
+                <Link
+                  to={`/diagnosis?type=${diagType}&sku=${encodeURIComponent(a.sku)}`}
+                  className="ml-auto inline-flex items-center gap-1 rounded-full border border-primary-300/70 bg-primary-50 px-2.5 py-1 text-[11px] font-medium text-primary-700 hover:bg-primary-100 cursor-pointer whitespace-nowrap transition-colors"
+                >
+                  <i className="ri-search-eye-line text-[12px]" aria-hidden />
+                  去诊断
+                </Link>
+              )}
             </div>
             <div className="mt-1.5 text-[12px] leading-relaxed text-foreground-500">
               {a.suggestion}

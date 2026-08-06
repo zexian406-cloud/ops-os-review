@@ -145,6 +145,19 @@ export async function setCloudConfig(cfg: CloudConfig): Promise<void> {
   await db.config.put({ key: "cloud", value: cfg });
 }
 
+// ==================== 数据健康报告（最近一次导入） ====================
+export async function getLatestHealthReport<T = unknown>(): Promise<T | null> {
+  const row = await db.config.get("latestHealthReport");
+  return (row?.value as T) ?? null;
+}
+
+export async function setLatestHealthReport(report: unknown): Promise<void> {
+  await db.config.put({
+    key: "latestHealthReport",
+    value: { ...(report as Record<string, unknown>), savedAt: new Date().toISOString() },
+  });
+}
+
 // ==================== Shop management ====================
 const DEFAULT_SHOPS = [
   { id: "shop_1", name: "一店", createdAt: new Date().toISOString() },
