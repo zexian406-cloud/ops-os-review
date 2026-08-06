@@ -639,6 +639,10 @@ export function recordMskuStore(existing: SkuMaster, mskuRaw: string | undefined
  * 把某行的 MSKU 对应的售价/运费/销售总价记录到父记录的 mskuMetrics。
  * 这样展开 MSKU 子项时能展示各 MSKU 自身的销售总价，而非共用父级。
  * first-wins：同一 MSKU 重复出现时首次值为准。
+ *
+ * 注意：不跳过 t === existing.sku 的情况。因为用户的 SKU 标识符 Sheet 中，
+ * MSKU 列可能就填的是 SKU 本身（如 MSKU=BFEGT74, price=185.99），
+ * 此时该 MSKU 也应有独立的 price 记录，否则虚拟子项会回退到父级首次出现的 price。
  */
 export function recordMskuPrice(
   existing: SkuMaster,
@@ -650,7 +654,6 @@ export function recordMskuPrice(
   if (!mskuRaw) return;
   const tokens = mskuRaw.split(/[,\s，、·]+/).map((t) => t.trim()).filter(Boolean);
   for (const t of tokens) {
-    if (t === existing.sku) continue;
     if (!existing.mskuMetrics) existing.mskuMetrics = {};
     if (!existing.mskuMetrics[t]) existing.mskuMetrics[t] = {};
     const m = existing.mskuMetrics[t];
