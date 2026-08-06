@@ -350,16 +350,19 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       if (!mskuMetricsAgg.has(sku)) mskuMetricsAgg.set(sku, {});
       const skuMetricsMap = mskuMetricsAgg.get(sku)!;
       for (const mskuKey of mskuTokens) {
-        if (!mskuKey || mskuKey === sku) continue;
-        skuMetricsMap[mskuKey] = {
-          rating: rating > 0 ? Math.round(rating * 10) / 10 : undefined,
-          reviewCount: reviewCount > 0 ? Math.round(reviewCount) : undefined,
-          adRatio: adRatio > 0 ? Math.round(adRatio * 100) / 100 : undefined,
-          returnRate: returnRate > 0 ? Math.round(returnRate * 100) / 100 : undefined,
-          refundRate: refundRate > 0 ? Math.round(refundRate * 100) / 100 : undefined,
-          sales7d: daily7d,
-          sales30d: monthlyRaw,
-        };
+        if (!mskuKey) continue;
+        // 每个MSKU首次写入时保留已有字段，避免覆盖Step1写入的price/shippingFee/listPrice
+        if (!skuMetricsMap[mskuKey]) {
+          skuMetricsMap[mskuKey] = {};
+        }
+        const m = skuMetricsMap[mskuKey];
+        if (m.rating == null && rating > 0) m.rating = Math.round(rating * 10) / 10;
+        if (m.reviewCount == null && reviewCount > 0) m.reviewCount = Math.round(reviewCount);
+        if (m.adRatio == null && adRatio > 0) m.adRatio = Math.round(adRatio * 100) / 100;
+        if (m.returnRate == null && returnRate > 0) m.returnRate = Math.round(returnRate * 100) / 100;
+        if (m.refundRate == null && refundRate > 0) m.refundRate = Math.round(refundRate * 100) / 100;
+        if (m.sales7d == null) m.sales7d = daily7d;
+        if (m.sales30d == null) m.sales30d = monthlyRaw;
       }
     }
     // FIX: 销量(绝对值)取总和，比率类指标取平均。
