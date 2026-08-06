@@ -181,8 +181,8 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
         // 故：重复行的属性补进已有记录，sku 仍为干净的家族码，不产生中文/拼接垃圾码。
         const existing = skuMaster.find((s) => s.sku === sku);
         if (existing) {
-          // MSKU：收集全部不同变体（逗号拼接），避免丢信息
-          if (msku && msku !== sku && !existing.msku?.split(",").includes(msku)) {
+          // MSKU：收集全部变体（含 MSKU=SKU 的情况），逗号拼接避免丢信息
+          if (msku && !existing.msku?.split(",").includes(msku)) {
             existing.msku = existing.msku ? `${existing.msku},${msku}` : msku;
           }
           // 各 MSKU 独立店铺：按行保留到 mskuStores（首次出现为准）
@@ -400,10 +400,17 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
         refundRate: refundRate > 0 ? Math.round(refundRate * 100) / 100 : undefined,
       });
     }
-    // FIX: 把各 MSKU 独立指标写入父 SKU 的 mskuMetrics 字段
+    // FIX: 把各 MSKU 独立指标合并到父 SKU 的 mskuMetrics 字段（保留 Step 1 写入的 price/shippingFee/listPrice）
     for (const [sku, metrics] of mskuMetricsAgg) {
       const master = skuMaster.find((s) => s.sku === sku);
-      if (master) master.mskuMetrics = metrics;
+      if (master) {
+        if (!master.mskuMetrics) master.mskuMetrics = {};
+        for (const [mskuName, metric] of Object.entries(metrics)) {
+          if (!master.mskuMetrics[mskuName]) master.mskuMetrics[mskuName] = {};
+          // 合并指标（rating/sales等），不覆盖已有的 price/shippingFee/listPrice
+          Object.assign(master.mskuMetrics[mskuName], metric);
+        }
+      }
     }
     // FIX: 合并原运营数据导入：品名/店铺/ASIN/链接更新到skuMaster
     for (const [sku, info] of infoAgg) {
