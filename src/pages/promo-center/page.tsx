@@ -504,6 +504,7 @@ function ActivitySection(props: {
     setForm({ ...p, costMode: p.costMode ?? "amount", amount: p.amount, rate: p.rate });
   };
   const del = async (id: string) => {
+    if (!confirm("确定删除这条促销活动吗？删除后无法恢复。")) return;
     await db.promotions.delete(id);
     setSelected((prev) => { const n = new Set(prev); n.delete(id); return n; });
     flash("已删除");
@@ -895,6 +896,7 @@ function ActivitySection(props: {
                   <th className="border-b border-background-200 px-2 py-2.5 text-right">正常价</th>
                   <th className="border-b border-background-200 px-2 py-2.5 text-right">折扣价</th>
                   <th className="border-b border-background-200 px-2 py-2.5 text-right">促销成本</th>
+                  <th className="border-b border-background-200 px-2 py-2.5 text-right">利润</th>
                   <th className="border-b border-background-200 px-2 py-2.5 text-right">利润率</th>
                   <th className="border-b border-background-200 px-2 py-2.5 text-right">广告费比</th>
                   <th className="border-b border-background-200 px-2 py-2.5">备注</th>
@@ -1007,6 +1009,9 @@ function ActivitySection(props: {
                             {p.costMode === "amount" && p.amount ? `$${p.amount.toFixed(2)}` : p.costMode === "rate" && p.rate ? `${p.rate}%` : m && m.promoCost > 0 ? `$${m.promoCost.toFixed(2)}` : "-"}
                           </span>
                         )}
+                      </td>
+                      <td className={`mono-num border-b border-background-200/70 px-2 py-1.5 text-right font-semibold text-[12px] ${m && m.profit >= 0 ? 'text-foreground-800' : 'text-red-600'}`}>
+                        {m ? `$${m.profit.toFixed(2)}` : "-"}
                       </td>
                       <td className={`mono-num border-b border-background-200/70 px-2 py-1.5 text-right font-semibold text-[12px] ${m && m.margin >= 10 ? 'text-primary-700' : m && m.margin >= 0 ? 'text-foreground-700' : 'text-red-600'}`}>
                         {m ? `${m.margin.toFixed(1)}%` : "-"}
@@ -1186,6 +1191,7 @@ function CostSection(props: {
   };
 
   const del = async (id: string) => {
+    if (!confirm("确定删除这条促销活动吗？删除后无法恢复。")) return;
     await db.manualPromotions.delete(id);
     flash("已删除");
     reload();
