@@ -1,14 +1,10 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { db, addOpsLog } from "@/domain/db";
 import { useOpsData } from "@/domain/store";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
-import PageLayoutCustomizer from "@/components/layout/PageLayoutCustomizer";
-import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
-import { type Layout } from "react-grid-layout";
-import { usePageLayout, type GridItemLayout } from "@/hooks/usePageLayout";
 import type { TodoItem, SkuMaster } from "@/domain/types";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -113,33 +109,6 @@ export default function TodoPage() {
   const incompleteCount = useMemo(() => todos.filter((t) => !t.completed).length, [todos]);
   const completedCount = useMemo(() => todos.filter((t) => t.completed).length, [todos]);
 
-  const {
-    customizing, setCustomizing, toggleSection, reset: resetLayout,
-    visibleKeys, allKeys, gridLayout, setGridLayout,
-    resetItemSize, resetItemPosition,
-  } = usePageLayout("todo");
-
-  // ── 构建 ReactGridLayout 布局数组 ──
-  const rglLayout: Layout[] = useMemo(() => {
-    return visibleKeys.map((key) => {
-      const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 6 };
-      return {
-        i: key,
-        x: Math.max(Math.min(item.x, 12), 0),
-        y: Math.max(item.y, 0),
-        w: Math.min(Math.max(item.w, 2), 12),
-        h: Math.max(item.h, 2),
-        minW: 2,
-        maxW: 12,
-        minH: 2,
-      };
-    });
-  }, [visibleKeys, gridLayout]);
-
-  const handleLayoutChange = useCallback((layout: Layout[]) => {
-    setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
-  }, [setGridLayout]);
-
   const inputCls = "w-full rounded-md border border-background-200 bg-background-50 px-3 py-2 text-sm text-foreground-800 placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200/50";
 
   return (
@@ -152,40 +121,9 @@ export default function TodoPage() {
             {incompleteCount} 个未完成 · {completedCount} 个已完成 · 完成待办自动归档到操作记录
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCustomizing(!customizing)}
-          className="flex items-center gap-1.5 rounded-[12px] border border-background-200 bg-background-50 px-3 py-1.5 text-[12px] font-medium text-foreground-500 hover:bg-background-100 hover:text-foreground-800 cursor-pointer"
-        >
-          <i className={customizing ? "ri-close-line" : "ri-layout-masonry-line"} aria-hidden />
-          {customizing ? "关闭设置" : "自定义布局"}
-        </button>
       </div>
 
-      {customizing && (
-        <PageLayoutCustomizer
-          pageId="todo"
-          visibleKeys={visibleKeys}
-          allKeys={allKeys}
-          toggle={toggleSection}
-          onClose={() => setCustomizing(false)}
-          onReset={resetLayout}
-        />
-      )}
-
-      {/* 画布布局 — 全部区块可拖拽定位 */}
-      <CanvasLayout
-        layout={rglLayout}
-        customizing={customizing}
-        onLayoutChange={handleLayoutChange}
-        onHideItem={toggleSection}
-        onResetItemSize={resetItemSize}
-        onResetItemPosition={resetItemPosition}
-      >
-
       {/* Add new todo */}
-      {visibleKeys.includes("addForm") && (
-      <CanvasItem key="addForm" itemKey="addForm">
       <Section title="新增待办" icon="ri-add-circle-line">
 
         <div className="flex flex-wrap items-end gap-3">
@@ -245,12 +183,8 @@ export default function TodoPage() {
           </button>
         </div>
       </Section>
-      </CanvasItem>
-      )}
 
       {/* Todo list */}
-      {visibleKeys.includes("todoList") && (
-      <CanvasItem key="todoList" itemKey="todoList">
       <Section title="待办列表" icon="ri-list-check-3" subtitle={`${incompleteCount} 个未完成`}>
         {todos.length === 0 ? (
           <EmptyState icon="ri-check-double-line" title="暂无待办" desc="输入待办内容并点击添加" />
@@ -332,9 +266,6 @@ export default function TodoPage() {
           </div>
         )}
       </Section>
-      </CanvasItem>
-      )}
-      </CanvasLayout>
 
 
       {deleteConfirm && (

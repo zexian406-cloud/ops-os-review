@@ -277,3 +277,66 @@ export function aggregateIssues(issues: HealthIssue[]): AggregatedIssue[] {
   }
   return Array.from(map.values()).sort((a, b) => a.ruleId - b.ruleId);
 }
+
+/**
+ * 数据健康指标（用于数据健康页顶部三张卡片）
+ * - 数据完整性：成功导入行数 / 总行数
+ * - 字段覆盖率：MSKU / 评分 / 广告费比 / FOB 四个关键字段的填充率均值
+ * - 异常值检测：规则 3-7（负库存/负销量/售价异常/评分越界）的警告数量
+ */
+export interface HealthMetrics {
+  integrity: { value: string; detail: string };
+  fieldCoverage: { value: string; detail: string };
+  outliers: { value: string; detail: string };
+}
+
+export function computeHealthMetrics(result: ValidationResult): HealthMetrics {
+  const { summary, validRows, warnings } = result;
+
+  // ── 数据完整性 ──
+  const integrityPct =
+    summary.totalRows > 0
+      ? (summary.successCount / summary.totalRows) * 100
+      : 0;
+  const integrity = {
+    value: `${integrityPct.toFixed(1)}%`,
+    detail: `${summary.successCount} / ${summary.totalRows} 行通过校验`,
+  };
+
+  // ── 字段覆盖率 ──
+  const skus = validRows?.skuMaster ?? [];
+  const snapshots = validRows?.dailySnapshot ?? [];
+  const skuCount = skus.length || 1;
+  const snapCount = snapshots.length || 1;
+
+  const mskuFilled = skus.filter((s) => s.sku && s.sku.trim()).length;
+  const fobFilled = skus.filter((s) => s.costFob != null && s.costFob > 0).length;
+  const ratingFilled = snapshots.filter((s) => s.rating > 0).length;
+  const adRatioFilled = snapshots.filter((s) => s.adRatio > 0).length;
+
+  const coveragePct =
+    ((mskuFilled / skuCount) +
+      (fobFilled / skuCount) +
+      (ratingFilled / snapCount) +
+      (adRatioFilled / snapCount)) /
+    4 *
+    100;
+
+  const fieldCoverage = {
+    value: `${coveragePct.toFixed(1)}%`,
+    detail: `MSKU ${mskuFilled}/${skuCount} · 评分 ${ratingFilled}/${snapCount} · 广告费比 ${adRatioFilled}/${snapCount} · FOB ${fobFilled}/${skuCount}`,
+  };
+
+  // ── 异常值检测（规则 3-7）──
+  const outlierRuleIds = [3, 4, 5, 6, 7];
+  const outlierCount = warnings.filter((w) => outlierRuleIds.includes(w.ruleId)).length;
+  const outliers = {
+    value: outlierCount > 0 ? `${outlierCount} 个` : "0 个",
+    detail:
+      outlierCount > 0
+        ? `已识别并修正 ${outlierCount} 处异常（负库存/负销量/售价异常/评分越界）`
+        : "所有数据均在合理范围内",
+  };
+
+  return { integrity, fieldCoverage, outliers };
+}

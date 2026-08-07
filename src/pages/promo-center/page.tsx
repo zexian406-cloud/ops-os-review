@@ -4,10 +4,6 @@ import { db, getAllShops } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
-import PageLayoutCustomizer from "@/components/layout/PageLayoutCustomizer";
-import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
-import { usePageLayout, type GridItemLayout } from "@/hooks/usePageLayout";
-import { type Layout } from "react-grid-layout";
 import { computeAll, getEffectivePromoCost, aggregateWeeklyCosts } from "@/domain/calculator";
 import type {
   ManualPromotion, ManualPromoType, Promotion, PromotionType, Shop, SkuMaster, DailySnapshot,
@@ -68,33 +64,6 @@ export default function PromoCenterPage() {
     next.set("tab", t);
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
-
-  // 自定义布局
-  const {
-    customizing, setCustomizing, toggleSection, reset: resetLayout,
-    visibleKeys, allKeys, gridLayout, setGridLayout,
-    resetItemSize, resetItemPosition,
-  } = usePageLayout("promo-center");
-
-  // ── 构建 ReactGridLayout 布局数组 ──
-  const rglLayout: Layout[] = useMemo(() => {
-    return visibleKeys.map((key) => {
-      const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 6 };
-      return {
-        i: key,
-        x: Math.max(Math.min(item.x, 12), 0),
-        y: Math.max(item.y, 0),
-        w: Math.min(Math.max(item.w, 2), 12),
-        h: Math.max(item.h, 2),
-        minW: 2,
-        maxW: 12,
-        minH: 2,
-      };
-    });
-  }, [visibleKeys, gridLayout]);
-  const handleLayoutChange = useCallback((layout: Layout[]) => {
-    setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
-  }, [setGridLayout]);
 
   // 数据
   const [skus, setSkus] = useState<SkuMaster[]>([]);
@@ -213,26 +182,7 @@ export default function PromoCenterPage() {
             活动管理 · 成本录入 · 时间线一览 — 一次录入，全局联动，自动汇入总成本公式
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCustomizing(!customizing)}
-          className="flex items-center gap-1.5 rounded-[9px] border border-background-200 bg-background-50 px-3 py-1.5 text-[12px] font-medium text-foreground-500 hover:bg-background-100 hover:text-foreground-800 cursor-pointer"
-        >
-          <i className={customizing ? "ri-close-line" : "ri-layout-masonry-line"} aria-hidden />
-          {customizing ? "关闭设置" : "自定义布局"}
-        </button>
       </div>
-
-      {customizing && (
-        <PageLayoutCustomizer
-          pageId="promo-center"
-          visibleKeys={visibleKeys}
-          allKeys={allKeys}
-          toggle={toggleSection}
-          onClose={() => setCustomizing(false)}
-          onReset={resetLayout}
-        />
-      )}
 
       {msg && (
         <div className={[
@@ -267,18 +217,9 @@ export default function PromoCenterPage() {
         ))}
       </div>
 
-      {/* ── 画布布局 ── */}
-      <CanvasLayout
-        layout={rglLayout}
-        customizing={customizing}
-        onLayoutChange={handleLayoutChange}
-        onHideItem={toggleSection}
-        onResetItemSize={resetItemSize}
-        onResetItemPosition={resetItemPosition}
-      >
+      {/* ── 内容区 ── */}
+      <div className="space-y-6">
       {/* ── KPI 汇总卡片 ── */}
-      {(visibleKeys.length === 0 || visibleKeys.includes("summaryCards")) && (
-        <CanvasItem key="summaryCards" itemKey="summaryCards">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="rounded-[14px] border border-background-200/70 bg-background-100/50 p-4">
             <div className="flex items-center gap-2">
@@ -327,12 +268,9 @@ export default function PromoCenterPage() {
             </div>
           </div>
         </div>
-        </CanvasItem>
-      )}
 
       {/* ── Tab 1: 活动管理 ── */}
-      {tab === "activity" && (visibleKeys.length === 0 || visibleKeys.includes("activityTab")) && (
-        <CanvasItem key="activityTab" itemKey="activityTab">
+      {tab === "activity" && (
           <ActivitySection
             promotions={promotions}
             skus={skus}
@@ -344,14 +282,11 @@ export default function PromoCenterPage() {
             prefilledSku={prefilledSku}
             reload={reload}
             flash={flash}
-            visibleKeys={visibleKeys}
           />
-        </CanvasItem>
       )}
 
       {/* ── Tab 2: 促销成本 ── */}
-      {tab === "cost" && (visibleKeys.length === 0 || visibleKeys.includes("costTab")) && (
-        <CanvasItem key="costTab" itemKey="costTab">
+      {tab === "cost" && (
           <CostSection
             manualPromotions={manualPromotions}
             promotions={promotions}
@@ -363,14 +298,11 @@ export default function PromoCenterPage() {
             prefilledSku={prefilledSku}
             reload={reload}
             flash={flash}
-            visibleKeys={visibleKeys}
           />
-        </CanvasItem>
       )}
 
       {/* ── Tab 3: 促销时间线 ── */}
-      {tab === "timeline" && (visibleKeys.length === 0 || visibleKeys.includes("timelineTab")) && (
-        <CanvasItem key="timelineTab" itemKey="timelineTab">
+      {tab === "timeline" && (
           <TimelineSection
             buckets={weeklyBuckets}
             promotions={promotions}
@@ -378,9 +310,8 @@ export default function PromoCenterPage() {
             skuMap={skuMap}
             snapMap={snapMap}
           />
-        </CanvasItem>
       )}
-      </CanvasLayout>
+      </div>
     </div>
   );
 }
@@ -400,7 +331,6 @@ function ActivitySection(props: {
   prefilledSku: string;
   reload: () => void;
   flash: (m: string) => void;
-  visibleKeys: string[];
 }) {
   const { promotions, skus, skuMap, snapMap, prefilledSku, reload, flash, getShopName } = props;
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -586,7 +516,6 @@ function ActivitySection(props: {
   return (
     <div className="space-y-5">
       {/* 新增/编辑活动 */}
-      {(props.visibleKeys.length === 0 || props.visibleKeys.includes("activityForm")) && (
         <Section
           title={editingId ? "编辑活动" : bulkMode ? "批量添加活动" : "新增活动"}
           icon="ri-add-circle-line"
@@ -868,10 +797,8 @@ function ActivitySection(props: {
             </div>
           </div>
         </Section>
-      )}
 
       {/* 已有活动列表 */}
-      {(props.visibleKeys.length === 0 || props.visibleKeys.includes("activityList")) && (
         <Section
           title="已有促销活动"
           icon="ri-flashlight-line"
@@ -1099,7 +1026,6 @@ function ActivitySection(props: {
             <span>默认只读防误触 · 点击行末铅笔图标进入编辑模式 · 利润率 =（折扣价 − 总成本 − 促销成本）÷ 折扣价</span>
           </div>
         </Section>
-      )}
     </div>
   );
 }
@@ -1119,7 +1045,6 @@ function CostSection(props: {
   prefilledSku: string;
   reload: () => void;
   flash: (m: string) => void;
-  visibleKeys: string[];
 }) {
   const { manualPromotions, promotions, skus, skuMap, snapMap, prefilledSku, reload, flash } = props;
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1259,7 +1184,6 @@ function CostSection(props: {
   return (
     <div className="space-y-5">
       {/* KPI 汇总 */}
-      {(props.visibleKeys.length === 0 || props.visibleKeys.includes("costKpi")) && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="rounded-xl border border-background-200/70 bg-background-100/50 p-4">
             <div className="flex items-center gap-2">
@@ -1306,10 +1230,8 @@ function CostSection(props: {
             </div>
           </div>
         </div>
-      )}
 
       {/* 新增/编辑表单 */}
-      {(props.visibleKeys.length === 0 || props.visibleKeys.includes("costForm")) && (
         <Section
           title={editingId ? "编辑促销成本" : "新增促销成本"}
           icon="ri-add-circle-line"
@@ -1408,10 +1330,8 @@ function CostSection(props: {
             )}
           </div>
         </Section>
-      )}
 
       {/* 列表 */}
-      {(props.visibleKeys.length === 0 || props.visibleKeys.includes("costList")) && (
         <Section
           title="促销成本记录"
           icon="ri-timeline-view"
@@ -1523,7 +1443,6 @@ function CostSection(props: {
             <span>促销成本自动按周聚合进总成本公式（总成本 = FOB+头程+尾程+佣金+仓租+广告费+退货费+<strong>促销成本</strong>）。记录独立存储，不随 Excel 上传覆盖。</span>
           </div>
         </Section>
-      )}
     </div>
   );
 }

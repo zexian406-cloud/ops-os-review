@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
 import { computeWarehouseTotals } from "@/domain/calculator";
@@ -6,10 +6,6 @@ import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
-import PageLayoutCustomizer from "@/components/layout/PageLayoutCustomizer";
-import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
-import { type Layout } from "react-grid-layout";
-import { usePageLayout, type GridItemLayout } from "@/hooks/usePageLayout";
 import {
   useShipmentKpiLayout,
   SHIPMENT_KPI_METRIC_LABELS,
@@ -41,37 +37,8 @@ export default function Shipment() {
   const [sortMode, setSortMode] = useState<SortMode>("priority");
 
   const {
-    customizing, setCustomizing, toggleSection, reset: resetLayout,
-    visibleKeys, allKeys, gridLayout, setGridLayout,
-    resetItemSize, resetItemPosition,
-  } = usePageLayout("shipment");
-
-  const {
     customizingKpi, setCustomizingKpi, setKpiSlot, resetKpi, kpiSlots,
   } = useShipmentKpiLayout();
-
-  const customizingMode = customizing || customizingKpi;
-
-  // ── 构建 ReactGridLayout 布局数组 ──
-  const rglLayout: Layout[] = useMemo(() => {
-    return visibleKeys.map((key) => {
-      const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 6 };
-      return {
-        i: key,
-        x: Math.max(Math.min(item.x, 12), 0),
-        y: Math.max(item.y, 0),
-        w: Math.min(Math.max(item.w, 2), 12),
-        h: Math.max(item.h, 2),
-        minW: 2,
-        maxW: 12,
-        minH: 2,
-      };
-    });
-  }, [visibleKeys, gridLayout]);
-
-  const handleLayoutChange = useCallback((layout: Layout[]) => {
-    setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
-  }, [setGridLayout]);
 
   const today = useMemo(() => {
     const dates = snapshots.map((s) => s.date);
@@ -237,52 +204,22 @@ export default function Shipment() {
         </div>
         <button
           type="button"
-          onClick={() => {
-            if (customizingMode) {
-              setCustomizing(false);
-              setCustomizingKpi(false);
-            } else {
-              setCustomizing(true);
-              setCustomizingKpi(true);
-            }
-          }}
+          onClick={() => setCustomizingKpi(!customizingKpi)}
           className="flex items-center gap-1.5 rounded-[12px] border border-background-200 bg-background-50 px-3 py-1.5 text-[12px] font-medium text-foreground-500 hover:bg-background-100 hover:text-foreground-800 cursor-pointer whitespace-nowrap"
         >
-          <i className={customizingMode ? "ri-close-line" : "ri-layout-masonry-line"} aria-hidden />
-          {customizingMode ? "关闭设置" : "自定义布局"}
+          <i className={customizingKpi ? "ri-close-line" : "ri-settings-3-line"} aria-hidden />
+          {customizingKpi ? "关闭设置" : "自定义 KPI"}
         </button>
       </div>
 
-      {/* 自定义布局面板 */}
-      {customizing && (
-        <PageLayoutCustomizer
-          pageId="shipment"
-          visibleKeys={visibleKeys}
-          allKeys={allKeys}
-          toggle={toggleSection}
-          onClose={() => setCustomizing(false)}
-          onReset={resetLayout}
-        />
-      )}
-
-      {/* 画布布局 — 全部区块可拖拽定位 */}
-      <CanvasLayout
-        layout={rglLayout}
-        customizing={customizing}
-        onLayoutChange={handleLayoutChange}
-        onHideItem={toggleSection}
-        onResetItemSize={resetItemSize}
-        onResetItemPosition={resetItemPosition}
-      >
       {/* KPI 卡片区域 + 自定义模式 */}
-      {visibleKeys.includes("summaryKpi") && (
-        <CanvasItem key="summaryKpi" itemKey="summaryKpi">
+      <div>
           {customizingKpi && (
             <div className="mb-3 flex items-center justify-between rounded-xl border border-dashed border-accent-300/60 bg-accent-50/40 px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <i className="ri-pencil-line text-accent-600 text-sm" aria-hidden />
                 <span className="text-[12px] font-medium text-accent-800">
-                  点击每张 KPI 卡片的下拉菜单，切换你想看的指标。拖拽排序在下方"区块布局"中操作。
+                  点击每张 KPI 卡片的下拉菜单，切换你想看的指标。
                 </span>
               </div>
               <button
@@ -323,12 +260,10 @@ export default function Shipment() {
               );
             })}
           </div>
-        </CanvasItem>
-      )}
+        </div>
 
-      {visibleKeys.includes("filters") && (
-        <CanvasItem key="filters" itemKey="filters">
-          <div className="flex flex-wrap items-center gap-2">
+      {/* 筛选器 */}
+      <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 rounded-full border border-background-300/70 bg-background-100/70 px-1 py-1">
             {(["7d", "30d"] as const).map((basis) => (
               <button key={basis} type="button" onClick={() => setSalesBasis(basis)}
@@ -359,11 +294,9 @@ export default function Shipment() {
             ))}
           </div>
           </div>
-        </CanvasItem>
-      )}
+      </div>
 
-      {visibleKeys.includes("shipmentCards") && (
-      <CanvasItem key="shipmentCards" itemKey="shipmentCards">
+      {/* 发货建议卡片 */}
         <Section title="发货建议卡片" icon="ri-grid-line" subtitle={`共 ${skuSuggestions.length} 个 SKU · ${SORT_LABELS[sortMode]}`}>
           {skuSuggestions.length === 0 ? (
             <EmptyState icon="ri-check-double-line" title="没有匹配的发货建议" desc="调整筛选条件或前往参数中心调整目标库存天数" />
@@ -373,9 +306,6 @@ export default function Shipment() {
             </div>
           )}
         </Section>
-      </CanvasItem>
-      )}
-      </CanvasLayout>
     </div>
   );
 }

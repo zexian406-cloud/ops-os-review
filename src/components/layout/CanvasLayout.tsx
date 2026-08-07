@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
 import { GridLayout, useContainerWidth, getCompactor, type Layout } from "react-grid-layout";
-import "react-grid-layout/css/styles.css";
+import "react-grid-layout/dist/styles.css";
 import "react-resizable/css/styles.css";
 
 /* ────────── CanvasItem Context ──────────
@@ -125,8 +125,19 @@ export default function CanvasLayout({
   const canRender = mounted && safeWidth > 0;
 
   // onLayoutChange: 只更新内部状态，不持久化（防止挂载时覆盖默认布局）
+  // 深度比较避免无限循环：onLayoutChange 在每次渲染都会触发，
+  // 如果 layout 未实际变化则返回 prev（相同引用不触发重渲染）
   const handleLayoutChange = useCallback((newLayout: Layout) => {
-    setInternalLayout([...newLayout] as Layout[]);
+    setInternalLayout((prev) => {
+      if (prev.length === newLayout.length) {
+        const same = prev.every((item, i) => {
+          const n = newLayout[i];
+          return n.i === item.i && n.x === item.x && n.y === item.y && n.w === item.w && n.h === item.h;
+        });
+        if (same) return prev;
+      }
+      return [...newLayout] as Layout[];
+    });
   }, []);
 
   // onDragStop / onResizeStop: 用户交互完成，持久化到父组件

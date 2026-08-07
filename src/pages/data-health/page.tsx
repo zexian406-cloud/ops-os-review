@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import HealthReport from '@/components/health/HealthReport';
 import { getLatestHealthReport } from '@/domain/db';
+import { computeHealthMetrics } from '@/domain/data-health';
 import type { ValidationResult } from '@/domain/data-health';
 
 interface StoredReport extends ValidationResult {
@@ -45,9 +46,7 @@ export default function DataHealthPage() {
           加载中...
         </div>
       ) : report ? (
-        <div className="rounded-2xl border border-background-200/70 bg-background-50 p-6">
-          <HealthReport result={report} />
-        </div>
+        <DataHealthContent report={report} />
       ) : (
         <div className="rounded-2xl border border-background-200/70 bg-background-50 p-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -112,6 +111,86 @@ export default function DataHealthPage() {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ────────── 数据健康内容（有报告时展示） ────────── */
+
+function DataHealthContent({ report }: { report: StoredReport }) {
+  const metrics = useMemo(() => computeHealthMetrics(report), [report]);
+
+  const integrityNum = parseFloat(metrics.integrity.value);
+  const coverageNum = parseFloat(metrics.fieldCoverage.value);
+  const outlierNum = parseInt(metrics.outliers.value, 10) || 0;
+
+  const integrityTone = integrityNum >= 95 ? "accent" : integrityNum >= 70 ? "primary" : "red";
+  const coverageTone = coverageNum >= 80 ? "primary" : coverageNum >= 60 ? "secondary" : "red";
+  const outlierTone = outlierNum === 0 ? "accent" : "red";
+
+  return (
+    <div className="space-y-4">
+      {/* 三张指标卡片 */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <MetricCard
+          label="数据完整性"
+          value={metrics.integrity.value}
+          detail={metrics.integrity.detail}
+          tone={integrityTone}
+          icon="ri-shield-check-line"
+        />
+        <MetricCard
+          label="字段覆盖率"
+          value={metrics.fieldCoverage.value}
+          detail={metrics.fieldCoverage.detail}
+          tone={coverageTone}
+          icon="ri-pie-chart-line"
+        />
+        <MetricCard
+          label="异常值检测"
+          value={metrics.outliers.value}
+          detail={metrics.outliers.detail}
+          tone={outlierTone}
+          icon="ri-alert-line"
+        />
+      </div>
+
+      {/* 详细健康报告 */}
+      <div className="rounded-2xl border border-background-200/70 bg-background-50 p-6">
+        <HealthReport result={report} />
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  detail,
+  tone,
+  icon,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone: "accent" | "primary" | "secondary" | "red";
+  icon: string;
+}) {
+  const cfg = {
+    accent: { text: "text-accent-600", bg: "bg-accent-50", border: "border-accent-200" },
+    primary: { text: "text-primary-600", bg: "bg-primary-50", border: "border-primary-200" },
+    secondary: { text: "text-secondary-600", bg: "bg-secondary-50", border: "border-secondary-200" },
+    red: { text: "text-red-600", bg: "bg-red-50", border: "border-red-200" },
+  }[tone];
+
+  return (
+    <div className={`rounded-2xl border ${cfg.border} ${cfg.bg} p-5`}>
+      <div className="flex items-center gap-1.5">
+        <i className={`${icon} text-[16px] ${cfg.text}`} aria-hidden />
+        <div className="text-sm text-foreground-600">{label}</div>
+      </div>
+      <div className={`mt-2 text-3xl font-bold mono-num ${cfg.text}`}>{value}</div>
+      <div className="mt-2 text-xs text-foreground-400">{detail}</div>
     </div>
   );
 }
