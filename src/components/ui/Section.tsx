@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, CSSProperties } from "react";
 
 interface SectionProps {
   title?: ReactNode;
@@ -8,11 +8,12 @@ interface SectionProps {
   children: ReactNode;
   className?: string;
   padded?: boolean;
+  style?: CSSProperties;
 }
 
-export default function Section({ title, subtitle, icon, action, children, className = "", padded = true }: SectionProps) {
+export default function Section({ title, subtitle, icon, action, children, className = "", padded = true, style }: SectionProps) {
   return (
-    <section className={["glass-card overflow-hidden", className].join(" ")}>
+    <section className={["glass-card overflow-hidden", className].join(" ")} style={style}>
       {(title || action) && (
         <header className="flex items-start justify-between gap-4 border-b border-background-200/40 px-5 py-4 md:px-6 md:py-5">
           <div className="min-w-0">

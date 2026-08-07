@@ -183,6 +183,47 @@ export const DEFAULT_ALL_KPI_CARDS: AllKpiCardKey[] = [
   ...DEFAULT_QUALITY_KPI_CARDS,
 ];
 
+/* ────────── 网格布局项 ────────── */
+export interface GridItemLayout {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export const SKU_LABELS: Record<SkuDetailSectionKey, string> = {
+  header: "头部信息",
+  discountBanner: "折扣横幅",
+  kpiCards: "KPI 卡片",
+  editData: "数据编辑",
+  profitAnalysis: "利润分析",
+  costWaterfall: "成本瀑布图",
+  promoShipment: "促销发货",
+  mixedReplenish: "混卖补货",
+  inventory: "库存分析",
+  listing: "Listing 优化",
+  weekOverWeek: "周环比",
+  historyCharts: "历史趋势",
+  relatedTodos: "关联待办",
+};
+
+/** 默认网格布局：12列网格，各区块初始位置 */
+const DEFAULT_SKU_GRID_LAYOUT: Record<SkuDetailSectionKey, GridItemLayout> = {
+  header:         { x: 0, y: 0,  w: 12, h: 2 },
+  discountBanner: { x: 0, y: 2,  w: 12, h: 1 },
+  kpiCards:       { x: 0, y: 3,  w: 12, h: 2 },
+  editData:       { x: 0, y: 5,  w: 12, h: 3 },
+  profitAnalysis: { x: 0, y: 8,  w: 6,  h: 5 },
+  costWaterfall:  { x: 6, y: 8,  w: 6,  h: 5 },
+  promoShipment:  { x: 0, y: 13, w: 12, h: 2 },
+  mixedReplenish: { x: 0, y: 15, w: 12, h: 3 },
+  inventory:      { x: 0, y: 18, w: 12, h: 4 },
+  listing:        { x: 0, y: 22, w: 12, h: 5 },
+  weekOverWeek:   { x: 0, y: 27, w: 12, h: 3 },
+  historyCharts:  { x: 0, y: 30, w: 12, h: 4 },
+  relatedTodos:   { x: 0, y: 34, w: 12, h: 3 },
+};
+
 interface LayoutPrefs {
   dashboard: {
     visible: DashboardSectionKey[];
@@ -193,6 +234,7 @@ interface LayoutPrefs {
     visible: SkuDetailSectionKey[];
     order: SkuDetailSectionKey[];
     kpiCardOrder: AllKpiCardKey[];
+    gridLayout: Record<string, GridItemLayout>;
   };
   shipment: {
     kpiSlots: ShipmentKpiMetricKey[];
@@ -244,6 +286,7 @@ function loadPrefs(): LayoutPrefs {
           visible: parsed.skuDetail?.visible ?? DEFAULT_SKU_ORDER,
           order: parsed.skuDetail?.order ?? DEFAULT_SKU_ORDER,
           kpiCardOrder: parsed.skuDetail?.kpiCardOrder ?? [...DEFAULT_ALL_KPI_CARDS],
+          gridLayout: parsed.skuDetail?.gridLayout ?? { ...DEFAULT_SKU_GRID_LAYOUT },
         },
         shipment: {
           kpiSlots: parsed.shipment?.kpiSlots ?? [...DEFAULT_SHIPMENT_KPI_SLOTS],
@@ -253,7 +296,7 @@ function loadPrefs(): LayoutPrefs {
   } catch { /* ignore */ }
   return {
     dashboard: { visible: [...DEFAULT_DASHBOARD_ORDER], order: [...DEFAULT_DASHBOARD_ORDER], kpiSlots: [...DEFAULT_KPI_SLOTS] },
-    skuDetail: { visible: [...DEFAULT_SKU_ORDER], order: [...DEFAULT_SKU_ORDER], kpiCardOrder: [...DEFAULT_ALL_KPI_CARDS] },
+    skuDetail: { visible: [...DEFAULT_SKU_ORDER], order: [...DEFAULT_SKU_ORDER], kpiCardOrder: [...DEFAULT_ALL_KPI_CARDS], gridLayout: { ...DEFAULT_SKU_GRID_LAYOUT } },
     shipment: { kpiSlots: [...DEFAULT_SHIPMENT_KPI_SLOTS] },
   };
 }
@@ -390,14 +433,28 @@ export function useSkuDetailLayout() {
   const reset = useCallback(() => {
     const next: LayoutPrefs = {
       ...prefs,
-      skuDetail: { visible: [...DEFAULT_SKU_ORDER], order: [...DEFAULT_SKU_ORDER], kpiCardOrder: [...DEFAULT_ALL_KPI_CARDS] },
+      skuDetail: { visible: [...DEFAULT_SKU_ORDER], order: [...DEFAULT_SKU_ORDER], kpiCardOrder: [...DEFAULT_ALL_KPI_CARDS], gridLayout: { ...DEFAULT_SKU_GRID_LAYOUT } },
     };
     savePrefs(next);
     setPrefs(next);
   }, [prefs]);
 
+  // ── 网格布局更新（react-grid-layout 拖拽/缩放后回调） ──
+  const setGridLayout = useCallback((layout: { i: string; x: number; y: number; w: number; h: number }[]) => {
+    setPrefs((prev) => {
+      const gridLayout = { ...prev.skuDetail.gridLayout };
+      for (const item of layout) {
+        gridLayout[item.i] = { x: item.x, y: item.y, w: item.w, h: item.h };
+      }
+      const next = { ...prev, skuDetail: { ...prev.skuDetail, gridLayout } };
+      savePrefs(next);
+      return next;
+    });
+  }, []);
+
   const visibleKeys = prefs.skuDetail.visible;
   const orderedKeys = prefs.skuDetail.order.filter((k) => visibleKeys.includes(k));
+  const gridLayout = prefs.skuDetail.gridLayout;
 
   // 从统一数组拆分为3个独立数组（兼容SkuLayoutCustomizer接口）
   const allCards = prefs.skuDetail.kpiCardOrder;
@@ -430,6 +487,8 @@ export function useSkuDetailLayout() {
     moveCoreKpiCard,
     moveCoverageKpiCard,
     moveQualityKpiCard,
+    setGridLayout,
+    gridLayout,
     reset,
     visibleKeys,
     orderedKeys,
@@ -482,20 +541,4 @@ export const DASHBOARD_LABELS: Record<DashboardSectionKey, string> = {
   alerts: "紧急告警",
   shipment: "发货建议",
   wowBar: "上期对比条",
-};
-
-export const SKU_LABELS: Record<SkuDetailSectionKey, string> = {
-  header: "头部信息",
-  discountBanner: "促销横幅",
-  kpiCards: "KPI 卡片",
-  editData: "编辑运营数据",
-  profitAnalysis: "盈利分析",
-  costWaterfall: "成本瀑布",
-  promoShipment: "促销 & 发货",
-  mixedReplenish: "混卖补货",
-  inventory: "库存分析",
-  listing: "Listing & 基础数据",
-  weekOverWeek: "本周 vs 上周",
-  historyCharts: "历史图表",
-  relatedTodos: "关联待办",
 };

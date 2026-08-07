@@ -323,3 +323,59 @@ h1, h2, h3, h4, h5, h6 {
   background: oklch(var(--accent-200) / 0.50);
   color: oklch(var(--foreground-900));
 }
+
+/* ── SKU 详情页：自定义布局编辑态视觉高亮 ── */
+.rgl-item-editing {
+  outline: 2px dashed oklch(var(--primary-400) / 0.6);
+  outline-offset: 2px;
+  border-radius: 14px;
+  transition: outline-color 0.2s, box-shadow 0.2s;
+}
+.rgl-item-editing:hover {
+  outline-color: oklch(var(--primary-500));
+  box-shadow: 0 4px 16px oklch(var(--primary-500) / 0.12);
+}
+
+/* ── react-grid-layout 编辑画布辅助 ── */
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top, width, height;
+}
+.react-grid-item.cssTransforms {
+  transition-property: transform, width, height;
+}
+.react-grid-item.resizing {
+  z-index: 3;
+  opacity: 0.9;
+}
+.react-grid-item.react-draggable-dragging {
+  z-index: 4;
+  opacity: 0.85;
+  box-shadow: 0 8px 32px oklch(0 0 0 / 0.15);
+}
+.react-grid-item.dropping {
+  visibility: hidden;
+}
+.react-grid-item.react-grid-placeholder {
+  background: oklch(var(--primary-300) / 0.2);
+  border: 2px dashed oklch(var(--primary-400) / 0.5);
+  border-radius: 12px;
+  transition-duration: 100ms;
+  z-index: 2;
+}
+.react-resizable-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+  z-index: 5;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="6" height="6"><path d="M 0 0 L 6 6 M 0 3 L 3 6 M 3 0 L 6 3" stroke="%23999" stroke-width="1" fill="none"/></svg>');
+  background-position: bottom right;
+  background-repeat: no-repeat;
+  opacity: 0.4;
+}
+.react-resizable-handle:hover {
+  opacity: 0.8;
+}

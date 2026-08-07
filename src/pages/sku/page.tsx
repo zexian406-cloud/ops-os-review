@@ -1528,8 +1528,10 @@ function ChildRow({
             </Link>
           )}
           {(() => {
-            // 优先取 mskuAsins 中该 MSKU 对应的 ASIN，回退到父级 asin
-            const displayAsin = (child.msku && child.mskuAsins?.[child.msku]) || child.asin;
+            // 优先取 mskuAsins 中该 MSKU 对应的独立 ASIN
+            // 仅跟卖链接（linkType=follow）回退到父级 asin；非跟卖不回退，避免误判为跟卖
+            const individual = child.msku && child.mskuAsins?.[child.msku];
+            const displayAsin = individual || (child.linkType === "follow" ? child.asin : undefined);
             return displayAsin ? (
               <div className="mono-num text-[10px] text-foreground-400 leading-tight">{displayAsin}</div>
             ) : null;
