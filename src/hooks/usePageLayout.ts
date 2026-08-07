@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 
-/* ────────── 页面布局系统 ──────────
- * 支持任意页面的区块显隐 + 排序自定义
+/* ────────── 页面布局系统（画布模式） ──────────
+ * 移除垂直排序，改为画布式自由拖拽布局
  * 每个页面有独立的 localStorage 存储
  */
 
@@ -18,16 +18,23 @@ export type PageId =
   | "settings"
   | "import" | "promo-center";
 
+export interface GridItemLayout {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 interface PageLayout {
   visible: string[];
-  order: string[];
+  gridLayout: Record<string, GridItemLayout>;
 }
 
 interface LayoutStore {
   pages: Record<PageId, PageLayout>;
 }
 
-const STORAGE_KEY = "aos-page-layout-v2";
+const STORAGE_KEY = "aos-page-layout-v3";
 
 /* ────────── 各页面默认区块 ────────── */
 export const DEFAULT_SECTIONS: Record<PageId, string[]> = {
@@ -55,6 +62,49 @@ export const DEFAULT_SECTIONS: Record<PageId, string[]> = {
     "activityForm", "activityList", "costKpi", "costForm", "costList",
   ],
 };
+
+/* ────────── 各页面默认画布布局 ────────── */
+const DEFAULT_GRID_LAYOUTS: Record<string, Record<string, GridItemLayout>> = {
+  shipment: {
+    summaryKpi:    { x: 0, y: 0, w: 12, h: 4 },
+    filters:       { x: 0, y: 4, w: 12, h: 3 },
+    shipmentCards: { x: 0, y: 7, w: 12, h: 20 },
+  },
+  promotions: {
+    summaryCards: { x: 0, y: 0, w: 12, h: 4 },
+    addForm:      { x: 0, y: 4, w: 6,  h: 10 },
+    promoList:    { x: 6, y: 4, w: 6,  h: 16 },
+  },
+  todo: {
+    addForm:  { x: 0, y: 0, w: 5, h: 10 },
+    todoList: { x: 5, y: 0, w: 7, h: 20 },
+  },
+  promoCenter: {
+    summaryCards: { x: 0, y: 0,  w: 12, h: 4 },
+    activityTab:  { x: 0, y: 4,  w: 6,  h: 8 },
+    costTab:      { x: 6, y: 4,  w: 6,  h: 8 },
+    timelineTab:  { x: 0, y: 12, w: 12, h: 6 },
+    activityForm: { x: 0, y: 18, w: 6,  h: 8 },
+    activityList: { x: 6, y: 18, w: 6,  h: 10 },
+    costKpi:      { x: 0, y: 28, w: 12, h: 4 },
+    costForm:     { x: 0, y: 32, w: 6,  h: 8 },
+    costList:     { x: 6, y: 32, w: 6,  h: 10 },
+  },
+};
+
+function getDefaultGridLayout(pageId: PageId): Record<string, GridItemLayout> {
+  const layout = DEFAULT_GRID_LAYOUTS[pageId];
+  if (layout) return { ...layout };
+  // Fallback: stack vertically with full width
+  const sections = DEFAULT_SECTIONS[pageId] ?? [];
+  const result: Record<string, GridItemLayout> = {};
+  let y = 0;
+  for (const s of sections) {
+    result[s] = { x: 0, y, w: 12, h: 6 };
+    y += 6;
+  }
+  return result;
+}
 
 export const PAGE_LABELS: Record<PageId, string> = {
   dashboard: "总览",
@@ -150,14 +200,15 @@ function getPageLayout(pageId: PageId): PageLayout {
   const store = loadStore();
   const existing = store.pages[pageId];
   const defaults = DEFAULT_SECTIONS[pageId] ?? [];
+  const defaultGrid = getDefaultGridLayout(pageId);
   if (!existing) {
-    return { visible: [...defaults], order: [...defaults] };
+    return { visible: [...defaults], gridLayout: defaultGrid };
   }
   // 合并新增区块（新功能上线后默认显示）
-  const allKeys = new Set([...defaults, ...existing.order]);
-  const order = Array.from(allKeys).filter((k) => existing.order.includes(k) || !existing.visible || existing.visible.includes(k));
+  const allKeys = new Set([...defaults, ...Object.keys(existing.gridLayout || {})]);
   const visible = Array.from(allKeys).filter((k) => existing.visible.includes(k));
-  return { visible, order };
+  const gridLayout = { ...defaultGrid, ...(existing.gridLayout || {}) };
+  return { visible, gridLayout };
 }
 
 function setPageLayout(pageId: PageId, layout: PageLayout) {
@@ -166,7 +217,7 @@ function setPageLayout(pageId: PageId, layout: PageLayout) {
   saveStore(store);
 }
 
-/* ────────── 通用 Hook ────────── */
+/* ────────── 通用 Hook（画布模式） ────────── */
 export function usePageLayout(pageId: PageId) {
   const [prefs, setPrefs] = useState<PageLayout>(() => getPageLayout(pageId));
   const [customizing, setCustomizing] = useState(false);
@@ -182,16 +233,13 @@ export function usePageLayout(pageId: PageId) {
     });
   }, [pageId]);
 
-  const moveSection = useCallback((key: string, direction: "up" | "down") => {
+  const setGridLayout = useCallback((layout: { i: string; x: number; y: number; w: number; h: number }[]) => {
     setPrefs((prev) => {
-      const order = [...prev.order];
-      const idx = order.indexOf(key);
-      if (idx === -1) return prev;
-      const newIdx = direction === "up" ? Math.max(0, idx - 1) : Math.min(order.length - 1, idx + 1);
-      if (newIdx === idx) return prev;
-      const [removed] = order.splice(idx, 1);
-      order.splice(newIdx, 0, removed);
-      const next = { ...prev, order };
+      const gridLayout = { ...prev.gridLayout };
+      for (const item of layout) {
+        gridLayout[item.i] = { x: item.x, y: item.y, w: item.w, h: item.h };
+      }
+      const next = { ...prev, gridLayout };
       setPageLayout(pageId, next);
       return next;
     });
@@ -199,50 +247,23 @@ export function usePageLayout(pageId: PageId) {
 
   const reset = useCallback(() => {
     const defaults = DEFAULT_SECTIONS[pageId] ?? [];
-    const next: PageLayout = { visible: [...defaults], order: [...defaults] };
+    const next: PageLayout = { visible: [...defaults], gridLayout: getDefaultGridLayout(pageId) };
     setPageLayout(pageId, next);
     setPrefs(next);
   }, [pageId]);
 
   const visibleKeys = prefs.visible;
-  const orderedKeys = prefs.order.filter((k) => visibleKeys.includes(k));
   const allKeys = DEFAULT_SECTIONS[pageId] ?? [];
+  const gridLayout = prefs.gridLayout;
 
   return {
     customizing,
     setCustomizing,
     toggleSection,
-    moveSection,
+    setGridLayout,
+    gridLayout,
     reset,
     visibleKeys,
-    orderedKeys,
     allKeys,
   };
-}
-
-/* ────────── 向后兼容：旧版 Dashboard / SKU Detail 迁移 ────────── */
-export function migrateLegacyLayoutPrefs() {
-  try {
-    const legacy = localStorage.getItem("aos-layout-prefs-v1");
-    if (!legacy) return;
-    const parsed = JSON.parse(legacy) as {
-      dashboard?: { visible?: string[]; order?: string[] };
-      skuDetail?: { visible?: string[]; order?: string[] };
-    };
-    const store = loadStore();
-    if (parsed.dashboard) {
-      store.pages.dashboard = {
-        visible: parsed.dashboard.visible ?? DEFAULT_SECTIONS.dashboard,
-        order: parsed.dashboard.order ?? DEFAULT_SECTIONS.dashboard,
-      };
-    }
-    if (parsed.skuDetail) {
-      store.pages.skuDetail = {
-        visible: parsed.skuDetail.visible ?? DEFAULT_SECTIONS.skuDetail,
-        order: parsed.skuDetail.order ?? DEFAULT_SECTIONS.skuDetail,
-      };
-    }
-    saveStore(store);
-    localStorage.removeItem("aos-layout-prefs-v1");
-  } catch { /* ignore */ }
 }

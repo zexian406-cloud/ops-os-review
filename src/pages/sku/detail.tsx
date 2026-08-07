@@ -28,6 +28,11 @@ const lifecycleLabel: Record<string, string> = { new: "新品", growth: "成长"
 const saleStatusLabel: Record<string, string> = { active: "在售", clearance: "清货", paused: "暂停", discontinued: "停售" };
 const linkTypeLabel: Record<string, string> = { main: "主链接", follow: "跟卖", backup: "备用" };
 
+/* ── KPI 卡片固定顺序（画布模式下不再支持单独排序） ── */
+const CORE_KPI_ORDER = ["dailySales7d", "monthlySales", "inStock", "inTransit", "totalStock", "stockSalesRatio"];
+const COVERAGE_KPI_ORDER = ["coverDays", "coverOnHand", "coverWithTransit", "leadTime"];
+const QUALITY_KPI_ORDER = ["rating", "reviewCount", "returnRate", "adRatio", "refundFee"];
+
 /** 取某 MSKU 的展示店铺：优先 mskuStores（导入保留的各 MSKU 店铺），否则回退 sku.store。 */
 const mskuStoreOf = (sku: SkuMaster, m: string): string =>
   (sku.mskuStores && sku.mskuStores[m]) || sku.store;
@@ -188,10 +193,7 @@ export default function SkuDetail() {
   // ── Layout customizer ──
   const {
     customizing, setCustomizing, toggleSection, reset: resetLayout,
-    visibleKeys, allKeys,
-    moveCoreKpiCard, moveCoverageKpiCard, moveQualityKpiCard,
-    coreKpiCardOrder, coverageKpiCardOrder, qualityKpiCardOrder,
-    gridLayout, setGridLayout,
+    visibleKeys, allKeys, gridLayout, setGridLayout,
   } = useSkuDetailLayout();
 
   // ── 构建 ReactGridLayout 布局数组 ──
@@ -643,7 +645,7 @@ export default function SkuDetail() {
       <div key="kpiCards" className="space-y-2">
         {/* ── 核心 KPI ── */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-            {coreKpiCardOrder.map((key) => {
+            {CORE_KPI_ORDER.map((key) => {
               switch (key) {
                 case "dailySales7d": {
                   const _7dTotal = latest.dailySales7d * 7;
@@ -668,7 +670,7 @@ export default function SkuDetail() {
 
         {/* ── 覆盖 KPI ── */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {coverageKpiCardOrder.map((key) => {
+            {COVERAGE_KPI_ORDER.map((key) => {
               switch (key) {
                 case "coverDays": {
                   const noSales = !Number.isFinite(coverDays);
@@ -684,7 +686,7 @@ export default function SkuDetail() {
 
         {/* ── 质量 KPI ── */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-            {qualityKpiCardOrder.map((key) => {
+            {QUALITY_KPI_ORDER.map((key) => {
               switch (key) {
                 case "rating": return <KpiCard key={key} label="评分" value={latest.rating > 0 ? latest.rating.toFixed(1) : "N/A"} sub={skuWow ? deltaArrow(skuWow.ratingDelta) : "目标 4.0+"} icon="ri-star-line" tone={latest.rating > 0 && latest.rating < 3.8 ? "danger" : latest.rating > 0 && latest.rating < 4.0 ? "warn" : "accent"} />;
                 case "reviewCount": return <KpiCard key={key} label="Review 数" value={latest.reviewCount != null ? latest.reviewCount.toLocaleString() : "N/A"} sub="累计" icon="ri-chat-3-line" />;

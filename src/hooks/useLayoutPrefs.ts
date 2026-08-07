@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 
 /* ────────── Dashboard 布局偏好 ────────── */
 export type DashboardSectionKey =
@@ -135,54 +135,6 @@ export const SHIPMENT_KPI_METRIC_TONES: Record<ShipmentKpiMetricKey, "default" |
 
 export const DEFAULT_SHIPMENT_KPI_SLOTS: ShipmentKpiMetricKey[] = ["pendingSkus", "suggestQty", "fobCost", "campaigns"];
 
-/* ────────── SKU 详情页 KPI 卡片 Key ────────── */
-export type CoreKpiCardKey = "dailySales7d" | "monthlySales" | "inStock" | "inTransit" | "totalStock" | "stockSalesRatio";
-export type CoverageKpiCardKey = "coverDays" | "coverOnHand" | "coverWithTransit" | "leadTime";
-export type QualityKpiCardKey = "rating" | "reviewCount" | "returnRate" | "adRatio" | "refundFee";
-
-export const CORE_KPI_CARD_LABELS: Record<CoreKpiCardKey, string> = {
-  dailySales7d: "7天日均销量",
-  monthlySales: "30天销量",
-  inStock: "在库库存",
-  inTransit: "在途库存",
-  totalStock: "总库存",
-  stockSalesRatio: "存销比",
-};
-
-export const COVERAGE_KPI_CARD_LABELS: Record<CoverageKpiCardKey, string> = {
-  coverDays: "综合覆盖",
-  coverOnHand: "在库覆盖",
-  coverWithTransit: "含在途覆盖",
-  leadTime: "Lead Time",
-};
-
-export const QUALITY_KPI_CARD_LABELS: Record<QualityKpiCardKey, string> = {
-  rating: "评分",
-  reviewCount: "Review 数",
-  returnRate: "退货率/退款率",
-  adRatio: "广告费比",
-  refundFee: "退款费",
-};
-
-export const DEFAULT_CORE_KPI_CARDS: CoreKpiCardKey[] = ["dailySales7d", "monthlySales", "inStock", "inTransit", "totalStock", "stockSalesRatio"];
-export const DEFAULT_COVERAGE_KPI_CARDS: CoverageKpiCardKey[] = ["coverDays", "coverOnHand", "coverWithTransit", "leadTime"];
-export const DEFAULT_QUALITY_KPI_CARDS: QualityKpiCardKey[] = ["rating", "reviewCount", "returnRate", "adRatio", "refundFee"];
-
-/* ────────── 统一 KPI 卡片（合并所有） ────────── */
-export type AllKpiCardKey = CoreKpiCardKey | CoverageKpiCardKey | QualityKpiCardKey;
-
-export const ALL_KPI_CARD_LABELS: Record<AllKpiCardKey, string> = {
-  ...CORE_KPI_CARD_LABELS,
-  ...COVERAGE_KPI_CARD_LABELS,
-  ...QUALITY_KPI_CARD_LABELS,
-};
-
-export const DEFAULT_ALL_KPI_CARDS: AllKpiCardKey[] = [
-  ...DEFAULT_CORE_KPI_CARDS,
-  ...DEFAULT_COVERAGE_KPI_CARDS,
-  ...DEFAULT_QUALITY_KPI_CARDS,
-];
-
 /* ────────── 网格布局项 ────────── */
 export interface GridItemLayout {
   x: number;
@@ -226,16 +178,27 @@ const DEFAULT_SKU_GRID_LAYOUT: Record<SkuDetailSectionKey, GridItemLayout> = {
   relatedTodos:   { x: 0, y: 70, w: 12, h: 6 },
 };
 
+/* ────────── Dashboard 默认画布布局 ────────── */
+const DEFAULT_DASHBOARD_GRID_LAYOUT: Record<DashboardSectionKey, GridItemLayout> = {
+  kpi:         { x: 0, y: 0,  w: 12, h: 4 },
+  todo:        { x: 0, y: 4,  w: 6,  h: 10 },
+  opsLogs:     { x: 6, y: 4,  w: 6,  h: 10 },
+  weekCompare: { x: 0, y: 14, w: 12, h: 6 },
+  promotions:  { x: 0, y: 20, w: 6,  h: 8 },
+  riskBuckets: { x: 6, y: 20, w: 6,  h: 8 },
+  alerts:      { x: 0, y: 28, w: 8,  h: 6 },
+  shipment:    { x: 8, y: 28, w: 4,  h: 10 },
+  wowBar:      { x: 0, y: 38, w: 12, h: 3 },
+};
+
 interface LayoutPrefs {
   dashboard: {
     visible: DashboardSectionKey[];
-    order: DashboardSectionKey[];
     kpiSlots: KpiMetricKey[];
+    gridLayout: Record<string, GridItemLayout>;
   };
   skuDetail: {
     visible: SkuDetailSectionKey[];
-    order: SkuDetailSectionKey[];
-    kpiCardOrder: AllKpiCardKey[];
     gridLayout: Record<string, GridItemLayout>;
   };
   shipment: {
@@ -243,7 +206,7 @@ interface LayoutPrefs {
   };
 }
 
-const DEFAULT_DASHBOARD_ORDER: DashboardSectionKey[] = [
+const DEFAULT_DASHBOARD_VISIBLE: DashboardSectionKey[] = [
   "kpi",
   "todo",
   "opsLogs",
@@ -255,7 +218,7 @@ const DEFAULT_DASHBOARD_ORDER: DashboardSectionKey[] = [
   "wowBar",
 ];
 
-const DEFAULT_SKU_ORDER: SkuDetailSectionKey[] = [
+const DEFAULT_SKU_VISIBLE: SkuDetailSectionKey[] = [
   "header",
   "discountBanner",
   "kpiCards",
@@ -271,7 +234,7 @@ const DEFAULT_SKU_ORDER: SkuDetailSectionKey[] = [
   "relatedTodos",
 ];
 
-const STORAGE_KEY = "aos-layout-prefs-v3";
+const STORAGE_KEY = "aos-layout-prefs-v4";
 
 function loadPrefs(): LayoutPrefs {
   try {
@@ -280,14 +243,12 @@ function loadPrefs(): LayoutPrefs {
       const parsed = JSON.parse(raw) as Partial<LayoutPrefs>;
       return {
         dashboard: {
-          visible: parsed.dashboard?.visible ?? DEFAULT_DASHBOARD_ORDER,
-          order: parsed.dashboard?.order ?? DEFAULT_DASHBOARD_ORDER,
+          visible: parsed.dashboard?.visible ?? DEFAULT_DASHBOARD_VISIBLE,
           kpiSlots: parsed.dashboard?.kpiSlots ?? [...DEFAULT_KPI_SLOTS],
+          gridLayout: parsed.dashboard?.gridLayout ?? { ...DEFAULT_DASHBOARD_GRID_LAYOUT },
         },
         skuDetail: {
-          visible: parsed.skuDetail?.visible ?? DEFAULT_SKU_ORDER,
-          order: parsed.skuDetail?.order ?? DEFAULT_SKU_ORDER,
-          kpiCardOrder: parsed.skuDetail?.kpiCardOrder ?? [...DEFAULT_ALL_KPI_CARDS],
+          visible: parsed.skuDetail?.visible ?? DEFAULT_SKU_VISIBLE,
           gridLayout: parsed.skuDetail?.gridLayout ?? { ...DEFAULT_SKU_GRID_LAYOUT },
         },
         shipment: {
@@ -297,8 +258,8 @@ function loadPrefs(): LayoutPrefs {
     }
   } catch { /* ignore */ }
   return {
-    dashboard: { visible: [...DEFAULT_DASHBOARD_ORDER], order: [...DEFAULT_DASHBOARD_ORDER], kpiSlots: [...DEFAULT_KPI_SLOTS] },
-    skuDetail: { visible: [...DEFAULT_SKU_ORDER], order: [...DEFAULT_SKU_ORDER], kpiCardOrder: [...DEFAULT_ALL_KPI_CARDS], gridLayout: { ...DEFAULT_SKU_GRID_LAYOUT } },
+    dashboard: { visible: [...DEFAULT_DASHBOARD_VISIBLE], kpiSlots: [...DEFAULT_KPI_SLOTS], gridLayout: { ...DEFAULT_DASHBOARD_GRID_LAYOUT } },
+    skuDetail: { visible: [...DEFAULT_SKU_VISIBLE], gridLayout: { ...DEFAULT_SKU_GRID_LAYOUT } },
     shipment: { kpiSlots: [...DEFAULT_SHIPMENT_KPI_SLOTS] },
   };
 }
@@ -328,21 +289,6 @@ export function useDashboardLayout() {
     });
   }, []);
 
-  const moveSection = useCallback((key: DashboardSectionKey, direction: "up" | "down") => {
-    setPrefs((prev) => {
-      const order = [...prev.dashboard.order];
-      const idx = order.indexOf(key);
-      if (idx === -1) return prev;
-      const newIdx = direction === "up" ? Math.max(0, idx - 1) : Math.min(order.length - 1, idx + 1);
-      if (newIdx === idx) return prev;
-      const [removed] = order.splice(idx, 1);
-      order.splice(newIdx, 0, removed);
-      const next = { ...prev, dashboard: { ...prev.dashboard, order } };
-      savePrefs(next);
-      return next;
-    });
-  }, []);
-
   const setKpiSlot = useCallback((index: number, key: KpiMetricKey) => {
     setPrefs((prev) => {
       const slots = [...prev.dashboard.kpiSlots];
@@ -355,30 +301,42 @@ export function useDashboardLayout() {
     });
   }, []);
 
+  const setGridLayout = useCallback((layout: { i: string; x: number; y: number; w: number; h: number }[]) => {
+    setPrefs((prev) => {
+      const gridLayout = { ...prev.dashboard.gridLayout };
+      for (const item of layout) {
+        gridLayout[item.i] = { x: item.x, y: item.y, w: item.w, h: item.h };
+      }
+      const next = { ...prev, dashboard: { ...prev.dashboard, gridLayout } };
+      savePrefs(next);
+      return next;
+    });
+  }, []);
+
   const reset = useCallback(() => {
     const next: LayoutPrefs = {
       ...prefs,
-      dashboard: { visible: [...DEFAULT_DASHBOARD_ORDER], order: [...DEFAULT_DASHBOARD_ORDER], kpiSlots: [...DEFAULT_KPI_SLOTS] },
+      dashboard: { visible: [...DEFAULT_DASHBOARD_VISIBLE], kpiSlots: [...DEFAULT_KPI_SLOTS], gridLayout: { ...DEFAULT_DASHBOARD_GRID_LAYOUT } },
     };
     savePrefs(next);
     setPrefs(next);
   }, [prefs]);
 
   const visibleKeys = prefs.dashboard.visible;
-  const orderedKeys = prefs.dashboard.order.filter((k) => visibleKeys.includes(k));
   const kpiSlots = prefs.dashboard.kpiSlots;
+  const gridLayout = prefs.dashboard.gridLayout;
 
   return {
     customizing,
     setCustomizing,
     toggleSection,
-    moveSection,
     setKpiSlot,
+    setGridLayout,
+    gridLayout,
     reset,
     visibleKeys,
-    orderedKeys,
     kpiSlots,
-    allKeys: DEFAULT_DASHBOARD_ORDER,
+    allKeys: DEFAULT_DASHBOARD_VISIBLE,
   };
 }
 
@@ -401,47 +359,15 @@ export function useSkuDetailLayout() {
     });
   }, []);
 
-  const moveSection = useCallback((key: SkuDetailSectionKey, direction: "up" | "down") => {
-    setPrefs((prev) => {
-      const order = [...prev.skuDetail.order];
-      const idx = order.indexOf(key);
-      if (idx === -1) return prev;
-      const newIdx = direction === "up" ? Math.max(0, idx - 1) : Math.min(order.length - 1, idx + 1);
-      if (newIdx === idx) return prev;
-      const [removed] = order.splice(idx, 1);
-      order.splice(newIdx, 0, removed);
-      const next = { ...prev, skuDetail: { ...prev.skuDetail, order } };
-      savePrefs(next);
-      return next;
-    });
-  }, []);
-
-  // ── 统一 KPI 卡片排序 ──
-  const moveKpiCard = useCallback((key: AllKpiCardKey, direction: "left" | "right") => {
-    setPrefs((prev) => {
-      const cards = [...prev.skuDetail.kpiCardOrder];
-      const idx = cards.indexOf(key);
-      if (idx === -1) return prev;
-      const newIdx = direction === "left" ? Math.max(0, idx - 1) : Math.min(cards.length - 1, idx + 1);
-      if (newIdx === idx) return prev;
-      const [removed] = cards.splice(idx, 1);
-      cards.splice(newIdx, 0, removed);
-      const next = { ...prev, skuDetail: { ...prev.skuDetail, kpiCardOrder: cards } };
-      savePrefs(next);
-      return next;
-    });
-  }, []);
-
   const reset = useCallback(() => {
     const next: LayoutPrefs = {
       ...prefs,
-      skuDetail: { visible: [...DEFAULT_SKU_ORDER], order: [...DEFAULT_SKU_ORDER], kpiCardOrder: [...DEFAULT_ALL_KPI_CARDS], gridLayout: { ...DEFAULT_SKU_GRID_LAYOUT } },
+      skuDetail: { visible: [...DEFAULT_SKU_VISIBLE], gridLayout: { ...DEFAULT_SKU_GRID_LAYOUT } },
     };
     savePrefs(next);
     setPrefs(next);
   }, [prefs]);
 
-  // ── 网格布局更新（react-grid-layout 拖拽/缩放后回调） ──
   const setGridLayout = useCallback((layout: { i: string; x: number; y: number; w: number; h: number }[]) => {
     setPrefs((prev) => {
       const gridLayout = { ...prev.skuDetail.gridLayout };
@@ -455,50 +381,17 @@ export function useSkuDetailLayout() {
   }, []);
 
   const visibleKeys = prefs.skuDetail.visible;
-  const orderedKeys = prefs.skuDetail.order.filter((k) => visibleKeys.includes(k));
   const gridLayout = prefs.skuDetail.gridLayout;
-
-  // 从统一数组拆分为3个独立数组（兼容SkuLayoutCustomizer接口）
-  const allCards = prefs.skuDetail.kpiCardOrder;
-  const coreKpiCardOrder = allCards.filter((k): k is CoreKpiCardKey =>
-    ["dailySales7d", "monthlySales", "inStock", "inTransit", "totalStock", "stockSalesRatio"].includes(k)
-  );
-  const coverageKpiCardOrder = allCards.filter((k): k is CoverageKpiCardKey =>
-    ["coverDays", "coverOnHand", "coverWithTransit", "leadTime"].includes(k)
-  );
-  const qualityKpiCardOrder = allCards.filter((k): k is QualityKpiCardKey =>
-    ["rating", "reviewCount", "returnRate", "adRatio", "refundFee"].includes(k)
-  );
-
-  const moveCoreKpiCard = useCallback((key: CoreKpiCardKey, direction: "left" | "right") => {
-    moveKpiCard(key, direction);
-  }, [moveKpiCard]);
-  const moveCoverageKpiCard = useCallback((key: CoverageKpiCardKey, direction: "left" | "right") => {
-    moveKpiCard(key, direction);
-  }, [moveKpiCard]);
-  const moveQualityKpiCard = useCallback((key: QualityKpiCardKey, direction: "left" | "right") => {
-    moveKpiCard(key, direction);
-  }, [moveKpiCard]);
 
   return {
     customizing,
     setCustomizing,
     toggleSection,
-    moveSection,
-    moveKpiCard,
-    moveCoreKpiCard,
-    moveCoverageKpiCard,
-    moveQualityKpiCard,
     setGridLayout,
     gridLayout,
     reset,
     visibleKeys,
-    orderedKeys,
-    kpiCardOrder: allCards,
-    coreKpiCardOrder,
-    coverageKpiCardOrder,
-    qualityKpiCardOrder,
-    allKeys: DEFAULT_SKU_ORDER,
+    allKeys: DEFAULT_SKU_VISIBLE,
   };
 }
 

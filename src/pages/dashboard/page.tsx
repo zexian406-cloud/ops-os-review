@@ -1,8 +1,9 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
+import { type Layout } from "react-grid-layout";
 import { useOpsData } from "@/domain/store";
 import { computeWarehouseTotals } from "@/domain/calculator";
 import { db, getAllShops } from "@/domain/db";
@@ -10,10 +11,11 @@ import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
+import CanvasLayout from "@/components/layout/CanvasLayout";
 import type { AlertType, TodoItem, Shop, OpsLog } from "@/domain/types";
 import AlertList from "./AlertList";
 import LayoutCustomizer from "@/components/layout/LayoutCustomizer";
-import { useDashboardLayout, type DashboardSectionKey, type KpiMetricKey, KPI_METRIC_LABELS, KPI_METRIC_ICONS, KPI_METRIC_TONES } from "@/hooks/useLayoutPrefs";
+import { useDashboardLayout, type DashboardSectionKey, type KpiMetricKey, KPI_METRIC_LABELS, KPI_METRIC_ICONS, KPI_METRIC_TONES, type GridItemLayout } from "@/hooks/useLayoutPrefs";
 
 const deltaArrow = (v: number, inverse = false) => {
   if (Math.abs(v) < 0.01) return <span className="text-foreground-400">→ 0</span>;
@@ -69,9 +71,21 @@ export default function Dashboard() {
   }, []);
 
   const {
-    customizing, setCustomizing, toggleSection, moveSection, reset, setKpiSlot,
-    visibleKeys, orderedKeys, kpiSlots,
+    customizing, setCustomizing, toggleSection, reset, setKpiSlot,
+    visibleKeys, kpiSlots, gridLayout, setGridLayout, allKeys,
   } = useDashboardLayout();
+
+  // ── 构建 ReactGridLayout 布局数组 ──
+  const rglLayout: Layout[] = useMemo(() => {
+    return visibleKeys.map((key) => {
+      const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 6 };
+      return { i: key, x: item.x, y: item.y, w: item.w, h: item.h, minW: 3, maxW: 12, minH: 2 };
+    });
+  }, [visibleKeys, gridLayout]);
+
+  const handleLayoutChange = useCallback((layout: Layout[]) => {
+    setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
+  }, [setGridLayout]);
 
   // ── 店铺筛选 ──
   const shopFilterId = useMemo(() => {
@@ -600,38 +614,29 @@ export default function Dashboard() {
       {customizing && (
         <LayoutCustomizer
           visibleKeys={visibleKeys}
-          orderedKeys={orderedKeys}
-          allKeys={["kpi", "todo", "opsLogs", "weekCompare", "promotions", "riskBuckets", "alerts", "shipment", "wowBar"]}
+          allKeys={allKeys}
           toggle={toggleSection}
-          move={moveSection}
           onClose={() => setCustomizing(false)}
           onReset={reset}
         />
       )}
 
-      {/* Sections in custom order */}
-      {orderedKeys.map((key) => {
-        const node = sections[key];
-        if (!node) return null;
-        // alerts + shipment side-by-side special layout
-        if (key === "alerts") {
-          const shipmentNode = orderedKeys.includes("shipment") ? sections.shipment : null;
-          if (shipmentNode && orderedKeys.indexOf("shipment") === orderedKeys.indexOf(key) + 1) {
-            return (
-              <div key="alerts-shipment" className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-                <div className="xl:col-span-2">{node}</div>
-                <div>{shipmentNode}</div>
-              </div>
-            );
-          }
-        }
-        if (key === "shipment") {
-          const alertIdx = orderedKeys.indexOf("alerts");
-          const shipIdx = orderedKeys.indexOf("shipment");
-          if (alertIdx !== -1 && shipIdx === alertIdx + 1) return null; // rendered together above
-        }
-        return <div key={key}>{node}</div>;
-      })}
+      {/* Canvas Layout — 自由拖拽画布模式 */}
+      <CanvasLayout
+        layout={rglLayout}
+        customizing={customizing}
+        onLayoutChange={handleLayoutChange}
+      >
+        {visibleKeys.map((key) => {
+          const node = sections[key as DashboardSectionKey];
+          if (!node) return null;
+          return (
+            <div key={key} className="canvas-item-inner">
+              {node}
+            </div>
+          );
+        })}
+      </CanvasLayout>
     </div>
   );
 }

@@ -5,7 +5,9 @@ import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import PageLayoutCustomizer from "@/components/layout/PageLayoutCustomizer";
-import { usePageLayout } from "@/hooks/usePageLayout";
+import CanvasLayout from "@/components/layout/CanvasLayout";
+import { usePageLayout, type GridItemLayout } from "@/hooks/usePageLayout";
+import { type Layout } from "react-grid-layout";
 import { computeAll, getEffectivePromoCost, aggregateWeeklyCosts } from "@/domain/calculator";
 import type {
   ManualPromotion, ManualPromoType, Promotion, PromotionType, Shop, SkuMaster, DailySnapshot,
@@ -69,9 +71,20 @@ export default function PromoCenterPage() {
 
   // 自定义布局
   const {
-    customizing, setCustomizing, toggleSection, moveSection, reset: resetLayout,
-    visibleKeys, orderedKeys, allKeys,
+    customizing, setCustomizing, toggleSection, reset: resetLayout,
+    visibleKeys, allKeys, gridLayout, setGridLayout,
   } = usePageLayout("promo-center");
+
+  // ── 构建 ReactGridLayout 布局数组 ──
+  const rglLayout: Layout[] = useMemo(() => {
+    return visibleKeys.map((key) => {
+      const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 6 };
+      return { i: key, x: item.x, y: item.y, w: item.w, h: item.h, minW: 3, maxW: 12, minH: 2 };
+    });
+  }, [visibleKeys, gridLayout]);
+  const handleLayoutChange = useCallback((layout: Layout[]) => {
+    setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
+  }, [setGridLayout]);
 
   // 数据
   const [skus, setSkus] = useState<SkuMaster[]>([]);
@@ -204,18 +217,51 @@ export default function PromoCenterPage() {
         <PageLayoutCustomizer
           pageId="promo-center"
           visibleKeys={visibleKeys}
-          orderedKeys={orderedKeys}
           allKeys={allKeys}
           toggle={toggleSection}
-          move={moveSection}
           onClose={() => setCustomizing(false)}
           onReset={resetLayout}
         />
       )}
 
+      {msg && (
+        <div className={[
+          "rounded-md px-3 py-1.5 text-[12px]",
+          msg.includes("请填写") || msg.includes("缺失") ? "border border-red-200 bg-red-50 text-red-800" : "border border-accent-200 bg-accent-100/60 text-accent-900",
+        ].join(" ")}>
+          {msg}
+        </div>
+      )}
+
+      {/* ── Tab 切换 ── */}
+      <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-background-300/70 bg-background-100/70 px-1 py-1">
+        {[
+          { key: "activity" as Tab, label: "活动管理", icon: "ri-flashlight-line" },
+          { key: "cost" as Tab, label: "促销成本", icon: "ri-coupon-3-line" },
+          { key: "timeline" as Tab, label: "促销时间线", icon: "ri-timeline-view" },
+        ].map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={[
+              "flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] font-medium transition-colors cursor-pointer whitespace-nowrap",
+              tab === t.key
+                ? "bg-primary-500 text-background-50"
+                : "text-foreground-600 hover:text-foreground-900",
+            ].join(" ")}
+          >
+            <i className={t.icon} aria-hidden />
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── 画布布局 ── */}
+      <CanvasLayout layout={rglLayout} customizing={customizing} onLayoutChange={handleLayoutChange}>
       {/* ── KPI 汇总卡片 ── */}
       {(visibleKeys.length === 0 || visibleKeys.includes("summaryCards")) && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div key="summaryCards" className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="rounded-[14px] border border-background-200/70 bg-background-100/50 p-4">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary-100 text-[14px] text-primary-700">
@@ -265,83 +311,57 @@ export default function PromoCenterPage() {
         </div>
       )}
 
-      {msg && (
-        <div className={[
-          "rounded-md px-3 py-1.5 text-[12px]",
-          msg.includes("请填写") || msg.includes("缺失") ? "border border-red-200 bg-red-50 text-red-800" : "border border-accent-200 bg-accent-100/60 text-accent-900",
-        ].join(" ")}>
-          {msg}
-        </div>
-      )}
-
-      {/* ── Tab 切换 ── */}
-      <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-background-300/70 bg-background-100/70 px-1 py-1">
-        {[
-          { key: "activity" as Tab, label: "活动管理", icon: "ri-flashlight-line" },
-          { key: "cost" as Tab, label: "促销成本", icon: "ri-coupon-3-line" },
-          { key: "timeline" as Tab, label: "促销时间线", icon: "ri-timeline-view" },
-        ].map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={[
-              "flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] font-medium transition-colors cursor-pointer whitespace-nowrap",
-              tab === t.key
-                ? "bg-primary-500 text-background-50"
-                : "text-foreground-600 hover:text-foreground-900",
-            ].join(" ")}
-          >
-            <i className={t.icon} aria-hidden />
-            {t.label}
-          </button>
-        ))}
-      </div>
-
       {/* ── Tab 1: 活动管理 ── */}
       {tab === "activity" && (visibleKeys.length === 0 || visibleKeys.includes("activityTab")) && (
-        <ActivitySection
-          promotions={promotions}
-          skus={skus}
-          skuMap={skuMap}
-          snapMap={snapMap}
-          shops={shops}
-          shopNameMap={shopNameMap}
-          getShopName={getShopName}
-          prefilledSku={prefilledSku}
-          reload={reload}
-          flash={flash}
-          visibleKeys={visibleKeys}
-        />
+        <div key="activityTab">
+          <ActivitySection
+            promotions={promotions}
+            skus={skus}
+            skuMap={skuMap}
+            snapMap={snapMap}
+            shops={shops}
+            shopNameMap={shopNameMap}
+            getShopName={getShopName}
+            prefilledSku={prefilledSku}
+            reload={reload}
+            flash={flash}
+            visibleKeys={visibleKeys}
+          />
+        </div>
       )}
 
       {/* ── Tab 2: 促销成本 ── */}
       {tab === "cost" && (visibleKeys.length === 0 || visibleKeys.includes("costTab")) && (
-        <CostSection
-          manualPromotions={manualPromotions}
-          promotions={promotions}
-          skus={skus}
-          skuMap={skuMap}
-          snapMap={snapMap}
-          shops={shops}
-          shopNameMap={shopNameMap}
-          prefilledSku={prefilledSku}
-          reload={reload}
-          flash={flash}
-          visibleKeys={visibleKeys}
-        />
+        <div key="costTab">
+          <CostSection
+            manualPromotions={manualPromotions}
+            promotions={promotions}
+            skus={skus}
+            skuMap={skuMap}
+            snapMap={snapMap}
+            shops={shops}
+            shopNameMap={shopNameMap}
+            prefilledSku={prefilledSku}
+            reload={reload}
+            flash={flash}
+            visibleKeys={visibleKeys}
+          />
+        </div>
       )}
 
       {/* ── Tab 3: 促销时间线 ── */}
       {tab === "timeline" && (visibleKeys.length === 0 || visibleKeys.includes("timelineTab")) && (
-        <TimelineSection
-          buckets={weeklyBuckets}
-          promotions={promotions}
-          manualPromotions={manualPromotions}
-          skuMap={skuMap}
-          snapMap={snapMap}
-        />
+        <div key="timelineTab">
+          <TimelineSection
+            buckets={weeklyBuckets}
+            promotions={promotions}
+            manualPromotions={manualPromotions}
+            skuMap={skuMap}
+            snapMap={snapMap}
+          />
+        </div>
       )}
+      </CanvasLayout>
     </div>
   );
 }

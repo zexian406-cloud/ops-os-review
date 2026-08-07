@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
 import { computeWarehouseTotals } from "@/domain/calculator";
@@ -7,7 +7,9 @@ import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import PageLayoutCustomizer from "@/components/layout/PageLayoutCustomizer";
-import { usePageLayout } from "@/hooks/usePageLayout";
+import CanvasLayout from "@/components/layout/CanvasLayout";
+import { type Layout } from "react-grid-layout";
+import { usePageLayout, type GridItemLayout } from "@/hooks/usePageLayout";
 import {
   useShipmentKpiLayout,
   SHIPMENT_KPI_METRIC_LABELS,
@@ -39,8 +41,8 @@ export default function Shipment() {
   const [sortMode, setSortMode] = useState<SortMode>("priority");
 
   const {
-    customizing, setCustomizing, toggleSection, moveSection, reset: resetLayout,
-    visibleKeys, orderedKeys, allKeys,
+    customizing, setCustomizing, toggleSection, reset: resetLayout,
+    visibleKeys, allKeys, gridLayout, setGridLayout,
   } = usePageLayout("shipment");
 
   const {
@@ -48,6 +50,18 @@ export default function Shipment() {
   } = useShipmentKpiLayout();
 
   const customizingMode = customizing || customizingKpi;
+
+  // ── 构建 ReactGridLayout 布局数组 ──
+  const rglLayout: Layout[] = useMemo(() => {
+    return visibleKeys.map((key) => {
+      const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 6 };
+      return { i: key, x: item.x, y: item.y, w: item.w, h: item.h, minW: 3, maxW: 12, minH: 2 };
+    });
+  }, [visibleKeys, gridLayout]);
+
+  const handleLayoutChange = useCallback((layout: Layout[]) => {
+    setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
+  }, [setGridLayout]);
 
   const today = useMemo(() => {
     const dates = snapshots.map((s) => s.date);
@@ -229,9 +243,27 @@ export default function Shipment() {
         </button>
       </div>
 
+      {/* 自定义布局面板 */}
+      {customizing && (
+        <PageLayoutCustomizer
+          pageId="shipment"
+          visibleKeys={visibleKeys}
+          allKeys={allKeys}
+          toggle={toggleSection}
+          onClose={() => setCustomizing(false)}
+          onReset={resetLayout}
+        />
+      )}
+
+      {/* 画布布局 — 全部区块可拖拽定位 */}
+      <CanvasLayout
+        layout={rglLayout}
+        customizing={customizing}
+        onLayoutChange={handleLayoutChange}
+      >
       {/* KPI 卡片区域 + 自定义模式 */}
       {visibleKeys.includes("summaryKpi") && (
-        <div>
+        <div key="summaryKpi">
           {customizingKpi && (
             <div className="mb-3 flex items-center justify-between rounded-xl border border-dashed border-accent-300/60 bg-accent-50/40 px-4 py-2.5">
               <div className="flex items-center gap-2">
@@ -281,22 +313,8 @@ export default function Shipment() {
         </div>
       )}
 
-      {/* 自定义布局面板 */}
-      {customizing && (
-        <PageLayoutCustomizer
-          pageId="shipment"
-          visibleKeys={visibleKeys}
-          orderedKeys={orderedKeys}
-          allKeys={allKeys}
-          toggle={toggleSection}
-          move={moveSection}
-          onClose={() => setCustomizing(false)}
-          onReset={resetLayout}
-        />
-      )}
-
       {visibleKeys.includes("filters") && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div key="filters" className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 rounded-full border border-background-300/70 bg-background-100/70 px-1 py-1">
             {(["7d", "30d"] as const).map((basis) => (
               <button key={basis} type="button" onClick={() => setSalesBasis(basis)}
@@ -330,6 +348,7 @@ export default function Shipment() {
       )}
 
       {visibleKeys.includes("shipmentCards") && (
+      <div key="shipmentCards">
         <Section title="发货建议卡片" icon="ri-grid-line" subtitle={`共 ${skuSuggestions.length} 个 SKU · ${SORT_LABELS[sortMode]}`}>
           {skuSuggestions.length === 0 ? (
             <EmptyState icon="ri-check-double-line" title="没有匹配的发货建议" desc="调整筛选条件或前往参数中心调整目标库存天数" />
@@ -339,7 +358,9 @@ export default function Shipment() {
             </div>
           )}
         </Section>
+      </div>
       )}
+      </CanvasLayout>
     </div>
   );
 }

@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { db, getAllShops } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import PageLayoutCustomizer from "@/components/layout/PageLayoutCustomizer";
-import { usePageLayout } from "@/hooks/usePageLayout";
+import CanvasLayout from "@/components/layout/CanvasLayout";
+import { type Layout } from "react-grid-layout";
+import { usePageLayout, type GridItemLayout } from "@/hooks/usePageLayout";
 import type { Promotion, PromotionType, SkuMaster, DailySnapshot, Shop } from "@/domain/types";
 
 const PROMO_TYPES: { value: PromotionType; label: string }[] = [
@@ -27,9 +29,21 @@ export default function PromotionsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const {
-    customizing, setCustomizing, toggleSection, moveSection, reset: resetLayout,
-    visibleKeys, orderedKeys, allKeys,
+    customizing, setCustomizing, toggleSection, reset: resetLayout,
+    visibleKeys, allKeys, gridLayout, setGridLayout,
   } = usePageLayout("promotions");
+
+  // ── 构建 ReactGridLayout 布局数组 ──
+  const rglLayout: Layout[] = useMemo(() => {
+    return visibleKeys.map((key) => {
+      const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 6 };
+      return { i: key, x: item.x, y: item.y, w: item.w, h: item.h, minW: 3, maxW: 12, minH: 2 };
+    });
+  }, [visibleKeys, gridLayout]);
+
+  const handleLayoutChange = useCallback((layout: Layout[]) => {
+    setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
+  }, [setGridLayout]);
 
   const [bulkSkus, setBulkSkus] = useState<Set<string>>(new Set());
   const [bulkMode, setBulkMode] = useState(false);
@@ -321,18 +335,23 @@ export default function PromotionsPage() {
         <PageLayoutCustomizer
           pageId="promotions"
           visibleKeys={visibleKeys}
-          orderedKeys={orderedKeys}
           allKeys={allKeys}
           toggle={toggleSection}
-          move={moveSection}
           onClose={() => setCustomizing(false)}
           onReset={resetLayout}
         />
       )}
 
+      {/* 画布布局 — 全部区块可拖拽定位 */}
+      <CanvasLayout
+        layout={rglLayout}
+        customizing={customizing}
+        onLayoutChange={handleLayoutChange}
+      >
+
       {/* ── 促销汇总卡片 ── */}
       {visibleKeys.includes("summaryCards") && (
-      <div className="grid grid-cols-3 gap-3">
+      <div key="summaryCards" className="grid grid-cols-3 gap-3">
         <div className="rounded-xl border border-background-200/70 bg-background-100/50 p-3">
           <div className="text-[11px] font-medium text-foreground-500">平均利润率</div>
           <div className={`font-heading text-[22px] font-bold mt-0.5 ${summaryStats.avgMargin >= 10 ? "text-primary-700" : summaryStats.avgMargin >= 0 ? "text-foreground-800" : "text-red-600"}`}>
@@ -359,6 +378,7 @@ export default function PromotionsPage() {
 
       {/* ── 新增促销 ── */}
       {visibleKeys.includes("addForm") && (
+      <div key="addForm">
       <Section
         title={bulkMode ? "批量添加促销" : "新增促销"}
         icon="ri-add-circle-line"
@@ -606,10 +626,12 @@ export default function PromotionsPage() {
           )}
         </div>
       </Section>
+      </div>
       )}
 
       {/* ── 已有促销 ── */}
       {visibleKeys.includes("promoList") && (
+      <div key="promoList">
       <Section
         title="已有促销"
         icon="ri-flashlight-line"
@@ -875,7 +897,9 @@ export default function PromotionsPage() {
           <span>默认只读防误触 · 点击行末铅笔图标进入编辑模式 · 利润率 =（折扣价 − 总成本）÷ 折扣价</span>
         </div>
       </Section>
+      </div>
       )}
+      </CanvasLayout>
     </div>
   );
 }
