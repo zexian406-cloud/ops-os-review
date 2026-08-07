@@ -73,10 +73,14 @@ export default function CanvasLayout({
   }, [onLayoutChange]);
 
   // ── 为每个子元素包裹下拉菜单 ──
-  const wrappedChildren = React.Children.map(children, (child) => {
-    if (!React.isValidElement(child)) return child;
+  // 注意：不能用 React.Children.map，它会自动给返回元素的 key 加前缀（如 "kpi" → ".$kpi"），
+  // 导致 GridLayout 的 synchronizeLayoutWithChildren 用 child.key 匹配 layout.i 时全部失败，
+  // 所有卡片回退到默认 1x1 尺寸。改用 forEach 手动构建数组，保留原始 key。
+  const wrappedChildren: React.ReactNode[] = [];
+  React.Children.forEach(children, (child) => {
+    if (!React.isValidElement(child)) return;
     const key = String(child.key ?? "");
-    return (
+    wrappedChildren.push(
       <div key={key} className="canvas-item-wrapper">
         {customizing && (onHideItem || onResetItemSize || onResetItemPosition) && (
           <CardMenu
