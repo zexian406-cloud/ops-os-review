@@ -1067,7 +1067,7 @@ export default function SkuDetail() {
             {editProfit && profitEdit ? (
               /* ── 编辑模式 ── */
               <div className="space-y-2">
-                {/* 售价/运费/总价 */}
+                {/* 售价/买家运费/总价 */}
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <label className="mb-0.5 block text-[11px] font-medium text-foreground-500">售价 $</label>
@@ -1077,7 +1077,7 @@ export default function SkuDetail() {
                     }} />
                   </div>
                   <div>
-                    <label className="mb-0.5 block text-[11px] font-medium text-foreground-500">运费 $</label>
+                    <label className="mb-0.5 block text-[11px] font-medium text-foreground-500">买家运费 $</label>
                     <input type="number" step="0.01" className={profitInputCls} value={profitEdit.shippingFee ?? 0} onChange={(e) => {
                       const s = Number(e.target.value);
                       setProfitEdit({ ...profitEdit, shippingFee: s, listPrice: (profitEdit.price ?? 0) + s });
@@ -1127,7 +1127,7 @@ export default function SkuDetail() {
               /* ── 只读模式 ── */
               <div className="space-y-1 text-[13px]">
                 <ProfitRow label="售价" value={`$${sku.price.toFixed(2)}`} highlight />
-                <ProfitRow label="运费" value={`$${(focusMetric?.shippingFee ?? sku.shippingFee ?? 0).toFixed(2)}`} />
+                <ProfitRow label="买家运费" value={`$${(focusMetric?.shippingFee ?? sku.shippingFee ?? 0).toFixed(2)}`} />
                 <ProfitRow label="销售总价" value={`$${(focusMetric?.listPrice ?? sku.listPrice ?? sku.price).toFixed(2)}`} highlight />
                 <div className="my-1.5 h-px bg-background-200/50" />
                 <ProfitRow label="FOB" value={`-$${(sku.costFob ?? 0).toFixed(2)}`} />
@@ -1515,7 +1515,7 @@ export default function SkuDetail() {
                     <input type="date" className={inputCls} value={editSku.launchDate ?? ""} onChange={(e) => updateEditSku({ launchDate: e.target.value })} />
                   </div>
                   <div>
-                    <label className={labelCls}>运费 $</label>
+                    <label className={labelCls}>买家运费 $</label>
                     <input type="number" step="0.01" className={inputCls} value={editSku.shippingFee ?? ""} onChange={(e) => {
                       const s = Number(e.target.value);
                       updateEditSku({ shippingFee: s, listPrice: (editSku.price ?? 0) + s });
@@ -1566,7 +1566,7 @@ export default function SkuDetail() {
                 <InfoRow label="生命周期" value={sku.lifecycle ? lifecycleLabel[sku.lifecycle] : "-"} />
                 <InfoRow label="品类" value={sku.category ?? "-"} />
                 <InfoRow label="上架日期" value={sku.launchDate ?? "-"} />
-                <InfoRow label="运费" value={sku.shippingFee != null ? `$${sku.shippingFee.toFixed(2)}` : "-"} />
+                <InfoRow label="买家运费" value={sku.shippingFee != null ? `$${sku.shippingFee.toFixed(2)}` : "-"} />
                 <InfoRow label="销售总价" value={sku.listPrice != null ? `$${sku.listPrice.toFixed(2)}` : `$${sku.price.toFixed(2)}`} />
                 <InfoRow label="优惠券" value={sku.coupon != null ? `$${sku.coupon.toFixed(2)}` : "-"} />
               </div>
@@ -1707,7 +1707,12 @@ export default function SkuDetail() {
                 ))}
                 <div>
                   <label className={labelCls}>透明计划</label>
-                  <input className={inputCls} value={editSku.transparentPlan ?? ""} onChange={(e) => updateEditSku({ transparentPlan: e.target.value })} />
+                  <select className={selectCls} value={editSku.transparentPlan ?? ""} onChange={(e) => updateEditSku({ transparentPlan: e.target.value || undefined })}>
+                    <option value="">未设置</option>
+                    <option value="已加入">已加入</option>
+                    <option value="未加入">未加入</option>
+                    <option value="申请中">申请中</option>
+                  </select>
                 </div>
                 <div>
                   <label className={labelCls}>产品链接</label>

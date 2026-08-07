@@ -996,7 +996,12 @@ export default function SkuList() {
                 ))}
                 <div>
                   <label className={labelCls}>透明计划</label>
-                  <input className={inputCls} value={createForm.transparentPlan ?? ""} onChange={(e) => updateCreateField({ transparentPlan: e.target.value })} placeholder="例如：已加入" />
+                  <select className={inputCls + " cursor-pointer"} value={createForm.transparentPlan ?? ""} onChange={(e) => updateCreateField({ transparentPlan: e.target.value || undefined })}>
+                    <option value="">未设置</option>
+                    <option value="已加入">已加入</option>
+                    <option value="未加入">未加入</option>
+                    <option value="申请中">申请中</option>
+                  </select>
                 </div>
               </div>
             )}
@@ -1330,7 +1335,7 @@ function SkuGroupCard({
                     </th>
                   )}
                   <th className="px-3 py-2 whitespace-nowrap">在售</th>
-                  <th className="px-3 py-2 whitespace-nowrap">MSKU</th>
+                  <th className="px-3 py-2 whitespace-nowrap">MSKU / ASIN</th>
                   <th className="px-3 py-2 whitespace-nowrap">店铺</th>
                   <th className="px-3 py-2 text-right whitespace-nowrap">星级</th>
                   <th className="px-3 py-2 text-right whitespace-nowrap">销售总价</th>
@@ -1521,6 +1526,9 @@ function ChildRow({
             >
               {child.msku || child.sku}
             </Link>
+          )}
+          {child.asin && (
+            <div className="mono-num text-[10px] text-foreground-400 leading-tight">{child.asin}</div>
           )}
         </div>
       </td>
