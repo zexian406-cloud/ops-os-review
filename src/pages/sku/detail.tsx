@@ -1136,7 +1136,7 @@ export default function SkuDetail() {
                 <ProfitRow label="佣金" value={`-$${costCommission.toFixed(2)}`} inferred={isCommissionInferred} />
                 <ProfitRow label="仓租" value={`-$${(sku.costStorage ?? 0).toFixed(2)}`} />
                 <ProfitRow label="广告费" value={`-$${costAd.toFixed(2)}`} inferred={isAdInferred} />
-                <ProfitRow label="退货损失" value={`-$${costRefundLoss.toFixed(2)}`} />
+                <ProfitRow label="退款损失" value={`-$${costRefundLoss.toFixed(2)}`} />
                 {costCoupon > 0 && <ProfitRow label="优惠券(历史)" value={`($${costCoupon.toFixed(2)})`} />}
                 {costPromo > 0 && <ProfitRow label="促销成本(手动)" value={`-$${costPromo.toFixed(2)}`} />}
                 {weekPromoCost.count > 0 && (
@@ -1180,7 +1180,7 @@ export default function SkuDetail() {
                 <ProfitRow label="折扣佣金" value={`-$${discountCostCommission.toFixed(2)}`} inferred={isCommissionInferred} />
                 <ProfitRow label="仓租" value={`-$${(sku.costStorage ?? 0).toFixed(2)}`} />
                 <ProfitRow label="折扣广告费" value={`-$${discountCostAd.toFixed(2)}`} inferred={isDiscountAdInferred} />
-                <ProfitRow label="折扣退货损失" value={`-$${discountCostRefundLoss.toFixed(2)}`} />
+                <ProfitRow label="折扣退款损失" value={`-$${discountCostRefundLoss.toFixed(2)}`} />
                 <ProfitRow label="优惠券" value={`(${discountCostCoupon.toFixed(2)})`} />
                 <div className="my-1.5 h-px bg-background-200/50" />
                 <ProfitRow label="折扣总成本" value={`$${discountTotalCost.toFixed(2)}`} bold />
@@ -1215,7 +1215,7 @@ export default function SkuDetail() {
             {costCommission > 0 ? <CostWaterfall label="佣金" value={-costCommission} color="bg-secondary-400" /> : null}
             {costStorage > 0 ? <CostWaterfall label="仓租" value={-costStorage} color="bg-secondary-300" /> : null}
             {costAd > 0 ? <CostWaterfall label="广告费" value={-costAd} color="bg-secondary-300" /> : null}
-            {costRefundLoss > 0 ? <CostWaterfall label="退货损失" value={-costRefundLoss} color="bg-secondary-300" /> : null}
+            {costRefundLoss > 0 ? <CostWaterfall label="退款损失" value={-costRefundLoss} color="bg-secondary-300" /> : null}
             {costPromo > 0 ? <CostWaterfall label="促销成本(手动)" value={-costPromo} color="bg-secondary-300" /> : null}
             {costCoupon > 0 ? <CostWaterfall label="优惠券" value={-costCoupon} color="bg-secondary-300" /> : null}
             <div className="my-2 h-px bg-background-200/70" />
