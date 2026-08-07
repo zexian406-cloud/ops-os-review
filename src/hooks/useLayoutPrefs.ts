@@ -326,7 +326,7 @@ const DEFAULT_SKU_VISIBLE: SkuDetailSectionKey[] = [
   "relatedTodos",
 ];
 
-const STORAGE_KEY = "aos-layout-prefs-v6";
+const STORAGE_KEY = "aos-layout-prefs-v7";
 
 function loadPrefs(): LayoutPrefs {
   try {

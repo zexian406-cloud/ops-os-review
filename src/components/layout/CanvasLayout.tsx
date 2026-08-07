@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from "react";
-import { GridLayout, useContainerWidth, type Layout } from "react-grid-layout";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { GridLayout, useContainerWidth, getCompactor, type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
@@ -17,16 +17,20 @@ interface CanvasLayoutProps {
 }
 
 /**
- * 画布式布局组件 — Notion Dashboard 风格
+ * 画布式布局组件 — Notion Dashboard 风格 (react-grid-layout v2 API)
  *
- * 核心思路：编辑模式和浏览模式都使用 ReactGridLayout。
- * - 编辑模式 (customizing=true): 可拖拽 + 可缩放，区块显示虚线边框，右上角显示更多菜单
- * - 浏览模式 (customizing=false): 不可拖拽不可缩放，区块内容溢出可滚动
- * - compactType=null: 不自动压缩，区块固定在用户放置的位置
- * - preventCollision: 不允许重叠
+ * v2 关键变化：
+ * - 使用 gridConfig / dragConfig / resizeConfig 替代 v1 的 cols/rowHeight/isDraggable 等
+ * - 使用 compactor 替代 compactType + preventCollision
+ * - getCompactor(null, false, true) = 无压缩 + 禁止重叠，卡片固定在用户放置的位置
  *
- * 子元素需要带 key 属性，key 值与 layout 数组中的 i 字段对应。
+ * 防覆盖机制：
+ * - GridLayout 的 onLayoutChange 在挂载时也会触发，会覆盖正确的默认布局
+ * - 使用 internalLayout 内部状态渲染，onLayoutChange 只更新内部状态
+ * - onDragStop / onResizeStop 才真正持久化到父组件
  */
+const FREE_FORM_COMPACTOR = getCompactor(null, false, true);
+
 export default function CanvasLayout({
   layout,
   customizing,
@@ -38,9 +42,35 @@ export default function CanvasLayout({
 }: CanvasLayoutProps) {
   const { width, containerRef, mounted } = useContainerWidth();
 
+  // ── 内部布局状态 ──
+  // GridLayout 的 onLayoutChange 在组件挂载时也会触发（可能返回经过 correctBounds
+  // 调整的布局），直接持久化会覆盖正确的默认布局。因此用内部状态渲染，
+  // 仅在用户拖拽/缩放完成（onDragStop / onResizeStop）时才持久化。
+  const [internalLayout, setInternalLayout] = useState<Layout[]>(layout);
+
+  // 外部 layout 变化时（切换模板、重置、显隐模块）同步到内部状态
+  const layoutKey = JSON.stringify(layout);
+  useEffect(() => {
+    setInternalLayout(layout);
+  }, [layoutKey]);
+
   // Safety: never render GridLayout with width=0 — causes all cards to collapse
   const safeWidth = width > 0 ? width : 0;
   const canRender = mounted && safeWidth > 0;
+
+  // onLayoutChange: 只更新内部状态，不持久化（防止挂载时覆盖默认布局）
+  const handleLayoutChange = useCallback((newLayout: Layout) => {
+    setInternalLayout([...newLayout] as Layout[]);
+  }, []);
+
+  // onDragStop / onResizeStop: 用户交互完成，持久化到父组件
+  const handleDragStop = useCallback((newLayout: Layout) => {
+    onLayoutChange([...newLayout] as Layout[]);
+  }, [onLayoutChange]);
+
+  const handleResizeStop = useCallback((newLayout: Layout) => {
+    onLayoutChange([...newLayout] as Layout[]);
+  }, [onLayoutChange]);
 
   // ── 为每个子元素包裹下拉菜单 ──
   const wrappedChildren = React.Children.map(children, (child) => {
@@ -66,18 +96,15 @@ export default function CanvasLayout({
       {canRender && (
         <GridLayout
           className={`canvas-layout ${customizing ? "canvas-layout-editing" : "canvas-layout-viewing"}`}
-          layout={layout}
+          layout={internalLayout}
           width={safeWidth}
-          cols={12}
-          rowHeight={40}
-          margin={[12, 12]}
-          containerPadding={[0, 0]}
-          isDraggable={customizing}
-          isResizable={customizing}
-          compactType={null}
-          preventCollision
-          onLayoutChange={onLayoutChange}
-          useCSSTransforms
+          gridConfig={{ cols: 12, rowHeight: 40, margin: [12, 12], containerPadding: [0, 0] }}
+          dragConfig={{ enabled: customizing }}
+          resizeConfig={{ enabled: customizing }}
+          compactor={FREE_FORM_COMPACTOR}
+          onLayoutChange={handleLayoutChange}
+          onDragStop={handleDragStop}
+          onResizeStop={handleResizeStop}
         >
           {wrappedChildren}
         </GridLayout>
