@@ -1592,14 +1592,26 @@ export default function SkuDetail() {
                   sku.msku
                     ? (() => {
                         const allMs = sku.msku.split(/[,\s，、·]+/).map((m) => m.trim()).filter(Boolean);
+                        // focus=MSKU 时只展示焦点 MSKU；否则展示前3个 + 折叠
                         const list = focusMsku ? allMs.filter((m) => m === focusMsku) : allMs;
-                        return list.map((m) => (
-                          <span key={m}
-                            className={`mono-num mr-1 inline-block rounded-[8px] px-2 py-0.5 text-[12px] text-foreground-600 ${focusMsku && m === focusMsku ? "bg-primary-50 ring-2 ring-primary-400" : "bg-background-100"}`}>
-                            {m}
-                            <span className="ml-1 text-[10px] text-foreground-400">{mskuStoreOf(sku, m)}</span>
-                          </span>
-                        ));
+                        const display = list.length > 3 ? list.slice(0, 3) : list;
+                        const remaining = list.length - display.length;
+                        return (
+                          <>
+                            {display.map((m) => (
+                              <span key={m}
+                                className={`mono-num mr-1 inline-block rounded-[8px] px-2 py-0.5 text-[12px] text-foreground-600 ${focusMsku && m === focusMsku ? "bg-primary-50 ring-2 ring-primary-400" : "bg-background-100"}`}>
+                                {m}
+                                <span className="ml-1 text-[10px] text-foreground-400">{mskuStoreOf(sku, m)}</span>
+                              </span>
+                            ))}
+                            {remaining > 0 && (
+                              <span className="mono-num inline-block rounded-[8px] bg-background-100 px-2 py-0.5 text-[12px] text-foreground-400">
+                                等 {remaining} 个
+                              </span>
+                            )}
+                          </>
+                        );
                       })()
                     : "-"
                 } />
