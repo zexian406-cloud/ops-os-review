@@ -207,21 +207,23 @@ export const SKU_LABELS: Record<SkuDetailSectionKey, string> = {
   relatedTodos: "关联待办",
 };
 
-/** 默认网格布局：12列网格，各区块初始位置 */
+/** 默认网格布局：12列自由画布，compactType=null 不自动压缩
+ *  h 值基于 rowHeight=40px + margin=12px，内容溢出可滚动，用户可拖拽调整
+ *  默认布局混合全宽 + 左右并排，避免纯竖版 */
 const DEFAULT_SKU_GRID_LAYOUT: Record<SkuDetailSectionKey, GridItemLayout> = {
-  header:         { x: 0, y: 0,  w: 12, h: 2 },
-  discountBanner: { x: 0, y: 2,  w: 12, h: 1 },
-  kpiCards:       { x: 0, y: 3,  w: 12, h: 2 },
-  editData:       { x: 0, y: 5,  w: 12, h: 3 },
-  profitAnalysis: { x: 0, y: 8,  w: 6,  h: 5 },
-  costWaterfall:  { x: 6, y: 8,  w: 6,  h: 5 },
-  promoShipment:  { x: 0, y: 13, w: 12, h: 2 },
-  mixedReplenish: { x: 0, y: 15, w: 12, h: 3 },
-  inventory:      { x: 0, y: 18, w: 12, h: 4 },
-  listing:        { x: 0, y: 22, w: 12, h: 5 },
-  weekOverWeek:   { x: 0, y: 27, w: 12, h: 3 },
-  historyCharts:  { x: 0, y: 30, w: 12, h: 4 },
-  relatedTodos:   { x: 0, y: 34, w: 12, h: 3 },
+  header:         { x: 0, y: 0,  w: 12, h: 4 },
+  discountBanner: { x: 0, y: 4,  w: 12, h: 2 },
+  kpiCards:       { x: 0, y: 6,  w: 12, h: 10 },
+  editData:       { x: 0, y: 16, w: 6,  h: 8 },
+  profitAnalysis: { x: 6, y: 16, w: 6,  h: 8 },
+  costWaterfall:  { x: 0, y: 24, w: 6,  h: 10 },
+  promoShipment:  { x: 6, y: 24, w: 6,  h: 10 },
+  mixedReplenish: { x: 0, y: 34, w: 6,  h: 8 },
+  inventory:      { x: 6, y: 34, w: 6,  h: 8 },
+  listing:        { x: 0, y: 42, w: 12, h: 20 },
+  weekOverWeek:   { x: 0, y: 62, w: 6,  h: 4 },
+  historyCharts:  { x: 6, y: 62, w: 6,  h: 8 },
+  relatedTodos:   { x: 0, y: 70, w: 12, h: 6 },
 };
 
 interface LayoutPrefs {
@@ -269,7 +271,7 @@ const DEFAULT_SKU_ORDER: SkuDetailSectionKey[] = [
   "relatedTodos",
 ];
 
-const STORAGE_KEY = "aos-layout-prefs-v1";
+const STORAGE_KEY = "aos-layout-prefs-v3";
 
 function loadPrefs(): LayoutPrefs {
   try {

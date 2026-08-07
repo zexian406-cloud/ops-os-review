@@ -18,7 +18,9 @@ import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import SkuLayoutCustomizer from "@/components/layout/SkuLayoutCustomizer";
-import { useSkuDetailLayout } from "@/hooks/useLayoutPrefs";
+import CanvasLayout from "@/components/layout/CanvasLayout";
+import { useSkuDetailLayout, type SkuDetailSectionKey, type GridItemLayout } from "@/hooks/useLayoutPrefs";
+import { type Layout } from "react-grid-layout";
 import type { WowDelta } from "@/domain/engine";
 import type { DailySnapshot, SkuMaster, InventoryLayer, TodoItem, OpsLog } from "@/domain/types";
 
@@ -185,12 +187,33 @@ export default function SkuDetail() {
 
   // ── Layout customizer ──
   const {
-    customizing, setCustomizing, toggleSection, moveSection, reset: resetLayout,
-    visibleKeys, orderedKeys, allKeys,
+    customizing, setCustomizing, toggleSection, reset: resetLayout,
+    visibleKeys, allKeys,
     moveCoreKpiCard, moveCoverageKpiCard, moveQualityKpiCard,
     coreKpiCardOrder, coverageKpiCardOrder, qualityKpiCardOrder,
     gridLayout, setGridLayout,
   } = useSkuDetailLayout();
+
+  // ── 构建 ReactGridLayout 布局数组 ──
+  const rglLayout: Layout[] = useMemo(() => {
+    return visibleKeys.map((key) => {
+      const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 4 };
+      return {
+        i: key,
+        x: item.x,
+        y: item.y,
+        w: item.w,
+        h: item.h,
+        minW: 3,
+        maxW: 12,
+        minH: 2,
+      };
+    });
+  }, [visibleKeys, gridLayout]);
+
+  const handleLayoutChange = useCallback((layout: Layout[]) => {
+    setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
+  }, [setGridLayout]);
 
   // ── 关联待办 ──
   const [relatedTodos, setRelatedTodos] = useState<TodoItem[]>([]);
@@ -497,10 +520,27 @@ export default function SkuDetail() {
       : "暂无在途";
 
   return (
-    <div className="grid grid-cols-12 gap-6 items-start [grid-auto-flow:dense]">
+    <div className="space-y-4">
+      {/* 工具栏 */}
+      {customizing && (
+        <SkuLayoutCustomizer
+          visibleKeys={visibleKeys}
+          allKeys={allKeys}
+          toggle={toggleSection}
+          onClose={() => setCustomizing(false)}
+          onReset={resetLayout}
+        />
+      )}
+
+      {/* 画布布局 — 全部区块可拖拽定位 */}
+      <CanvasLayout
+        layout={rglLayout}
+        customizing={customizing}
+        onLayoutChange={handleLayoutChange}
+      >
       {/* ═══════ 1. 头部信息 ═══════ */}
       {visibleKeys.includes("header") && (
-      <div key="header" className={`flex flex-wrap items-start justify-between gap-4 col-span-12 ${customizing ? "rgl-item-editing" : ""}`} style={{ gridColumn: `span ${gridLayout["header"]?.w ?? 12}` }}>
+      <div key="header" className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <Link to="/sku" className="text-[12px] text-foreground-400 hover:text-foreground-700 cursor-pointer">← 返回 SKU 列表</Link>
           <h1 className="mt-1 font-heading text-[28px] font-bold leading-tight text-foreground-950">{sku.name}</h1>
@@ -558,83 +598,9 @@ export default function SkuDetail() {
       </div>
       )}
 
-      {/* ═══════ 健康评分卡 ═══════ */}
-      {(() => {
-        const hs = healthScores.get(skuId ?? "");
-        if (!hs) return null;
-        const cardCls =
-          hs.level === "健康"
-            ? "border-accent-200 bg-accent-50/50"
-            : hs.level === "关注"
-            ? "border-secondary-200 bg-secondary-50/50"
-            : "border-red-200 bg-red-50/50";
-        const badgeCls =
-          hs.level === "健康"
-            ? "bg-accent-500 text-white"
-            : hs.level === "关注"
-            ? "bg-secondary-500 text-white"
-            : "bg-red-500 text-white";
-        const ringCls =
-          hs.level === "健康"
-            ? "text-accent-600"
-            : hs.level === "关注"
-            ? "text-secondary-600"
-            : "text-red-600";
-        return (
-          <div className={`flex flex-wrap items-center gap-4 rounded-2xl border p-4 ${cardCls}`}>
-            <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-4 ${ringCls} border-current/20 bg-background-50`}>
-              <span className={`mono-num text-[26px] font-bold ${ringCls}`}>{hs.score}</span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${badgeCls}`}>{hs.level}</span>
-                <span className="text-[12px] text-foreground-500">综合健康分（100 满分）</span>
-              </div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] text-foreground-400">主要风险因子：</span>
-                {hs.factors.length === 0 ? (
-                  <span className="text-[12px] text-accent-700">无明显风险因子</span>
-                ) : (
-                  hs.factors.slice(0, 3).map((f) => (
-                    <span key={f.key} className="inline-flex items-center rounded-md bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-600">
-                      {f.label}
-                      <span className="ml-1 text-red-400">-{f.impact}</span>
-                    </span>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* 布局自定义 */}
-      {customizing && (
-        <SkuLayoutCustomizer
-          visibleKeys={visibleKeys}
-          orderedKeys={orderedKeys}
-          allKeys={allKeys}
-          toggle={toggleSection}
-          moveSection={moveSection}
-          moveCoreKpiCard={moveCoreKpiCard}
-          moveCoverageKpiCard={moveCoverageKpiCard}
-          moveQualityKpiCard={moveQualityKpiCard}
-          coreKpiCardOrder={coreKpiCardOrder}
-          coverageKpiCardOrder={coverageKpiCardOrder}
-          qualityKpiCardOrder={qualityKpiCardOrder}
-          gridLayout={gridLayout}
-          setGridLayout={setGridLayout}
-          onClose={() => setCustomizing(false)}
-          onReset={resetLayout}
-        />
-      )}
-
-      {/* ═══════ 2. 核心 KPI 区 ═══════ */}
-      {latest && (
-        <>
-          {/* ── 折扣利润率横幅 ── */}
-          {visibleKeys.includes("discountBanner") && activeOrUpcomingPromo?.discountPrice && activeOrUpcomingPromo.discountPrice > 0 && (
-            <div className={`rounded-[14px] border-2 border-accent-500 bg-accent-50/70 p-4 ${customizing ? "rgl-item-editing" : ""}`} style={{ gridColumn: `span ${gridLayout["discountBanner"]?.w ?? 12}` }}>
+      {/* ═══════ 2. 折扣利润率横幅 ═══════ */}
+      {latest && visibleKeys.includes("discountBanner") && activeOrUpcomingPromo?.discountPrice && activeOrUpcomingPromo.discountPrice > 0 && (
+            <div key="discountBanner" className="rounded-[14px] border-2 border-accent-500 bg-accent-50/70 p-4">
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-100 text-[18px] text-accent-700">
                   <i className="ri-coupon-3-line" aria-hidden />
@@ -672,8 +638,11 @@ export default function SkuDetail() {
             </div>
           )}
 
-          {visibleKeys.includes("kpiCards") && (
-          <div className={`grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 ${customizing ? "rgl-item-editing" : ""}`} style={{ gridColumn: `span ${gridLayout["kpiCards"]?.w ?? 12}` }}>
+      {/* ═══════ 3. KPI 卡片（全部合并） ═══════ */}
+      {latest && visibleKeys.includes("kpiCards") && (
+      <div key="kpiCards" className="space-y-2">
+        {/* ── 核心 KPI ── */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {coreKpiCardOrder.map((key) => {
               switch (key) {
                 case "dailySales7d": {
@@ -695,11 +664,10 @@ export default function SkuDetail() {
                 default: return null;
               }
             })}
-          </div>
-          )}
+        </div>
 
-          {visibleKeys.includes("kpiCards") && (
-          <div className={`grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4 ${customizing ? "rgl-item-editing" : ""}`} style={{ gridColumn: `span ${gridLayout["kpiCards"]?.w ?? 12}` }}>
+        {/* ── 覆盖 KPI ── */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {coverageKpiCardOrder.map((key) => {
               switch (key) {
                 case "coverDays": {
@@ -712,11 +680,10 @@ export default function SkuDetail() {
                 default: return null;
               }
             })}
-          </div>
-          )}
+        </div>
 
-          {visibleKeys.includes("kpiCards") && (
-          <div className={`grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 ${customizing ? "rgl-item-editing" : ""}`} style={{ gridColumn: `span ${gridLayout["kpiCards"]?.w ?? 12}` }}>
+        {/* ── 质量 KPI ── */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
             {qualityKpiCardOrder.map((key) => {
               switch (key) {
                 case "rating": return <KpiCard key={key} label="评分" value={latest.rating > 0 ? latest.rating.toFixed(1) : "N/A"} sub={skuWow ? deltaArrow(skuWow.ratingDelta) : "目标 4.0+"} icon="ri-star-line" tone={latest.rating > 0 && latest.rating < 3.8 ? "danger" : latest.rating > 0 && latest.rating < 4.0 ? "warn" : "accent"} />;
@@ -734,15 +701,14 @@ export default function SkuDetail() {
                 default: return null;
               }
             })}
-          </div>
-          )}
+        </div>
 
-          {/* 自然订单 / 广告订单占比 */}
-          {visibleKeys.includes("kpiCards") && (() => {
+        {/* ── 自然订单 / 广告订单占比 ── */}
+        {(() => {
             const ad = latest.adRatio;
             const organic = Math.max(0, Math.min(100, 100 - ad));
             return (
-              <div className={`grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-3 ${customizing ? "rgl-item-editing" : ""}`} style={{ gridColumn: `span ${gridLayout["kpiCards"]?.w ?? 12}` }}>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 <KpiCard
                   label="自然订单占比"
                   value={`${organic.toFixed(1)}%`}
@@ -788,12 +754,12 @@ export default function SkuDetail() {
               </div>
             );
           })()}
-        </>
+        </div>
       )}
 
       {/* ═══════ 运营数据编辑 ═══════ */}
       {visibleKeys.includes("editData") && (
-      <div className={`rounded-[14px] border border-background-200/70 bg-background-100/50 p-4 ${customizing ? "rgl-item-editing" : ""}`} style={{ gridColumn: `span ${gridLayout["editData"]?.w ?? 12}` }}>
+      <div key="editData" className="rounded-[14px] border border-background-200/70 bg-background-100/50 p-4">
         <button
           type="button"
           onClick={() => { setEditOpen(!editOpen); setEditMsg(null); }}
@@ -1053,7 +1019,7 @@ export default function SkuDetail() {
 
       {/* ═══════ 3. 盈利分析 ═══════ */}
       {visibleKeys.includes("profitAnalysis") && (
-      <Section title="盈利分析" icon="ri-funds-box-line" subtitle="正常售价 vs 折扣售价 · 全部可编辑" className={customizing ? "rgl-item-editing" : ""} style={{ gridColumn: `span ${gridLayout["profitAnalysis"]?.w ?? 12}` }}>
+      <Section key="profitAnalysis" title="盈利分析" icon="ri-funds-box-line" subtitle="正常售价 vs 折扣售价 · 全部可编辑">
         {/* 编辑切换 */}
         <div className="mb-3 flex items-center justify-between">
           {costMissing && (
@@ -1236,7 +1202,7 @@ export default function SkuDetail() {
 
       {/* ═══════ 4. 成本结构瀑布 ═══════ */}
       {visibleKeys.includes("costWaterfall") && (
-      <Section title="成本结构瀑布" icon="ri-water-flash-line" subtitle="售价 → 逐项扣减 → 净利" className={customizing ? "rgl-item-editing" : ""} style={{ gridColumn: `span ${gridLayout["costWaterfall"]?.w ?? 12}` }}>
+      <Section key="costWaterfall" title="成本结构瀑布" icon="ri-water-flash-line" subtitle="售价 → 逐项扣减 → 净利">
         <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
           <div className="space-y-3">
             <CostWaterfall label="售价" value={sku.price} color="bg-primary-500" isStart />
@@ -1262,7 +1228,7 @@ export default function SkuDetail() {
 
       {/* ═══════ 5. 促销折扣 + 发货建议 ═══════ */}
       {visibleKeys.includes("promoShipment") && (
-      <div className={`grid grid-cols-1 gap-4 lg:grid-cols-2 ${customizing ? "rgl-item-editing" : ""}`} style={{ gridColumn: `span ${gridLayout["promoShipment"]?.w ?? 12}` }}>
+      <div key="promoShipment" className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {skuPromos.length > 0 && (
           <Section title="促销活动" subtitle={`${skuPromos.length} 个`} icon="ri-flashlight-line"
             action={<Link to="/promotions" className="text-[12px] font-medium text-primary-700 hover:underline cursor-pointer whitespace-nowrap">管理促销 →</Link>}>
@@ -1336,7 +1302,7 @@ export default function SkuDetail() {
 
       {/* ═══════ 混卖补货建议 ═══════ */}
       {visibleKeys.includes("mixedReplenish") && sku.fulfillment === "mixed" && (fbaReplenish || fbmReplenish) && (
-        <Section title="混卖补货建议" icon="ri-truck-line" subtitle="FBA / FBM 独立计算安全库存和建议补货量" className={customizing ? "rgl-item-editing" : ""} style={{ gridColumn: `span ${gridLayout["mixedReplenish"]?.w ?? 12}` }}>
+        <Section key="mixedReplenish" title="混卖补货建议" icon="ri-truck-line" subtitle="FBA / FBM 独立计算安全库存和建议补货量">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {fbaReplenish && (
               <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
@@ -1392,7 +1358,7 @@ export default function SkuDetail() {
 
       {/* ═══════ 6. 库存分析 ═══════ */}
       {visibleKeys.includes("inventory") && (
-      <Section title="库存分析" icon="ri-archive-2-line" subtitle={`在库 ${allStock} 件 · 在途 ${allTransit} 件 · 可用 ${allAvailable} 件 · 存销比 ${stockSalesRatio}`} className={customizing ? "rgl-item-editing" : ""} style={{ gridColumn: `span ${gridLayout["inventory"]?.w ?? 12}` }}>
+      <Section key="inventory" title="库存分析" icon="ri-archive-2-line" subtitle={`在库 ${allStock} 件 · 在途 ${allTransit} 件 · 可用 ${allAvailable} 件 · 存销比 ${stockSalesRatio}`}>
         {/* 地区库存拆分 */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {([
@@ -1471,7 +1437,7 @@ export default function SkuDetail() {
 
       {/* ═══════ 7. Listing 优化 & 基础数据 ═══════ */}
       {visibleKeys.includes("listing") && (
-      <Section title="Listing 优化 & 基础数据" icon="ri-file-list-3-line" subtitle="SKU 主档信息 · 包裹参数 · Listing 状态 — 点击「编辑」可直接修改" className={customizing ? "rgl-item-editing" : ""} style={{ gridColumn: `span ${gridLayout["listing"]?.w ?? 12}` }}>
+      <Section key="listing" title="Listing 优化 & 基础数据" icon="ri-file-list-3-line" subtitle="SKU 主档信息 · 包裹参数 · Listing 状态 — 点击「编辑」可直接修改">
         {/* ── 全局保存提示 ── */}
         {skuMsg && (
           <div className={`mb-3 text-[13px] font-medium ${skuMsg.includes("失败") ? "text-red-600" : "text-accent-700"}`}>
@@ -1874,7 +1840,7 @@ export default function SkuDetail() {
 
       {/* ═══════ 8. 上期对比 ═══════ */}
       {visibleKeys.includes("weekOverWeek") && skuWow && (
-        <div className={`flex flex-wrap items-center gap-3 rounded-[14px] border border-background-200/70 bg-background-100/60 px-4 py-3 ${customizing ? "rgl-item-editing" : ""}`} style={{ gridColumn: `span ${gridLayout["weekOverWeek"]?.w ?? 12}` }}>
+        <div key="weekOverWeek" className="flex flex-wrap items-center gap-3 rounded-[14px] border border-background-200/70 bg-background-100/60 px-4 py-3">
           <span className="text-[12px] font-semibold text-foreground-700">上期对比</span>
           <div className="flex items-center gap-1.5 text-[12px] text-foreground-600"><span>日均销量</span>{deltaArrow(skuWow.dailySalesDelta)}</div>
           <span className="text-foreground-300">·</span>
@@ -1889,8 +1855,9 @@ export default function SkuDetail() {
       )}
 
       {/* ═══════ 本周 vs 上周对比 ═══════ */}
-      {latest && prevSnap ? (
-        <Section title="本周 vs 上周环比" icon="ri-bar-chart-grouped-line" subtitle="近7天数据对比">
+      {visibleKeys.includes("historyCharts") && (
+      latest && prevSnap ? (
+        <Section key="historyCharts" title="本周 vs 上周环比" icon="ri-bar-chart-grouped-line" subtitle="近7天数据对比">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             {/* 周销量对比 */}
             <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
@@ -1987,20 +1954,20 @@ export default function SkuDetail() {
           </div>
         </Section>
       ) : (
-        <div className="rounded-[14px] border border-background-200/70 bg-background-100/60 px-4 py-6 text-center text-[13px] text-foreground-500">
+        <div key="historyCharts" className="rounded-[14px] border border-background-200/70 bg-background-100/60 px-4 py-6 text-center text-[13px] text-foreground-500">
           <i className="ri-bar-chart-grouped-line mb-2 block text-[28px] text-foreground-300" aria-hidden />
           暂无上周数据，下次上传后可查看周环比
         </div>
+      )
       )}
 
       {/* ======= 关联待办 ======= */}
       {visibleKeys.includes("relatedTodos") && (
         <Section
+          key="relatedTodos"
           title="关联待办"
           icon="ri-checkbox-circle-line"
           subtitle={relatedTodos.length > 0 ? `${relatedTodos.length} 个未完成` : "暂无待办"}
-          className={customizing ? "rgl-item-editing" : ""}
-          style={{ gridColumn: `span ${gridLayout["relatedTodos"]?.w ?? 12}` }}
           action={
             <Link to="/todo" className="text-[12px] font-medium text-primary-700 hover:underline cursor-pointer whitespace-nowrap">
               管理待办 &rarr;
@@ -2047,6 +2014,57 @@ export default function SkuDetail() {
           )}
         </Section>
       )}
+      </CanvasLayout>
+
+      {/* ═══════ 健康评分卡（非布局区块） ═══════ */}
+      {(() => {
+        const hs = healthScores.get(skuId ?? "");
+        if (!hs) return null;
+        const cardCls =
+          hs.level === "健康"
+            ? "border-accent-200 bg-accent-50/50"
+            : hs.level === "关注"
+            ? "border-secondary-200 bg-secondary-50/50"
+            : "border-red-200 bg-red-50/50";
+        const badgeCls =
+          hs.level === "健康"
+            ? "bg-accent-500 text-white"
+            : hs.level === "关注"
+            ? "bg-secondary-500 text-white"
+            : "bg-red-500 text-white";
+        const ringCls =
+          hs.level === "健康"
+            ? "text-accent-600"
+            : hs.level === "关注"
+            ? "text-secondary-600"
+            : "text-red-600";
+        return (
+          <div className={`flex flex-wrap items-center gap-4 rounded-2xl border p-4 ${cardCls}`}>
+            <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-4 ${ringCls} border-current/20 bg-background-50`}>
+              <span className={`mono-num text-[26px] font-bold ${ringCls}`}>{hs.score}</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${badgeCls}`}>{hs.level}</span>
+                <span className="text-[12px] text-foreground-500">综合健康分（100 满分）</span>
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-foreground-400">主要风险因子：</span>
+                {hs.factors.length === 0 ? (
+                  <span className="text-[12px] text-accent-700">无明显风险因子</span>
+                ) : (
+                  hs.factors.slice(0, 3).map((f) => (
+                    <span key={f.key} className="inline-flex items-center rounded-md bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-600">
+                      {f.label}
+                      <span className="ml-1 text-red-400">-{f.impact}</span>
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ======= 异常原因拆解 ======= */}
       {skuDiagnoses.length > 0 && (
