@@ -225,6 +225,8 @@ export default function Dashboard() {
 
   if (loading) return <div className="text-sm text-foreground-400">加载中...</div>;
 
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
   const avgMarginChange = wowDeltas.length > 0 ? wowDeltas.reduce((s, d) => s + d.profitMarginDelta, 0) / wowDeltas.length : 0;
   const avgRatingChange = wowDeltas.length > 0 ? wowDeltas.reduce((s, d) => s + d.ratingDelta, 0) / wowDeltas.length : 0;
 
@@ -592,7 +594,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="font-heading text-[32px] font-bold leading-tight text-foreground-950 tracking-tight">
-              总览
+              运营一览
             </h1>
             <select
               value={shopFilter}

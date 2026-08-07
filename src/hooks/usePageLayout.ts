@@ -144,7 +144,7 @@ function getDefaultGridLayout(pageId: PageId): Record<string, GridItemLayout> {
 }
 
 export const PAGE_LABELS: Record<PageId, string> = {
-  dashboard: "总览",
+  dashboard: "运营一览",
   skuDetail: "SKU 详情",
   shipment: "发货决策",
   promotions: "促销管理",
