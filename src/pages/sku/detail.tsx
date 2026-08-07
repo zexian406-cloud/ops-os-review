@@ -1623,6 +1623,27 @@ export default function SkuDetail() {
                     <input type="number" step="0.01" className={inputCls} value={editSku.price} onChange={(e) => updateEditSku({ price: Number(e.target.value) })} />
                   </div>
                 </div>
+                {/* ── 成本构成（含头程运费） ── */}
+                <div className="mt-2 border-t border-background-200/70 pt-2">
+                  <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-foreground-500">成本构成 (USD)</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { k: "costFob" as const, l: "FOB 成本" },
+                      { k: "costShipping" as const, l: "头程运费" },
+                      { k: "costDelivery" as const, l: "尾程/配送费" },
+                      { k: "costCommission" as const, l: "佣金" },
+                      { k: "costStorage" as const, l: "仓储费" },
+                      { k: "costAd" as const, l: "广告费" },
+                      { k: "costReturn" as const, l: "退货费" },
+                      { k: "coupon" as const, l: "优惠券" },
+                    ]).map(({ k, l }) => (
+                      <div key={k}>
+                        <label className={labelCls}>{l}</label>
+                        <input type="number" step="0.01" className={inputCls} value={editSku[k] ?? ""} onChange={(e) => updateEditSku({ [k]: Number(e.target.value) || undefined })} placeholder="0.00" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="space-y-1 text-[13px]">
@@ -1634,6 +1655,15 @@ export default function SkuDetail() {
                 <div className="my-2 h-px bg-background-200/70" />
                 <InfoRow label="Lead Time" value={`${sku.leadTimeDays ?? 40} 天`} />
                 <InfoRow label="安全库存天数" value={`${sku.safetyStockDays ?? 30} 天`} />
+                <div className="my-2 h-px bg-background-200/70" />
+                <InfoRow label="FOB 成本" value={sku.costFob != null ? `$${sku.costFob.toFixed(2)}` : "-"} />
+                <InfoRow label="头程运费" value={sku.costShipping != null ? `$${sku.costShipping.toFixed(2)}` : "-"} />
+                <InfoRow label="尾程/配送费" value={sku.costDelivery != null ? `$${sku.costDelivery.toFixed(2)}` : "-"} />
+                <InfoRow label="佣金" value={sku.costCommission != null ? `$${sku.costCommission.toFixed(2)}` : "-"} />
+                <InfoRow label="仓储费" value={sku.costStorage != null ? `$${sku.costStorage.toFixed(2)}` : "-"} />
+                <InfoRow label="广告费" value={sku.costAd != null ? `$${sku.costAd.toFixed(2)}` : "-"} />
+                <InfoRow label="退货费" value={sku.costReturn != null ? `$${sku.costReturn.toFixed(2)}` : "-"} />
+                <InfoRow label="优惠券" value={sku.coupon != null ? `$${sku.coupon.toFixed(2)}` : "-"} />
               </div>
             )}
           </div>

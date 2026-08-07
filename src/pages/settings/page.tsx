@@ -1,10 +1,56 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { db, DEFAULT_GLOBAL_CONFIG, getGlobalConfig, setGlobalConfig } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import type { GlobalConfig, SkuMaster, WarehouseProvider, RateTier } from "@/domain/types";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
+
+/**
+ * 可内联编辑的数字单元格 — 本地字符串状态 + onBlur 写 DB。
+ * 避免 onChange 每次按键写 DB 导致无法输入小数（"5." → Number("5.")=5 → 丢小数点）。
+ */
+function EditableNumCell({
+  value,
+  onCommit,
+  placeholder,
+  step = "0.01",
+  className,
+}: {
+  value: number | undefined;
+  onCommit: (v: number | undefined) => void;
+  placeholder?: string;
+  step?: string;
+  className?: string;
+}) {
+  const [local, setLocal] = useState(value != null ? String(value) : "");
+  const focused = useRef(false);
+
+  // 外部数据变更时同步（仅在未聚焦时）
+  useEffect(() => {
+    if (!focused.current) {
+      setLocal(value != null ? String(value) : "");
+    }
+  }, [value]);
+
+  return (
+    <input
+      type="number"
+      step={step}
+      value={local}
+      placeholder={placeholder}
+      onFocus={() => { focused.current = true; }}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => {
+        focused.current = false;
+        const num = local.trim() === "" ? undefined : Number(local);
+        onCommit(Number.isNaN(num as number) ? undefined : num);
+        setLocal(num != null ? String(num) : "");
+      }}
+      className={className}
+    />
+  );
+}
 
 // ── 真实费率数据 ──
 const SEED_PROVIDERS: WarehouseProvider[] = [
@@ -301,29 +347,23 @@ export default function Settings() {
                     </td>
                     <td className="border-b border-background-200/70 px-3 py-2 text-right">
                       <div className="flex items-center justify-end gap-1 text-[11px] text-foreground-500">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={s.costShipping ?? ""}
-                          onChange={(e) => updateSkuField(s.sku, { costShipping: Number(e.target.value) || undefined })}
+                        <EditableNumCell
+                          value={s.costShipping}
+                          onCommit={(v) => updateSkuField(s.sku, { costShipping: v })}
                           placeholder="头程"
                           className="w-14 rounded-md border border-background-300/70 bg-background-50 px-1 py-1 text-right text-[11px] focus:border-primary-500 focus:outline-none"
                         />
                         <span className="text-foreground-400">/</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={s.costDelivery ?? ""}
-                          onChange={(e) => updateSkuField(s.sku, { costDelivery: Number(e.target.value) || undefined })}
+                        <EditableNumCell
+                          value={s.costDelivery}
+                          onCommit={(v) => updateSkuField(s.sku, { costDelivery: v })}
                           placeholder="配送"
                           className="w-14 rounded-md border border-background-300/70 bg-background-50 px-1 py-1 text-right text-[11px] focus:border-primary-500 focus:outline-none"
                         />
                         <span className="text-foreground-400">/</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={s.costFob ?? ""}
-                          onChange={(e) => updateSkuField(s.sku, { costFob: Number(e.target.value) || undefined })}
+                        <EditableNumCell
+                          value={s.costFob}
+                          onCommit={(v) => updateSkuField(s.sku, { costFob: v })}
                           placeholder="成本"
                           className="w-14 rounded-md border border-background-300/70 bg-background-50 px-1 py-1 text-right text-[11px] focus:border-primary-500 focus:outline-none"
                         />
