@@ -292,36 +292,40 @@ export default function Dashboard() {
       </div>
     ),
 
-    todo: todos.length > 0 ? (
-      <Section title="我的待办" icon="ri-list-check-3" subtitle={`${todos.length} 条未完成`}
+    todo: (
+      <Section title="我的待办" icon="ri-list-check-3" subtitle={todos.length > 0 ? `${todos.length} 条未完成` : "暂无待办"}
         action={<Link to="/todo" className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer whitespace-nowrap">管理待办 →</Link>}
       >
-        <div className="space-y-2">
-          {todos.slice(0, 5).map((item) => {
-            const isOverdue = item.dueDate && item.dueDate < today;
-            return (
-              <div key={item.id} className={`flex items-center gap-3 rounded-[14px] border px-3.5 py-2.5 ${isOverdue ? "border-red-200 bg-red-50/50" : "border-background-200 bg-background-50/60"}`}>
-                <i className={`text-[16px] ${isOverdue ? "ri-alert-line text-red-500" : "ri-checkbox-blank-circle-line text-foreground-400"}`} aria-hidden />
-                <span className={`flex-1 text-[13px] ${isOverdue ? "text-red-700" : "text-foreground-800"}`}>{item.content}</span>
-                {item.relatedSku && (
-                  <Link to={`/sku/${encodeURIComponent(item.relatedSku)}`} className="rounded-lg bg-background-100 px-2 py-0.5 text-[11px] font-medium text-foreground-600 hover:bg-background-200 cursor-pointer whitespace-nowrap">
-                    {item.relatedSku}
-                  </Link>
-                )}
-                {item.dueDate && (
-                  <span className={`text-[11px] whitespace-nowrap ${isOverdue ? "text-red-600 font-medium" : "text-foreground-400"}`}>{item.dueDate}</span>
-                )}
+        {todos.length > 0 ? (
+          <div className="space-y-2">
+            {todos.slice(0, 5).map((item) => {
+              const isOverdue = item.dueDate && item.dueDate < today;
+              return (
+                <div key={item.id} className={`flex items-center gap-3 rounded-[14px] border px-3.5 py-2.5 ${isOverdue ? "border-red-200 bg-red-50/50" : "border-background-200 bg-background-50/60"}`}>
+                  <i className={`text-[16px] ${isOverdue ? "ri-alert-line text-red-500" : "ri-checkbox-blank-circle-line text-foreground-400"}`} aria-hidden />
+                  <span className={`flex-1 text-[13px] ${isOverdue ? "text-red-700" : "text-foreground-800"}`}>{item.content}</span>
+                  {item.relatedSku && (
+                    <Link to={`/sku/${encodeURIComponent(item.relatedSku)}`} className="rounded-lg bg-background-100 px-2 py-0.5 text-[11px] font-medium text-foreground-600 hover:bg-background-200 cursor-pointer whitespace-nowrap">
+                      {item.relatedSku}
+                    </Link>
+                  )}
+                  {item.dueDate && (
+                    <span className={`text-[11px] whitespace-nowrap ${isOverdue ? "text-red-600 font-medium" : "text-foreground-400"}`}>{item.dueDate}</span>
+                  )}
+                </div>
+              );
+            })}
+            {todos.length > 5 && (
+              <div className="text-center text-[12px] text-foreground-400">
+                还有 {todos.length - 5} 条，<Link to="/todo" className="text-foreground-600 hover:underline cursor-pointer">查看全部</Link>
               </div>
-            );
-          })}
-          {todos.length > 5 && (
-            <div className="text-center text-[12px] text-foreground-400">
-              还有 {todos.length - 5} 条，<Link to="/todo" className="text-foreground-600 hover:underline cursor-pointer">查看全部</Link>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        ) : (
+          <EmptyState icon="ri-checkbox-circle-line" title="暂无待办" desc="所有任务已完成" />
+        )}
       </Section>
-    ) : null,
+    ),
 
     opsLogs: (
       <Section title="近期操作记录" icon="ri-history-line" subtitle={`${opsLogs.length} 条`}
@@ -406,70 +410,80 @@ export default function Dashboard() {
       </Section>
     ),
 
-    promotions: activePromos.length > 0 ? (
+    promotions: (
       <Section title="促销活动" icon="ri-calendar-event-line"
-        subtitle={activePromos.filter((p) => p.status === "upcoming").length > 0
-          ? `即将开始 ${activePromos.filter((p) => p.status === "upcoming").length} 个 · 进行中 ${activePromos.filter((p) => p.status === "active").length} 个`
-          : `进行中 ${activePromos.length} 个`}
+        subtitle={activePromos.length > 0
+          ? (activePromos.filter((p) => p.status === "upcoming").length > 0
+            ? `即将开始 ${activePromos.filter((p) => p.status === "upcoming").length} 个 · 进行中 ${activePromos.filter((p) => p.status === "active").length} 个`
+            : `进行中 ${activePromos.length} 个`)
+          : "暂无进行中的促销"}
         action={
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={() => setPromosExpanded(!promosExpanded)}
-              className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer whitespace-nowrap">
-              {promosExpanded ? "收起表格" : `展开（${activePromos.length} 个）`}
-            </button>
+          activePromos.length > 0 ? (
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => setPromosExpanded(!promosExpanded)}
+                className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer whitespace-nowrap">
+                {promosExpanded ? "收起表格" : `展开（${activePromos.length} 个）`}
+              </button>
+              <Link to="/settings" className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer">管理促销 →</Link>
+            </div>
+          ) : (
             <Link to="/settings" className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer">管理促销 →</Link>
-          </div>
+          )
         }
       >
-        {!promosExpanded ? (
-          <div className="glass-card px-4 py-3 text-[13px] text-foreground-600">
-            <i className="ri-calendar-event-line mr-1.5 text-accent-600" aria-hidden />
-            {activePromos.length} 个进行中/待开始 —{" "}
-            {activePromos.filter((p) => p.status === "active").slice(0, 2).map((p, i) => (
-              <span key={p.id}>{i > 0 && "、"}<Badge tone="accent">{p.type}</Badge> {p.skuName ?? p.sku}</span>
-            ))}
-            {activePromos.length > 2 && <span className="text-foreground-400"> 等 {activePromos.length - 2} 个活动</span>}
-          </div>
+        {activePromos.length > 0 ? (
+          !promosExpanded ? (
+            <div className="glass-card px-4 py-3 text-[13px] text-foreground-600">
+              <i className="ri-calendar-event-line mr-1.5 text-accent-600" aria-hidden />
+              {activePromos.length} 个进行中/待开始 —{" "}
+              {activePromos.filter((p) => p.status === "active").slice(0, 2).map((p, i) => (
+                <span key={p.id}>{i > 0 && "、"}<Badge tone="accent">{p.type}</Badge> {p.skuName ?? p.sku}</span>
+              ))}
+              {activePromos.length > 2 && <span className="text-foreground-400"> 等 {activePromos.length - 2} 个活动</span>}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground-400">
+                    <th className="border-b border-background-200 px-3 py-2.5">产品</th>
+                    <th className="border-b border-background-200 px-3 py-2.5">店铺</th>
+                    <th className="border-b border-background-200 px-3 py-2.5">类型</th>
+                    <th className="border-b border-background-200 px-3 py-2.5">活动名称</th>
+                    <th className="border-b border-background-200 px-3 py-2.5">开始</th>
+                    <th className="border-b border-background-200 px-3 py-2.5">结束</th>
+                    <th className="border-b border-background-200 px-3 py-2.5">状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activePromos.map((p) => {
+                    const daysToStart = Math.ceil((new Date(p.startDate).getTime() - new Date(today).getTime()) / 86400000);
+                    const daysToEnd = Math.ceil((new Date(p.endDate).getTime() - new Date(today).getTime()) / 86400000);
+                    return (
+                      <tr key={p.id}>
+                        <td className="border-b border-background-200/50 px-3 py-2 font-medium text-foreground-900">{p.skuName ?? p.sku}</td>
+                        <td className="mono-num border-b border-background-200/50 px-3 py-2 text-[12px] text-foreground-500">{shopsMap.get(p.store) || p.store}</td>
+                        <td className="border-b border-background-200/50 px-3 py-2"><Badge tone={p.type === "BD" ? "primary" : p.type === "LD" ? "danger" : p.type === "7DD" ? "warn" : "accent"}>{p.type}</Badge></td>
+                        <td className="border-b border-background-200/50 px-3 py-2 text-foreground-700">{p.name}</td>
+                        <td className="mono-num border-b border-background-200/50 px-3 py-2 text-[12px]"><span className="flex items-center gap-1.5">{p.startDate}{p.status === "upcoming" && daysToStart <= 2 && daysToStart >= 0 && <Badge tone="warn">{daysToStart === 0 ? "今天" : `${daysToStart}d`}</Badge>}</span></td>
+                        <td className="mono-num border-b border-background-200/50 px-3 py-2 text-[12px]"><span className="flex items-center gap-1.5">{p.endDate}{daysToEnd <= 2 && daysToEnd >= 0 && <Badge tone="danger">{daysToEnd === 0 ? "今天" : `${daysToEnd}d`}</Badge>}</span></td>
+                        <td className="border-b border-background-200/50 px-3 py-2">
+                          <span className={["rounded-full px-2.5 py-0.5 text-[11px] font-medium", p.status === "active" ? "bg-accent-50 text-accent-700" : "bg-background-100 text-foreground-500"].join(" ")}>
+                            {p.status === "active" ? "进行中" : "待开始"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground-400">
-                  <th className="border-b border-background-200 px-3 py-2.5">产品</th>
-                  <th className="border-b border-background-200 px-3 py-2.5">店铺</th>
-                  <th className="border-b border-background-200 px-3 py-2.5">类型</th>
-                  <th className="border-b border-background-200 px-3 py-2.5">活动名称</th>
-                  <th className="border-b border-background-200 px-3 py-2.5">开始</th>
-                  <th className="border-b border-background-200 px-3 py-2.5">结束</th>
-                  <th className="border-b border-background-200 px-3 py-2.5">状态</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activePromos.map((p) => {
-                  const daysToStart = Math.ceil((new Date(p.startDate).getTime() - new Date(today).getTime()) / 86400000);
-                  const daysToEnd = Math.ceil((new Date(p.endDate).getTime() - new Date(today).getTime()) / 86400000);
-                  return (
-                    <tr key={p.id}>
-                      <td className="border-b border-background-200/50 px-3 py-2 font-medium text-foreground-900">{p.skuName ?? p.sku}</td>
-                      <td className="mono-num border-b border-background-200/50 px-3 py-2 text-[12px] text-foreground-500">{shopsMap.get(p.store) || p.store}</td>
-                      <td className="border-b border-background-200/50 px-3 py-2"><Badge tone={p.type === "BD" ? "primary" : p.type === "LD" ? "danger" : p.type === "7DD" ? "warn" : "accent"}>{p.type}</Badge></td>
-                      <td className="border-b border-background-200/50 px-3 py-2 text-foreground-700">{p.name}</td>
-                      <td className="mono-num border-b border-background-200/50 px-3 py-2 text-[12px]"><span className="flex items-center gap-1.5">{p.startDate}{p.status === "upcoming" && daysToStart <= 2 && daysToStart >= 0 && <Badge tone="warn">{daysToStart === 0 ? "今天" : `${daysToStart}d`}</Badge>}</span></td>
-                      <td className="mono-num border-b border-background-200/50 px-3 py-2 text-[12px]"><span className="flex items-center gap-1.5">{p.endDate}{daysToEnd <= 2 && daysToEnd >= 0 && <Badge tone="danger">{daysToEnd === 0 ? "今天" : `${daysToEnd}d`}</Badge>}</span></td>
-                      <td className="border-b border-background-200/50 px-3 py-2">
-                        <span className={["rounded-full px-2.5 py-0.5 text-[11px] font-medium", p.status === "active" ? "bg-accent-50 text-accent-700" : "bg-background-100 text-foreground-500"].join(" ")}>
-                          {p.status === "active" ? "进行中" : "待开始"}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <EmptyState icon="ri-calendar-event-line" title="暂无促销活动" desc="当前没有进行中或待开始的促销" />
         )}
       </Section>
-    ) : null,
+    ),
 
     riskBuckets: (
       <Section title="今日需要处理的事" subtitle="按类型聚合，点击查看详情" icon="ri-flashlight-line">
@@ -583,7 +597,13 @@ export default function Dashboard() {
         <div className="flex items-center gap-1.5 text-[12px] text-foreground-600"><span>平均评分</span>{deltaArrow(avgRatingChange)}</div>
         <Link to="/sku" className="ml-auto text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer">查看 SKU 列表 →</Link>
       </div>
-    ) : null,
+    ) : (
+      <div className="glass-card flex items-center gap-3 px-5 py-3.5">
+        <span className="text-[12px] font-semibold text-foreground-700">上期对比</span>
+        <span className="text-[12px] text-foreground-400">暂无上期数据，下周上传后可查看环比</span>
+        <Link to="/import" className="ml-auto text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer">导入数据 →</Link>
+      </div>
+    ),
   };
 
   // ── Main render ──
