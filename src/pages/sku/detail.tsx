@@ -997,7 +997,7 @@ export default function SkuDetail() {
 
               <div className="mt-3 rounded-lg border border-accent-200/70 bg-accent-50/60 px-3 py-2 text-[11px] text-foreground-500">
                 <i className="ri-magic-line mr-1 text-accent-600" aria-hidden />
-                <strong className="text-foreground-700">自动计算规则</strong>：单件利润 = 售价 − （FOB+头程+尾程+佣金+仓租+广告费+退货费+优惠券）。如需覆盖自动计算，手动填写利润即可。区域库存修改后会自动更新顶部汇总卡片。
+                <strong className="text-foreground-700">自动计算规则</strong>：单件利润 = 售价 − （FOB+头程+尾程+佣金+仓租+广告费+退款损失+优惠券）。如需覆盖自动计算，手动填写利润即可。区域库存修改后会自动更新顶部汇总卡片。
               </div>
               <div className="mt-4 flex items-center gap-3">
                 <button
