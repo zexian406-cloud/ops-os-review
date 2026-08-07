@@ -293,7 +293,6 @@ export default function Shipment() {
               </button>
             ))}
           </div>
-          </div>
       </div>
 
       {/* 发货建议卡片 */}
