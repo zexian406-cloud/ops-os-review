@@ -11,7 +11,7 @@ import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
-import CanvasLayout from "@/components/layout/CanvasLayout";
+import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
 import type { AlertType, TodoItem, Shop, OpsLog } from "@/domain/types";
 import AlertList from "./AlertList";
 import LayoutCustomizer from "@/components/layout/LayoutCustomizer";
@@ -73,7 +73,7 @@ export default function Dashboard() {
   const {
     customizing, setCustomizing, toggleSection, reset, setKpiSlot,
     visibleKeys, kpiSlots, gridLayout, setGridLayout, allKeys,
-    applyTemplate, resetItemSize, resetItemPosition,
+    resetItemSize, resetItemPosition,
   } = useDashboardLayout();
 
   // ── 构建 ReactGridLayout 布局数组 ──
@@ -631,7 +631,6 @@ export default function Dashboard() {
           toggle={toggleSection}
           onClose={() => setCustomizing(false)}
           onReset={reset}
-          onApplyTemplate={applyTemplate}
         />
       )}
 
@@ -648,9 +647,9 @@ export default function Dashboard() {
           const node = sections[key as DashboardSectionKey];
           if (!node) return null;
           return (
-            <div key={key}>
+            <CanvasItem key={key} itemKey={key}>
               {node}
-            </div>
+            </CanvasItem>
           );
         })}
       </CanvasLayout>

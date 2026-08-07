@@ -222,65 +222,18 @@ const DEFAULT_SKU_GRID_LAYOUT: Record<SkuDetailSectionKey, GridItemLayout> = {
   relatedTodos:   { x: 0, y: 70, w: 12, h: 6 },
 };
 
-/* ────────── Dashboard 默认画布布局 ────────── */
+/* ────────── Dashboard 默认画布布局 ──────────
+ * 紧凑布局：三列并排 + 宽窄搭配，不遮挡视野 */
 const DEFAULT_DASHBOARD_GRID_LAYOUT: Record<DashboardSectionKey, GridItemLayout> = {
   kpi:         { x: 0, y: 0,  w: 12, h: 4 },
-  todo:        { x: 0, y: 4,  w: 6,  h: 10 },
-  opsLogs:     { x: 6, y: 4,  w: 6,  h: 10 },
-  weekCompare: { x: 0, y: 14, w: 12, h: 6 },
-  promotions:  { x: 0, y: 20, w: 6,  h: 8 },
-  riskBuckets: { x: 6, y: 20, w: 6,  h: 8 },
-  alerts:      { x: 0, y: 28, w: 8,  h: 6 },
-  shipment:    { x: 8, y: 28, w: 4,  h: 10 },
-  wowBar:      { x: 0, y: 38, w: 12, h: 3 },
-};
-
-/* ────────── 布局模板 ────────── */
-export type LayoutTemplateId = "daily" | "profit" | "boss";
-
-export const LAYOUT_TEMPLATES: Record<LayoutTemplateId, { label: string; icon: string; desc: string }> = {
-  daily:  { label: "运营日常", icon: "ri-rocket-line",  desc: "突出待办、风险、库存、发货" },
-  profit: { label: "利润分析", icon: "ri-money-dollar-circle-line", desc: "突出利润、成本、广告" },
-  boss:   { label: "老板视角", icon: "ri-pie-chart-2-line",  desc: "突出销售、利润、风险" },
-};
-
-const DASHBOARD_TEMPLATES: Record<LayoutTemplateId, Record<DashboardSectionKey, GridItemLayout>> = {
-  /* 运营日常：突出待办、风险、库存、发货 */
-  daily: {
-    kpi:         { x: 0, y: 0,  w: 12, h: 4 },
-    todo:        { x: 0, y: 4,  w: 6,  h: 12 },
-    riskBuckets: { x: 6, y: 4,  w: 6,  h: 8 },
-    alerts:      { x: 6, y: 12, w: 6,  h: 6 },
-    shipment:    { x: 0, y: 16, w: 6,  h: 10 },
-    weekCompare: { x: 6, y: 18, w: 6,  h: 6 },
-    promotions:  { x: 0, y: 26, w: 6,  h: 8 },
-    opsLogs:     { x: 6, y: 24, w: 6,  h: 8 },
-    wowBar:      { x: 0, y: 34, w: 12, h: 3 },
-  },
-  /* 利润分析：突出利润、成本、广告 */
-  profit: {
-    kpi:         { x: 0, y: 0,  w: 12, h: 4 },
-    weekCompare: { x: 0, y: 4,  w: 12, h: 6 },
-    promotions:  { x: 0, y: 10, w: 6,  h: 8 },
-    opsLogs:     { x: 6, y: 10, w: 6,  h: 8 },
-    alerts:      { x: 0, y: 18, w: 6,  h: 6 },
-    riskBuckets: { x: 6, y: 18, w: 6,  h: 6 },
-    todo:        { x: 0, y: 24, w: 6,  h: 8 },
-    shipment:    { x: 6, y: 24, w: 6,  h: 8 },
-    wowBar:      { x: 0, y: 32, w: 12, h: 3 },
-  },
-  /* 老板视角：突出销售、利润、风险 */
-  boss: {
-    kpi:         { x: 0, y: 0,  w: 12, h: 4 },
-    weekCompare: { x: 0, y: 4,  w: 12, h: 6 },
-    riskBuckets: { x: 0, y: 10, w: 6,  h: 8 },
-    alerts:      { x: 6, y: 10, w: 6,  h: 8 },
-    promotions:  { x: 0, y: 18, w: 12, h: 6 },
-    shipment:    { x: 0, y: 24, w: 6,  h: 8 },
-    todo:        { x: 6, y: 24, w: 6,  h: 8 },
-    opsLogs:     { x: 0, y: 32, w: 12, h: 6 },
-    wowBar:      { x: 0, y: 38, w: 12, h: 3 },
-  },
+  todo:        { x: 0, y: 4,  w: 4,  h: 8 },
+  opsLogs:     { x: 4, y: 4,  w: 4,  h: 8 },
+  riskBuckets: { x: 8, y: 4,  w: 4,  h: 8 },
+  weekCompare: { x: 0, y: 12, w: 8,  h: 7 },
+  alerts:      { x: 8, y: 12, w: 4,  h: 7 },
+  promotions:  { x: 0, y: 19, w: 6,  h: 7 },
+  shipment:    { x: 6, y: 19, w: 6,  h: 7 },
+  wowBar:      { x: 0, y: 26, w: 12, h: 3 },
 };
 
 interface LayoutPrefs {
@@ -326,7 +279,7 @@ const DEFAULT_SKU_VISIBLE: SkuDetailSectionKey[] = [
   "relatedTodos",
 ];
 
-const STORAGE_KEY = "aos-layout-prefs-v7";
+const STORAGE_KEY = "aos-layout-prefs-v8";
 
 function loadPrefs(): LayoutPrefs {
   try {
@@ -427,18 +380,6 @@ export function useDashboardLayout() {
     setPrefs(next);
   }, []);
 
-  const applyTemplate = useCallback((templateId: LayoutTemplateId) => {
-    setPrefs((prev) => {
-      const templateLayout = DASHBOARD_TEMPLATES[templateId];
-      const next = {
-        ...prev,
-        dashboard: { ...prev.dashboard, gridLayout: { ...templateLayout } },
-      };
-      savePrefs(next);
-      return next;
-    });
-  }, []);
-
   const resetItemSize = useCallback((key: string) => {
     setPrefs((prev) => {
       const defaultItem = DEFAULT_DASHBOARD_GRID_LAYOUT[key as DashboardSectionKey];
@@ -475,7 +416,6 @@ export function useDashboardLayout() {
     setGridLayout,
     gridLayout,
     reset,
-    applyTemplate,
     resetItemSize,
     resetItemPosition,
     defaultGridLayout: DEFAULT_DASHBOARD_GRID_LAYOUT,

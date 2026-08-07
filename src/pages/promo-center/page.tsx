@@ -5,7 +5,7 @@ import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import PageLayoutCustomizer from "@/components/layout/PageLayoutCustomizer";
-import CanvasLayout from "@/components/layout/CanvasLayout";
+import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
 import { usePageLayout, type GridItemLayout } from "@/hooks/usePageLayout";
 import { type Layout } from "react-grid-layout";
 import { computeAll, getEffectivePromoCost, aggregateWeeklyCosts } from "@/domain/calculator";
@@ -278,7 +278,8 @@ export default function PromoCenterPage() {
       >
       {/* ── KPI 汇总卡片 ── */}
       {(visibleKeys.length === 0 || visibleKeys.includes("summaryCards")) && (
-        <div key="summaryCards" className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <CanvasItem key="summaryCards" itemKey="summaryCards">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="rounded-[14px] border border-background-200/70 bg-background-100/50 p-4">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary-100 text-[14px] text-primary-700">
@@ -326,11 +327,12 @@ export default function PromoCenterPage() {
             </div>
           </div>
         </div>
+        </CanvasItem>
       )}
 
       {/* ── Tab 1: 活动管理 ── */}
       {tab === "activity" && (visibleKeys.length === 0 || visibleKeys.includes("activityTab")) && (
-        <div key="activityTab">
+        <CanvasItem key="activityTab" itemKey="activityTab">
           <ActivitySection
             promotions={promotions}
             skus={skus}
@@ -344,12 +346,12 @@ export default function PromoCenterPage() {
             flash={flash}
             visibleKeys={visibleKeys}
           />
-        </div>
+        </CanvasItem>
       )}
 
       {/* ── Tab 2: 促销成本 ── */}
       {tab === "cost" && (visibleKeys.length === 0 || visibleKeys.includes("costTab")) && (
-        <div key="costTab">
+        <CanvasItem key="costTab" itemKey="costTab">
           <CostSection
             manualPromotions={manualPromotions}
             promotions={promotions}
@@ -363,12 +365,12 @@ export default function PromoCenterPage() {
             flash={flash}
             visibleKeys={visibleKeys}
           />
-        </div>
+        </CanvasItem>
       )}
 
       {/* ── Tab 3: 促销时间线 ── */}
       {tab === "timeline" && (visibleKeys.length === 0 || visibleKeys.includes("timelineTab")) && (
-        <div key="timelineTab">
+        <CanvasItem key="timelineTab" itemKey="timelineTab">
           <TimelineSection
             buckets={weeklyBuckets}
             promotions={promotions}
@@ -376,7 +378,7 @@ export default function PromoCenterPage() {
             skuMap={skuMap}
             snapMap={snapMap}
           />
-        </div>
+        </CanvasItem>
       )}
       </CanvasLayout>
     </div>

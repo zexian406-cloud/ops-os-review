@@ -3,7 +3,7 @@ import { db, getAllShops } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import PageLayoutCustomizer from "@/components/layout/PageLayoutCustomizer";
-import CanvasLayout from "@/components/layout/CanvasLayout";
+import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
 import { type Layout } from "react-grid-layout";
 import { usePageLayout, type GridItemLayout } from "@/hooks/usePageLayout";
 import type { Promotion, PromotionType, SkuMaster, DailySnapshot, Shop } from "@/domain/types";
@@ -364,7 +364,8 @@ export default function PromotionsPage() {
 
       {/* ── 促销汇总卡片 ── */}
       {visibleKeys.includes("summaryCards") && (
-      <div key="summaryCards" className="grid grid-cols-3 gap-3">
+      <CanvasItem key="summaryCards" itemKey="summaryCards">
+      <div className="grid grid-cols-3 gap-3">
         <div className="rounded-xl border border-background-200/70 bg-background-100/50 p-3">
           <div className="text-[11px] font-medium text-foreground-500">平均利润率</div>
           <div className={`font-heading text-[22px] font-bold mt-0.5 ${summaryStats.avgMargin >= 10 ? "text-primary-700" : summaryStats.avgMargin >= 0 ? "text-foreground-800" : "text-red-600"}`}>
@@ -387,11 +388,12 @@ export default function PromotionsPage() {
           <div className="text-[10px] text-foreground-500 mt-0.5">近7天快照 ads/rev</div>
         </div>
       </div>
+      </CanvasItem>
       )}
 
       {/* ── 新增促销 ── */}
       {visibleKeys.includes("addForm") && (
-      <div key="addForm">
+      <CanvasItem key="addForm" itemKey="addForm">
       <Section
         title={bulkMode ? "批量添加促销" : "新增促销"}
         icon="ri-add-circle-line"
@@ -639,12 +641,12 @@ export default function PromotionsPage() {
           )}
         </div>
       </Section>
-      </div>
+      </CanvasItem>
       )}
 
       {/* ── 已有促销 ── */}
       {visibleKeys.includes("promoList") && (
-      <div key="promoList">
+      <CanvasItem key="promoList" itemKey="promoList">
       <Section
         title="已有促销"
         icon="ri-flashlight-line"
@@ -910,7 +912,7 @@ export default function PromotionsPage() {
           <span>默认只读防误触 · 点击行末铅笔图标进入编辑模式 · 利润率 =（折扣价 − 总成本）÷ 折扣价</span>
         </div>
       </Section>
-      </div>
+      </CanvasItem>
       )}
       </CanvasLayout>
     </div>

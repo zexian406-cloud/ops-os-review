@@ -6,7 +6,7 @@ import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import PageLayoutCustomizer from "@/components/layout/PageLayoutCustomizer";
-import CanvasLayout from "@/components/layout/CanvasLayout";
+import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
 import { type Layout } from "react-grid-layout";
 import { usePageLayout, type GridItemLayout } from "@/hooks/usePageLayout";
 import type { TodoItem, SkuMaster } from "@/domain/types";
@@ -185,7 +185,7 @@ export default function TodoPage() {
 
       {/* Add new todo */}
       {visibleKeys.includes("addForm") && (
-      <div key="addForm">
+      <CanvasItem key="addForm" itemKey="addForm">
       <Section title="新增待办" icon="ri-add-circle-line">
 
         <div className="flex flex-wrap items-end gap-3">
@@ -245,12 +245,12 @@ export default function TodoPage() {
           </button>
         </div>
       </Section>
-      </div>
+      </CanvasItem>
       )}
 
       {/* Todo list */}
       {visibleKeys.includes("todoList") && (
-      <div key="todoList">
+      <CanvasItem key="todoList" itemKey="todoList">
       <Section title="待办列表" icon="ri-list-check-3" subtitle={`${incompleteCount} 个未完成`}>
         {todos.length === 0 ? (
           <EmptyState icon="ri-check-double-line" title="暂无待办" desc="输入待办内容并点击添加" />
@@ -332,7 +332,7 @@ export default function TodoPage() {
           </div>
         )}
       </Section>
-      </div>
+      </CanvasItem>
       )}
       </CanvasLayout>
 

@@ -1,10 +1,4 @@
-import { useState } from "react";
-import {
-  DASHBOARD_LABELS,
-  LAYOUT_TEMPLATES,
-  type DashboardSectionKey,
-  type LayoutTemplateId,
-} from "@/hooks/useLayoutPrefs";
+import { DASHBOARD_LABELS, type DashboardSectionKey } from "@/hooks/useLayoutPrefs";
 
 interface LayoutCustomizerProps {
   visibleKeys: DashboardSectionKey[];
@@ -12,25 +6,16 @@ interface LayoutCustomizerProps {
   toggle: (key: DashboardSectionKey) => void;
   onClose: () => void;
   onReset: () => void;
-  onApplyTemplate: (templateId: LayoutTemplateId) => void;
 }
 
 /**
- * Dashboard 布局工具栏 — Notion Dashboard 风格
- * - 模板选择（运营日常 / 利润分析 / 老板视角）
+ * Dashboard 布局工具栏
  * - 显隐切换
- * - 保存布局 / 恢复默认
+ * - 恢复默认
  */
 export default function LayoutCustomizer({
-  visibleKeys, allKeys, toggle, onClose, onReset, onApplyTemplate,
+  visibleKeys, allKeys, toggle, onClose, onReset,
 }: LayoutCustomizerProps) {
-  const [savedToast, setSavedToast] = useState(false);
-
-  const handleSave = () => {
-    setSavedToast(true);
-    setTimeout(() => setSavedToast(false), 2000);
-  };
-
   return (
     <div className="sticky top-0 z-50 rounded-[14px] border-2 border-primary-300 bg-background-50/95 backdrop-blur-md p-4 shadow-lg">
       {/* 标题行 */}
@@ -41,18 +26,6 @@ export default function LayoutCustomizer({
           <span className="text-[12px] text-foreground-500">— 拖动卡片调整位置，拖右下角调整大小</span>
         </div>
         <div className="flex items-center gap-2">
-          {savedToast && (
-            <span className="text-[12px] font-medium text-accent-600 animate-pulse">
-              <i className="ri-check-line" aria-hidden /> 布局已保存
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={handleSave}
-            className="rounded-[8px] bg-primary-500 px-4 py-1.5 text-[12px] font-semibold text-white hover:bg-primary-600 cursor-pointer"
-          >
-            保存布局
-          </button>
           <button
             type="button"
             onClick={onReset}
@@ -67,27 +40,6 @@ export default function LayoutCustomizer({
           >
             完成
           </button>
-        </div>
-      </div>
-
-      {/* 模板选择 */}
-      <div className="mb-4">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-foreground-400 mb-2">布局模板</div>
-        <div className="flex flex-wrap gap-2">
-          {(Object.entries(LAYOUT_TEMPLATES) as [LayoutTemplateId, typeof LAYOUT_TEMPLATES[LayoutTemplateId]][]).map(([id, tpl]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onApplyTemplate(id)}
-              className="flex items-center gap-2 rounded-[10px] border border-background-200 bg-background-50 px-4 py-2 text-[12px] font-medium text-foreground-600 hover:border-primary-400 hover:bg-primary-50 hover:text-primary-700 cursor-pointer transition-all"
-            >
-              <i className={`${tpl.icon} text-[14px]`} aria-hidden />
-              <div className="flex flex-col">
-                <span>{tpl.label}</span>
-                <span className="text-[10px] text-foreground-400">{tpl.desc}</span>
-              </div>
-            </button>
-          ))}
         </div>
       </div>
 

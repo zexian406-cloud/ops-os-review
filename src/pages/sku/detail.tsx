@@ -18,7 +18,7 @@ import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import SkuLayoutCustomizer from "@/components/layout/SkuLayoutCustomizer";
-import CanvasLayout from "@/components/layout/CanvasLayout";
+import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
 import { useSkuDetailLayout, type SkuDetailSectionKey, type GridItemLayout } from "@/hooks/useLayoutPrefs";
 import { type Layout } from "react-grid-layout";
 import type { WowDelta } from "@/domain/engine";
@@ -547,7 +547,8 @@ export default function SkuDetail() {
       >
       {/* ═══════ 1. 头部信息 ═══════ */}
       {visibleKeys.includes("header") && (
-      <div key="header" className="flex flex-wrap items-start justify-between gap-4">
+      <CanvasItem key="header" itemKey="header">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <Link to="/sku" className="text-[12px] text-foreground-400 hover:text-foreground-700 cursor-pointer">← 返回 SKU 列表</Link>
           <h1 className="mt-1 font-heading text-[28px] font-bold leading-tight text-foreground-950">{sku.name}</h1>
@@ -603,11 +604,13 @@ export default function SkuDetail() {
           )}
         </div>
       </div>
+      </CanvasItem>
       )}
 
       {/* ═══════ 2. 折扣利润率横幅 ═══════ */}
       {latest && visibleKeys.includes("discountBanner") && activeOrUpcomingPromo?.discountPrice && activeOrUpcomingPromo.discountPrice > 0 && (
-            <div key="discountBanner" className="rounded-[14px] border-2 border-accent-500 bg-accent-50/70 p-4">
+            <CanvasItem key="discountBanner" itemKey="discountBanner">
+            <div className="rounded-[14px] border-2 border-accent-500 bg-accent-50/70 p-4">
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-100 text-[18px] text-accent-700">
                   <i className="ri-coupon-3-line" aria-hidden />
@@ -643,11 +646,13 @@ export default function SkuDetail() {
                 </div>
               </div>
             </div>
+            </CanvasItem>
           )}
 
       {/* ═══════ 3. KPI 卡片（全部合并） ═══════ */}
       {latest && visibleKeys.includes("kpiCards") && (
-      <div key="kpiCards" className="space-y-2">
+      <CanvasItem key="kpiCards" itemKey="kpiCards">
+      <div className="space-y-2">
         {/* ── 核心 KPI ── */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {CORE_KPI_ORDER.map((key) => {
@@ -762,11 +767,13 @@ export default function SkuDetail() {
             );
           })()}
         </div>
+      </CanvasItem>
       )}
 
       {/* ═══════ 运营数据编辑 ═══════ */}
       {visibleKeys.includes("editData") && (
-      <div key="editData" className="rounded-[14px] border border-background-200/70 bg-background-100/50 p-4">
+      <CanvasItem key="editData" itemKey="editData">
+      <div className="rounded-[14px] border border-background-200/70 bg-background-100/50 p-4">
         <button
           type="button"
           onClick={() => { setEditOpen(!editOpen); setEditMsg(null); }}
@@ -1022,11 +1029,13 @@ export default function SkuDetail() {
           </div>
         )}
       </div>
+      </CanvasItem>
       )}
 
       {/* ═══════ 3. 盈利分析 ═══════ */}
       {visibleKeys.includes("profitAnalysis") && (
-      <Section key="profitAnalysis" title="盈利分析" icon="ri-funds-box-line" subtitle="正常售价 vs 折扣售价 · 全部可编辑">
+      <CanvasItem key="profitAnalysis" itemKey="profitAnalysis">
+      <Section title="盈利分析" icon="ri-funds-box-line" subtitle="正常售价 vs 折扣售价 · 全部可编辑">
         {/* 编辑切换 */}
         <div className="mb-3 flex items-center justify-between">
           {costMissing && (
@@ -1205,11 +1214,13 @@ export default function SkuDetail() {
           </div>
         </div>
       </Section>
+      </CanvasItem>
       )}
 
       {/* ═══════ 4. 成本结构瀑布 ═══════ */}
       {visibleKeys.includes("costWaterfall") && (
-      <Section key="costWaterfall" title="成本结构瀑布" icon="ri-water-flash-line" subtitle="售价 → 逐项扣减 → 净利">
+      <CanvasItem key="costWaterfall" itemKey="costWaterfall">
+      <Section title="成本结构瀑布" icon="ri-water-flash-line" subtitle="售价 → 逐项扣减 → 净利">
         <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
           <div className="space-y-3">
             <CostWaterfall label="售价" value={sku.price} color="bg-primary-500" isStart />
@@ -1231,11 +1242,13 @@ export default function SkuDetail() {
           </div>
         </div>
       </Section>
+      </CanvasItem>
       )}
 
       {/* ═══════ 5. 促销折扣 + 发货建议 ═══════ */}
       {visibleKeys.includes("promoShipment") && (
-      <div key="promoShipment" className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <CanvasItem key="promoShipment" itemKey="promoShipment">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {skuPromos.length > 0 && (
           <Section title="促销活动" subtitle={`${skuPromos.length} 个`} icon="ri-flashlight-line"
             action={<Link to="/promotions" className="text-[12px] font-medium text-primary-700 hover:underline cursor-pointer whitespace-nowrap">管理促销 →</Link>}>
@@ -1305,11 +1318,13 @@ export default function SkuDetail() {
           </Section>
         )}
       </div>
+      </CanvasItem>
       )}
 
       {/* ═══════ 混卖补货建议 ═══════ */}
       {visibleKeys.includes("mixedReplenish") && sku.fulfillment === "mixed" && (fbaReplenish || fbmReplenish) && (
-        <Section key="mixedReplenish" title="混卖补货建议" icon="ri-truck-line" subtitle="FBA / FBM 独立计算安全库存和建议补货量">
+        <CanvasItem key="mixedReplenish" itemKey="mixedReplenish">
+        <Section title="混卖补货建议" icon="ri-truck-line" subtitle="FBA / FBM 独立计算安全库存和建议补货量">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {fbaReplenish && (
               <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
@@ -1361,11 +1376,13 @@ export default function SkuDetail() {
             )}
           </div>
         </Section>
+        </CanvasItem>
       )}
 
       {/* ═══════ 6. 库存分析 ═══════ */}
       {visibleKeys.includes("inventory") && (
-      <Section key="inventory" title="库存分析" icon="ri-archive-2-line" subtitle={`在库 ${allStock} 件 · 在途 ${allTransit} 件 · 可用 ${allAvailable} 件 · 存销比 ${stockSalesRatio}`}>
+      <CanvasItem key="inventory" itemKey="inventory">
+      <Section title="库存分析" icon="ri-archive-2-line" subtitle={`在库 ${allStock} 件 · 在途 ${allTransit} 件 · 可用 ${allAvailable} 件 · 存销比 ${stockSalesRatio}`}>
         {/* 地区库存拆分 */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {([
@@ -1440,11 +1457,13 @@ export default function SkuDetail() {
           </div>
         ) : null}
       </Section>
+      </CanvasItem>
       )}
 
       {/* ═══════ 7. Listing 优化 & 基础数据 ═══════ */}
       {visibleKeys.includes("listing") && (
-      <Section key="listing" title="Listing 优化 & 基础数据" icon="ri-file-list-3-line" subtitle="SKU 主档信息 · 包裹参数 · Listing 状态 — 点击「编辑」可直接修改">
+      <CanvasItem key="listing" itemKey="listing">
+      <Section title="Listing 优化 & 基础数据" icon="ri-file-list-3-line" subtitle="SKU 主档信息 · 包裹参数 · Listing 状态 — 点击「编辑」可直接修改">
         {/* ── 全局保存提示 ── */}
         {skuMsg && (
           <div className={`mb-3 text-[13px] font-medium ${skuMsg.includes("失败") ? "text-red-600" : "text-accent-700"}`}>
@@ -1843,11 +1862,13 @@ export default function SkuDetail() {
           </div>
         )}
       </Section>
+      </CanvasItem>
       )}
 
       {/* ═══════ 8. 上期对比 ═══════ */}
       {visibleKeys.includes("weekOverWeek") && skuWow && (
-        <div key="weekOverWeek" className="flex flex-wrap items-center gap-3 rounded-[14px] border border-background-200/70 bg-background-100/60 px-4 py-3">
+        <CanvasItem key="weekOverWeek" itemKey="weekOverWeek">
+        <div className="flex flex-wrap items-center gap-3 rounded-[14px] border border-background-200/70 bg-background-100/60 px-4 py-3">
           <span className="text-[12px] font-semibold text-foreground-700">上期对比</span>
           <div className="flex items-center gap-1.5 text-[12px] text-foreground-600"><span>日均销量</span>{deltaArrow(skuWow.dailySalesDelta)}</div>
           <span className="text-foreground-300">·</span>
@@ -1859,12 +1880,14 @@ export default function SkuDetail() {
           <span className="text-foreground-300">·</span>
           <div className="flex items-center gap-1.5 text-[12px] text-foreground-600"><span>评分</span>{deltaArrow(skuWow.ratingDelta)}</div>
         </div>
+        </CanvasItem>
       )}
 
       {/* ═══════ 本周 vs 上周对比 ═══════ */}
       {visibleKeys.includes("historyCharts") && (
       latest && prevSnap ? (
-        <Section key="historyCharts" title="本周 vs 上周环比" icon="ri-bar-chart-grouped-line" subtitle="近7天数据对比">
+        <CanvasItem key="historyCharts" itemKey="historyCharts">
+        <Section title="本周 vs 上周环比" icon="ri-bar-chart-grouped-line" subtitle="近7天数据对比">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             {/* 周销量对比 */}
             <div className="rounded-[14px] border border-background-200/70 bg-background-50 p-4">
@@ -1960,18 +1983,21 @@ export default function SkuDetail() {
             </div>
           </div>
         </Section>
+        </CanvasItem>
       ) : (
-        <div key="historyCharts" className="rounded-[14px] border border-background-200/70 bg-background-100/60 px-4 py-6 text-center text-[13px] text-foreground-500">
+        <CanvasItem key="historyCharts" itemKey="historyCharts">
+        <div className="rounded-[14px] border border-background-200/70 bg-background-100/60 px-4 py-6 text-center text-[13px] text-foreground-500">
           <i className="ri-bar-chart-grouped-line mb-2 block text-[28px] text-foreground-300" aria-hidden />
           暂无上周数据，下次上传后可查看周环比
         </div>
+        </CanvasItem>
       )
       )}
 
       {/* ======= 关联待办 ======= */}
       {visibleKeys.includes("relatedTodos") && (
+        <CanvasItem key="relatedTodos" itemKey="relatedTodos">
         <Section
-          key="relatedTodos"
           title="关联待办"
           icon="ri-checkbox-circle-line"
           subtitle={relatedTodos.length > 0 ? `${relatedTodos.length} 个未完成` : "暂无待办"}
@@ -2020,6 +2046,7 @@ export default function SkuDetail() {
             </div>
           )}
         </Section>
+        </CanvasItem>
       )}
       </CanvasLayout>
 

@@ -1,7 +1,52 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
 import { GridLayout, useContainerWidth, getCompactor, type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
+
+/* ────────── CanvasItem Context ──────────
+ * 通过 Context 向子元素传递自定义模式状态和回调，
+ * 避免在 CanvasLayout 中包装子元素（包装会改变 key 导致 GridLayout 匹配失败）
+ */
+interface CanvasItemContextValue {
+  customizing: boolean;
+  onHideItem?: (key: string) => void;
+  onResetItemSize?: (key: string) => void;
+  onResetItemPosition?: (key: string) => void;
+}
+const CanvasItemContext = createContext<CanvasItemContextValue>({ customizing: false });
+
+/**
+ * CanvasItem — 页面中每个区块的包装器
+ *
+ * 用法：
+ * <CanvasLayout layout={rglLayout} ...>
+ *   {visibleKeys.map(key => (
+ *     <CanvasItem key={key} itemKey={key}>
+ *       {sections[key]}
+ *     </CanvasItem>
+ *   ))}
+ * </CanvasLayout>
+ *
+ * 注意：key 必须直接设在 <CanvasItem> 上，且与 layout 中的 i 值一致。
+ * CanvasItem 不再添加额外的 DOM 层——它直接渲染 children，
+ * GridLayout 会将它作为直接子元素处理。
+ */
+export function CanvasItem({ itemKey, children }: { itemKey: string; children: React.ReactNode }) {
+  const ctx = useContext(CanvasItemContext);
+  return (
+    <div className="canvas-item-wrapper" data-item-key={itemKey}>
+      {ctx.customizing && (ctx.onHideItem || ctx.onResetItemSize || ctx.onResetItemPosition) && (
+        <CardMenu
+          itemKey={itemKey}
+          onHide={ctx.onHideItem ? () => ctx.onHideItem!(itemKey) : undefined}
+          onResetSize={ctx.onResetItemSize ? () => ctx.onResetItemSize!(itemKey) : undefined}
+          onResetPosition={ctx.onResetItemPosition ? () => ctx.onResetItemPosition!(itemKey) : undefined}
+        />
+      )}
+      {children}
+    </div>
+  );
+}
 
 interface CanvasLayoutProps {
   layout: Layout[];
@@ -19,15 +64,18 @@ interface CanvasLayoutProps {
 /**
  * 画布式布局组件 — Notion Dashboard 风格 (react-grid-layout v2 API)
  *
- * v2 关键变化：
- * - 使用 gridConfig / dragConfig / resizeConfig 替代 v1 的 cols/rowHeight/isDraggable 等
- * - 使用 compactor 替代 compactType + preventCollision
- * - getCompactor(null, false, true) = 无压缩 + 禁止重叠，卡片固定在用户放置的位置
+ * v2 关键：
+ * - gridConfig / dragConfig / resizeConfig 替代 v1 的 cols/rowHeight/isDraggable
+ * - compactor 替代 compactType + preventCollision
+ * - getCompactor(null, false, true) = 无压缩 + 禁止重叠
  *
  * 防覆盖机制：
  * - GridLayout 的 onLayoutChange 在挂载时也会触发，会覆盖正确的默认布局
  * - 使用 internalLayout 内部状态渲染，onLayoutChange 只更新内部状态
  * - onDragStop / onResizeStop 才真正持久化到父组件
+ *
+ * 子元素直接传递给 GridLayout，不做额外包装（包装会改变 key 导致匹配失败）。
+ * 页面应使用 <CanvasItem key={key} itemKey={key}> 包装每个区块。
  */
 const FREE_FORM_COMPACTOR = getCompactor(null, false, true);
 
@@ -48,7 +96,7 @@ export default function CanvasLayout({
   // 仅在用户拖拽/缩放完成（onDragStop / onResizeStop）时才持久化。
   const [internalLayout, setInternalLayout] = useState<Layout[]>(layout);
 
-  // 外部 layout 变化时（切换模板、重置、显隐模块）同步到内部状态
+  // 外部 layout 变化时（重置、显隐模块）同步到内部状态
   const layoutKey = JSON.stringify(layout);
   useEffect(() => {
     setInternalLayout(layout);
@@ -72,48 +120,31 @@ export default function CanvasLayout({
     onLayoutChange([...newLayout] as Layout[]);
   }, [onLayoutChange]);
 
-  // ── 为每个子元素包裹下拉菜单 ──
-  // 注意：不能用 React.Children.map，它会自动给返回元素的 key 加前缀（如 "kpi" → ".$kpi"），
-  // 导致 GridLayout 的 synchronizeLayoutWithChildren 用 child.key 匹配 layout.i 时全部失败，
-  // 所有卡片回退到默认 1x1 尺寸。改用 forEach 手动构建数组，保留原始 key。
-  const wrappedChildren: React.ReactNode[] = [];
-  React.Children.forEach(children, (child) => {
-    if (!React.isValidElement(child)) return;
-    const key = String(child.key ?? "");
-    wrappedChildren.push(
-      <div key={key} className="canvas-item-wrapper">
-        {customizing && (onHideItem || onResetItemSize || onResetItemPosition) && (
-          <CardMenu
-            itemKey={key}
-            onHide={onHideItem ? () => onHideItem(key) : undefined}
-            onResetSize={onResetItemSize ? () => onResetItemSize(key) : undefined}
-            onResetPosition={onResetItemPosition ? () => onResetItemPosition(key) : undefined}
-          />
-        )}
-        {child}
-      </div>
-    );
-  });
+  // Context value for CanvasItem children
+  const ctxValue = useRef<CanvasItemContextValue>({ customizing, onHideItem, onResetItemSize, onResetItemPosition });
+  ctxValue.current = { customizing, onHideItem, onResetItemSize, onResetItemPosition };
 
   return (
-    <div ref={containerRef} className="canvas-layout-wrapper">
-      {canRender && (
-        <GridLayout
-          className={`canvas-layout ${customizing ? "canvas-layout-editing" : "canvas-layout-viewing"}`}
-          layout={internalLayout}
-          width={safeWidth}
-          gridConfig={{ cols: 12, rowHeight: 40, margin: [12, 12], containerPadding: [0, 0] }}
-          dragConfig={{ enabled: customizing }}
-          resizeConfig={{ enabled: customizing }}
-          compactor={FREE_FORM_COMPACTOR}
-          onLayoutChange={handleLayoutChange}
-          onDragStop={handleDragStop}
-          onResizeStop={handleResizeStop}
-        >
-          {wrappedChildren}
-        </GridLayout>
-      )}
-    </div>
+    <CanvasItemContext.Provider value={ctxValue.current}>
+      <div ref={containerRef} className="canvas-layout-wrapper">
+        {canRender && (
+          <GridLayout
+            className={`canvas-layout ${customizing ? "canvas-layout-editing" : "canvas-layout-viewing"}`}
+            layout={internalLayout}
+            width={safeWidth}
+            gridConfig={{ cols: 12, rowHeight: 40, margin: [12, 12], containerPadding: [0, 0] }}
+            dragConfig={{ enabled: customizing }}
+            resizeConfig={{ enabled: customizing }}
+            compactor={FREE_FORM_COMPACTOR}
+            onLayoutChange={handleLayoutChange}
+            onDragStop={handleDragStop}
+            onResizeStop={handleResizeStop}
+          >
+            {children}
+          </GridLayout>
+        )}
+      </div>
+    </CanvasItemContext.Provider>
   );
 }
 
@@ -143,7 +174,6 @@ function CardMenu({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
 
-  // 如果没有任何操作，不渲染菜单按钮
   if (!onHide && !onResetSize && !onResetPosition) return null;
 
   return (
