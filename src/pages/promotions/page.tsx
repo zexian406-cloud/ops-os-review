@@ -31,6 +31,7 @@ export default function PromotionsPage() {
   const {
     customizing, setCustomizing, toggleSection, reset: resetLayout,
     visibleKeys, allKeys, gridLayout, setGridLayout,
+    resetItemSize, resetItemPosition,
   } = usePageLayout("promotions");
 
   // ── 构建 ReactGridLayout 布局数组 ──
@@ -347,6 +348,9 @@ export default function PromotionsPage() {
         layout={rglLayout}
         customizing={customizing}
         onLayoutChange={handleLayoutChange}
+        onHideItem={toggleSection}
+        onResetItemSize={resetItemSize}
+        onResetItemPosition={resetItemPosition}
       >
 
       {/* ── 促销汇总卡片 ── */}

@@ -34,7 +34,7 @@ interface LayoutStore {
   pages: Record<PageId, PageLayout>;
 }
 
-const STORAGE_KEY = "aos-page-layout-v3";
+const STORAGE_KEY = "aos-page-layout-v4";
 
 /* ────────── 各页面默认区块 ────────── */
 export const DEFAULT_SECTIONS: Record<PageId, string[]> = {
@@ -252,6 +252,32 @@ export function usePageLayout(pageId: PageId) {
     setPrefs(next);
   }, [pageId]);
 
+  const defaultGridLayout = getDefaultGridLayout(pageId);
+
+  const resetItemSize = useCallback((key: string) => {
+    setPrefs((prev) => {
+      const defaultItem = defaultGridLayout[key];
+      if (!defaultItem) return prev;
+      const current = prev.gridLayout[key] ?? { x: 0, y: 0, w: 12, h: 6 };
+      const gridLayout = { ...prev.gridLayout, [key]: { ...current, w: defaultItem.w, h: defaultItem.h } };
+      const next = { ...prev, gridLayout };
+      setPageLayout(pageId, next);
+      return next;
+    });
+  }, [pageId, defaultGridLayout]);
+
+  const resetItemPosition = useCallback((key: string) => {
+    setPrefs((prev) => {
+      const defaultItem = defaultGridLayout[key];
+      if (!defaultItem) return prev;
+      const current = prev.gridLayout[key] ?? { w: 12, h: 6 };
+      const gridLayout = { ...prev.gridLayout, [key]: { ...current, x: defaultItem.x, y: defaultItem.y } };
+      const next = { ...prev, gridLayout };
+      setPageLayout(pageId, next);
+      return next;
+    });
+  }, [pageId, defaultGridLayout]);
+
   const visibleKeys = prefs.visible;
   const allKeys = DEFAULT_SECTIONS[pageId] ?? [];
   const gridLayout = prefs.gridLayout;
@@ -263,6 +289,9 @@ export function usePageLayout(pageId: PageId) {
     setGridLayout,
     gridLayout,
     reset,
+    resetItemSize,
+    resetItemPosition,
+    defaultGridLayout,
     visibleKeys,
     allKeys,
   };

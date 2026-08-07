@@ -73,6 +73,7 @@ export default function Dashboard() {
   const {
     customizing, setCustomizing, toggleSection, reset, setKpiSlot,
     visibleKeys, kpiSlots, gridLayout, setGridLayout, allKeys,
+    applyTemplate, resetItemSize, resetItemPosition,
   } = useDashboardLayout();
 
   // ── 构建 ReactGridLayout 布局数组 ──
@@ -618,20 +619,24 @@ export default function Dashboard() {
           toggle={toggleSection}
           onClose={() => setCustomizing(false)}
           onReset={reset}
+          onApplyTemplate={applyTemplate}
         />
       )}
 
-      {/* Canvas Layout — 自由拖拽画布模式 */}
+      {/* Canvas Layout — Notion Dashboard 风格画布 */}
       <CanvasLayout
         layout={rglLayout}
         customizing={customizing}
         onLayoutChange={handleLayoutChange}
+        onHideItem={toggleSection}
+        onResetItemSize={resetItemSize}
+        onResetItemPosition={resetItemPosition}
       >
         {visibleKeys.map((key) => {
           const node = sections[key as DashboardSectionKey];
           if (!node) return null;
           return (
-            <div key={key} className="canvas-item-inner">
+            <div key={key}>
               {node}
             </div>
           );

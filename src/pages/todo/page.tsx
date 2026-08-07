@@ -116,6 +116,7 @@ export default function TodoPage() {
   const {
     customizing, setCustomizing, toggleSection, reset: resetLayout,
     visibleKeys, allKeys, gridLayout, setGridLayout,
+    resetItemSize, resetItemPosition,
   } = usePageLayout("todo");
 
   // ── 构建 ReactGridLayout 布局数组 ──
@@ -168,6 +169,9 @@ export default function TodoPage() {
         layout={rglLayout}
         customizing={customizing}
         onLayoutChange={handleLayoutChange}
+        onHideItem={toggleSection}
+        onResetItemSize={resetItemSize}
+        onResetItemPosition={resetItemPosition}
       >
 
       {/* Add new todo */}

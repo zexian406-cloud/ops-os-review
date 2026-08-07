@@ -194,6 +194,7 @@ export default function SkuDetail() {
   const {
     customizing, setCustomizing, toggleSection, reset: resetLayout,
     visibleKeys, allKeys, gridLayout, setGridLayout,
+    resetItemSize, resetItemPosition,
   } = useSkuDetailLayout();
 
   // ── 构建 ReactGridLayout 布局数组 ──
@@ -539,6 +540,9 @@ export default function SkuDetail() {
         layout={rglLayout}
         customizing={customizing}
         onLayoutChange={handleLayoutChange}
+        onHideItem={toggleSection}
+        onResetItemSize={resetItemSize}
+        onResetItemPosition={resetItemPosition}
       >
       {/* ═══════ 1. 头部信息 ═══════ */}
       {visibleKeys.includes("header") && (

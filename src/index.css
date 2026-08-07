@@ -352,15 +352,22 @@ h1, h2, h3, h4, h5, h6 {
   z-index: 2;
 }
 
-/* ── 浏览模式：内容溢出可滚动 ── */
-.canvas-layout-viewing .react-grid-item {
+/* ── 卡片内容填满高度 ── */
+.canvas-item-wrapper {
+  height: 100%;
   overflow: auto;
+  position: relative;
+}
+
+/* ── 浏览模式 ── */
+.canvas-layout-viewing .react-grid-item {
+  overflow: visible;
   border-radius: 14px;
 }
 
 /* ── 编辑模式：虚线边框 + 悬停高亮 ── */
 .canvas-layout-editing .react-grid-item {
-  overflow: auto;
+  overflow: visible;
   border: 2px dashed oklch(var(--primary-400) / 0.5);
   border-radius: 12px;
   background: oklch(var(--background-50) / 0.6);
@@ -369,6 +376,74 @@ h1, h2, h3, h4, h5, h6 {
 .canvas-layout-editing .react-grid-item:hover {
   border-color: oklch(var(--primary-500));
   box-shadow: 0 4px 16px oklch(var(--primary-500) / 0.15);
+}
+
+/* ── 卡片右上角更多菜单 ── */
+.canvas-card-menu {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 10;
+}
+.canvas-card-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: oklch(var(--background-100) / 0.8);
+  color: oklch(var(--foreground-500));
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+.canvas-card-menu-btn:hover {
+  background: oklch(var(--primary-100));
+  color: oklch(var(--primary-700));
+}
+.canvas-card-menu-dropdown {
+  position: absolute;
+  top: 28px;
+  right: 0;
+  min-width: 160px;
+  border-radius: 10px;
+  border: 1px solid oklch(var(--background-300));
+  background: #fff;
+  box-shadow: 0 8px 24px oklch(0 0 0 / 0.12);
+  padding: 4px;
+  z-index: 20;
+}
+.canvas-card-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: oklch(var(--foreground-700));
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+.canvas-card-menu-item:hover {
+  background: oklch(var(--background-100));
+}
+.canvas-card-menu-item.canvas-card-menu-danger:hover {
+  background: oklch(0.96 0.02 20);
+  color: oklch(0.55 0.2 25);
+}
+.canvas-card-menu-item i {
+  font-size: 14px;
+  color: oklch(var(--foreground-400));
+}
+.canvas-card-menu-danger i {
+  color: oklch(0.65 0.15 25);
 }
 
 /* ── 拖拽缩放手柄 ── */

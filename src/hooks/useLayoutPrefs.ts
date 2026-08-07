@@ -191,6 +191,54 @@ const DEFAULT_DASHBOARD_GRID_LAYOUT: Record<DashboardSectionKey, GridItemLayout>
   wowBar:      { x: 0, y: 38, w: 12, h: 3 },
 };
 
+/* ────────── 布局模板 ────────── */
+export type LayoutTemplateId = "daily" | "profit" | "boss";
+
+export const LAYOUT_TEMPLATES: Record<LayoutTemplateId, { label: string; icon: string; desc: string }> = {
+  daily:  { label: "运营日常", icon: "ri-rocket-line",  desc: "突出待办、风险、库存、发货" },
+  profit: { label: "利润分析", icon: "ri-money-dollar-circle-line", desc: "突出利润、成本、广告" },
+  boss:   { label: "老板视角", icon: "ri-pie-chart-2-line",  desc: "突出销售、利润、风险" },
+};
+
+const DASHBOARD_TEMPLATES: Record<LayoutTemplateId, Record<DashboardSectionKey, GridItemLayout>> = {
+  /* 运营日常：突出待办、风险、库存、发货 */
+  daily: {
+    kpi:         { x: 0, y: 0,  w: 12, h: 4 },
+    todo:        { x: 0, y: 4,  w: 6,  h: 12 },
+    riskBuckets: { x: 6, y: 4,  w: 6,  h: 8 },
+    alerts:      { x: 6, y: 12, w: 6,  h: 6 },
+    shipment:    { x: 0, y: 16, w: 6,  h: 10 },
+    weekCompare: { x: 6, y: 18, w: 6,  h: 6 },
+    promotions:  { x: 0, y: 26, w: 6,  h: 8 },
+    opsLogs:     { x: 6, y: 24, w: 6,  h: 8 },
+    wowBar:      { x: 0, y: 34, w: 12, h: 3 },
+  },
+  /* 利润分析：突出利润、成本、广告 */
+  profit: {
+    kpi:         { x: 0, y: 0,  w: 12, h: 4 },
+    weekCompare: { x: 0, y: 4,  w: 12, h: 6 },
+    promotions:  { x: 0, y: 10, w: 6,  h: 8 },
+    opsLogs:     { x: 6, y: 10, w: 6,  h: 8 },
+    alerts:      { x: 0, y: 18, w: 6,  h: 6 },
+    riskBuckets: { x: 6, y: 18, w: 6,  h: 6 },
+    todo:        { x: 0, y: 24, w: 6,  h: 8 },
+    shipment:    { x: 6, y: 24, w: 6,  h: 8 },
+    wowBar:      { x: 0, y: 32, w: 12, h: 3 },
+  },
+  /* 老板视角：突出销售、利润、风险 */
+  boss: {
+    kpi:         { x: 0, y: 0,  w: 12, h: 4 },
+    weekCompare: { x: 0, y: 4,  w: 12, h: 6 },
+    riskBuckets: { x: 0, y: 10, w: 6,  h: 8 },
+    alerts:      { x: 6, y: 10, w: 6,  h: 8 },
+    promotions:  { x: 0, y: 18, w: 12, h: 6 },
+    shipment:    { x: 0, y: 24, w: 6,  h: 8 },
+    todo:        { x: 6, y: 24, w: 6,  h: 8 },
+    opsLogs:     { x: 0, y: 32, w: 12, h: 6 },
+    wowBar:      { x: 0, y: 38, w: 12, h: 3 },
+  },
+};
+
 interface LayoutPrefs {
   dashboard: {
     visible: DashboardSectionKey[];
@@ -234,7 +282,7 @@ const DEFAULT_SKU_VISIBLE: SkuDetailSectionKey[] = [
   "relatedTodos",
 ];
 
-const STORAGE_KEY = "aos-layout-prefs-v4";
+const STORAGE_KEY = "aos-layout-prefs-v5";
 
 function loadPrefs(): LayoutPrefs {
   try {
@@ -322,6 +370,42 @@ export function useDashboardLayout() {
     setPrefs(next);
   }, [prefs]);
 
+  const applyTemplate = useCallback((templateId: LayoutTemplateId) => {
+    setPrefs((prev) => {
+      const templateLayout = DASHBOARD_TEMPLATES[templateId];
+      const next = {
+        ...prev,
+        dashboard: { ...prev.dashboard, gridLayout: { ...templateLayout } },
+      };
+      savePrefs(next);
+      return next;
+    });
+  }, []);
+
+  const resetItemSize = useCallback((key: string) => {
+    setPrefs((prev) => {
+      const defaultItem = DEFAULT_DASHBOARD_GRID_LAYOUT[key as DashboardSectionKey];
+      if (!defaultItem) return prev;
+      const current = prev.dashboard.gridLayout[key] ?? { x: 0, y: 0, w: 12, h: 6 };
+      const gridLayout = { ...prev.dashboard.gridLayout, [key]: { ...current, w: defaultItem.w, h: defaultItem.h } };
+      const next = { ...prev, dashboard: { ...prev.dashboard, gridLayout } };
+      savePrefs(next);
+      return next;
+    });
+  }, []);
+
+  const resetItemPosition = useCallback((key: string) => {
+    setPrefs((prev) => {
+      const defaultItem = DEFAULT_DASHBOARD_GRID_LAYOUT[key as DashboardSectionKey];
+      if (!defaultItem) return prev;
+      const current = prev.dashboard.gridLayout[key] ?? { w: 12, h: 6 };
+      const gridLayout = { ...prev.dashboard.gridLayout, [key]: { ...current, x: defaultItem.x, y: defaultItem.y } };
+      const next = { ...prev, dashboard: { ...prev.dashboard, gridLayout } };
+      savePrefs(next);
+      return next;
+    });
+  }, []);
+
   const visibleKeys = prefs.dashboard.visible;
   const kpiSlots = prefs.dashboard.kpiSlots;
   const gridLayout = prefs.dashboard.gridLayout;
@@ -334,6 +418,10 @@ export function useDashboardLayout() {
     setGridLayout,
     gridLayout,
     reset,
+    applyTemplate,
+    resetItemSize,
+    resetItemPosition,
+    defaultGridLayout: DEFAULT_DASHBOARD_GRID_LAYOUT,
     visibleKeys,
     kpiSlots,
     allKeys: DEFAULT_DASHBOARD_VISIBLE,
@@ -383,6 +471,30 @@ export function useSkuDetailLayout() {
   const visibleKeys = prefs.skuDetail.visible;
   const gridLayout = prefs.skuDetail.gridLayout;
 
+  const resetItemSize = useCallback((key: string) => {
+    setPrefs((prev) => {
+      const defaultItem = DEFAULT_SKU_GRID_LAYOUT[key as SkuDetailSectionKey];
+      if (!defaultItem) return prev;
+      const current = prev.skuDetail.gridLayout[key] ?? { x: 0, y: 0, w: 12, h: 6 };
+      const gridLayout = { ...prev.skuDetail.gridLayout, [key]: { ...current, w: defaultItem.w, h: defaultItem.h } };
+      const next = { ...prev, skuDetail: { ...prev.skuDetail, gridLayout } };
+      savePrefs(next);
+      return next;
+    });
+  }, []);
+
+  const resetItemPosition = useCallback((key: string) => {
+    setPrefs((prev) => {
+      const defaultItem = DEFAULT_SKU_GRID_LAYOUT[key as SkuDetailSectionKey];
+      if (!defaultItem) return prev;
+      const current = prev.skuDetail.gridLayout[key] ?? { w: 12, h: 6 };
+      const gridLayout = { ...prev.skuDetail.gridLayout, [key]: { ...current, x: defaultItem.x, y: defaultItem.y } };
+      const next = { ...prev, skuDetail: { ...prev.skuDetail, gridLayout } };
+      savePrefs(next);
+      return next;
+    });
+  }, []);
+
   return {
     customizing,
     setCustomizing,
@@ -390,6 +502,9 @@ export function useSkuDetailLayout() {
     setGridLayout,
     gridLayout,
     reset,
+    resetItemSize,
+    resetItemPosition,
+    defaultGridLayout: DEFAULT_SKU_GRID_LAYOUT,
     visibleKeys,
     allKeys: DEFAULT_SKU_VISIBLE,
   };

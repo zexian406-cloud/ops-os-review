@@ -43,6 +43,7 @@ export default function Shipment() {
   const {
     customizing, setCustomizing, toggleSection, reset: resetLayout,
     visibleKeys, allKeys, gridLayout, setGridLayout,
+    resetItemSize, resetItemPosition,
   } = usePageLayout("shipment");
 
   const {
@@ -260,6 +261,9 @@ export default function Shipment() {
         layout={rglLayout}
         customizing={customizing}
         onLayoutChange={handleLayoutChange}
+        onHideItem={toggleSection}
+        onResetItemSize={resetItemSize}
+        onResetItemPosition={resetItemPosition}
       >
       {/* KPI 卡片区域 + 自定义模式 */}
       {visibleKeys.includes("summaryKpi") && (

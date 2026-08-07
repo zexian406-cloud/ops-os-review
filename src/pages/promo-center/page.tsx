@@ -73,6 +73,7 @@ export default function PromoCenterPage() {
   const {
     customizing, setCustomizing, toggleSection, reset: resetLayout,
     visibleKeys, allKeys, gridLayout, setGridLayout,
+    resetItemSize, resetItemPosition,
   } = usePageLayout("promo-center");
 
   // ── 构建 ReactGridLayout 布局数组 ──
@@ -258,7 +259,14 @@ export default function PromoCenterPage() {
       </div>
 
       {/* ── 画布布局 ── */}
-      <CanvasLayout layout={rglLayout} customizing={customizing} onLayoutChange={handleLayoutChange}>
+      <CanvasLayout
+        layout={rglLayout}
+        customizing={customizing}
+        onLayoutChange={handleLayoutChange}
+        onHideItem={toggleSection}
+        onResetItemSize={resetItemSize}
+        onResetItemPosition={resetItemPosition}
+      >
       {/* ── KPI 汇总卡片 ── */}
       {(visibleKeys.length === 0 || visibleKeys.includes("summaryCards")) && (
         <div key="summaryCards" className="grid grid-cols-2 md:grid-cols-4 gap-3">
