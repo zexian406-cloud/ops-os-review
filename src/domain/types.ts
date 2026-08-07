@@ -57,6 +57,10 @@ export interface SkuMaster {
   parentSku?: string;          // 父体 SKU
 groupSku?: string;           // 所属父SKU分组，空/未设置表示自己是父SKU/独立SKU
   msku?: string;               // MSKU
+  /** 各 MSKU 对应的独立 ASIN（MSKU -> ASIN）。
+   *  导入「SKU标识符」/「销量导入」时按行保留，展示/筛选时优先取此值，缺失则回退 asin。
+   *  向后兼容：旧数据无此字段时一律用父级 asin。 */
+  mskuAsins?: Record<string, string>;
   /** 各 MSKU 对应的独立店铺（MSKU -> storeId/storeName）。
    *  导入「SKU标识符」时按行保留，展示/筛选时优先取此值，缺失则回退 store。
    *  向后兼容：旧数据无此字段时一律用父级 store。 */

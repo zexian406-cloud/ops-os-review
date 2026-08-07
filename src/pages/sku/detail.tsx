@@ -30,6 +30,10 @@ const linkTypeLabel: Record<string, string> = { main: "主链接", follow: "跟�
 const mskuStoreOf = (sku: SkuMaster, m: string): string =>
   (sku.mskuStores && sku.mskuStores[m]) || sku.store;
 
+/** 取某 MSKU 的展示 ASIN：优先 mskuAsins（导入保留的各 MSKU ASIN），否则回退 sku.asin。 */
+const mskuAsinOf = (sku: SkuMaster, m: string): string | undefined =>
+  (sku.mskuAsins && sku.mskuAsins[m]) || sku.asin;
+
 // 告警类型 → 诊断页分组 key（与诊断页 tab 类型 profit/sales 对齐）
 const DIAGNOSIS_GROUP: Record<string, string> = {
   stockout: "sales",
@@ -505,7 +509,11 @@ export default function SkuDetail() {
                 </span>
               ));
             })()}
-            {sku.asin && <span className="mono-num text-foreground-500">{sku.asin}</span>}
+            {/* ASIN：focus=MSKU 时显示该 MSKU 对应的 ASIN，否则显示父级 ASIN */}
+            {(() => {
+              const displayAsin = focusMsku ? mskuAsinOf(sku, focusMsku) : sku.asin;
+              return displayAsin ? <span className="mono-num text-foreground-500">{displayAsin}</span> : null;
+            })()}
             {sku.marketplace && <Badge tone="secondary">{sku.marketplace}</Badge>}
             <Badge tone="primary">{sku.store}</Badge>
             <Badge tone="accent">{sku.fulfillment}</Badge>
@@ -1595,7 +1603,13 @@ export default function SkuDetail() {
                       })()
                     : "-"
                 } />
-                <InfoRow label="ASIN" value={sku.asin ?? "-"} />
+                <InfoRow label="ASIN" value={
+                  (() => {
+                    // focus=MSKU 时显示该 MSKU 对应的 ASIN，否则显示父级 ASIN
+                    const displayAsin = focusMsku ? mskuAsinOf(sku, focusMsku) : sku.asin;
+                    return displayAsin ?? "-";
+                  })()
+                } />
                 <InfoRow label="UPC" value={sku.upc ?? "-"} />
                 <InfoRow label="父体 ASIN" value={sku.parentAsin ?? "-"} />
                 <InfoRow label="父体 SKU" value={sku.parentSku ?? "-"} />

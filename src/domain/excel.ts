@@ -172,6 +172,8 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
         };
         // 父行 MSKU 也按行保留店铺（多 MSKU 场景各店铺不同）
         recordMskuStore(rec, msku, store);
+        // FIX: 父行 MSKU 也记录 ASIN，展开子项时各 MSKU 显示自身 ASIN
+        recordMskuAsin(rec, msku, asin);
         // FIX: 父行 MSKU 也记录售价/运费/销售总价，展开子项时各 MSKU 显示自身价格
         recordMskuPrice(rec, msku, price, shippingFee, listPrice);
         skuMaster.push(rec);
@@ -187,6 +189,8 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
           }
           // 各 MSKU 独立店铺：按行保留到 mskuStores（首次出现为准）
           recordMskuStore(existing, msku, store);
+          // FIX: 各 MSKU 独立 ASIN：按行保留到 mskuAsins（首次出现为准）
+          recordMskuAsin(existing, msku, asin);
           // FIX: 各 MSKU 独立售价/运费/销售总价：按行保留到 mskuMetrics（首次出现为准）
           recordMskuPrice(existing, msku, price, shippingFee, listPrice);
           // 父级 store 回填：首行店铺为空/占位（'-'）时，用后续行的店铺补齐
@@ -349,8 +353,15 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       }
       if (!mskuMetricsAgg.has(sku)) mskuMetricsAgg.set(sku, {});
       const skuMetricsMap = mskuMetricsAgg.get(sku)!;
+      // FIX: 同时记录各 MSKU 对应的 ASIN（如有）
+      const salesRowAsin = str(pickCell(row, c.asin));
       for (const mskuKey of mskuTokens) {
         if (!mskuKey) continue;
+        // 记录 MSKU → ASIN 映射（first-wins）
+        if (salesRowAsin) {
+          const master = skuMaster.find((s) => s.sku === sku);
+          if (master) recordMskuAsin(master, mskuKey, salesRowAsin);
+        }
         // 每个MSKU首次写入时保留已有字段，避免覆盖Step1写入的price/shippingFee/listPrice
         if (!skuMetricsMap[mskuKey]) {
           skuMetricsMap[mskuKey] = {};
@@ -633,6 +644,20 @@ export function recordMskuStore(existing: SkuMaster, mskuRaw: string | undefined
     if (t === existing.sku) continue; // 家族码本身不算 MSKU 变体
     if (!existing.mskuStores) existing.mskuStores = {};
     if (!(t in existing.mskuStores)) existing.mskuStores[t] = storeVal; // first-wins
+  }
+}
+
+/**
+ * 把某行的 MSKU 对应的 ASIN 记录到父记录的 mskuAsins。
+ * first-wins：同一 MSKU 重复出现时首次 ASIN 为准。
+ * 注意：不跳过 t === existing.sku 的情况（MSKU 可能就是 SKU 本身，也需记录 ASIN）。
+ */
+export function recordMskuAsin(existing: SkuMaster, mskuRaw: string | undefined, asinVal: string | undefined): void {
+  if (!mskuRaw || !asinVal) return;
+  const tokens = mskuRaw.split(/[,\s，、·]+/).map((t) => t.trim()).filter(Boolean);
+  for (const t of tokens) {
+    if (!existing.mskuAsins) existing.mskuAsins = {};
+    if (!(t in existing.mskuAsins)) existing.mskuAsins[t] = asinVal; // first-wins
   }
 }
 

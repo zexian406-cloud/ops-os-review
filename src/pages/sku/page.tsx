@@ -1527,9 +1527,13 @@ function ChildRow({
               {child.msku || child.sku}
             </Link>
           )}
-          {child.asin && (
-            <div className="mono-num text-[10px] text-foreground-400 leading-tight">{child.asin}</div>
-          )}
+          {(() => {
+            // 优先取 mskuAsins 中该 MSKU 对应的 ASIN，回退到父级 asin
+            const displayAsin = (child.msku && child.mskuAsins?.[child.msku]) || child.asin;
+            return displayAsin ? (
+              <div className="mono-num text-[10px] text-foreground-400 leading-tight">{displayAsin}</div>
+            ) : null;
+          })()}
         </div>
       </td>
       <td className="px-3 py-2 border-b border-background-200/40 text-foreground-600 whitespace-nowrap">
