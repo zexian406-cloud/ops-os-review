@@ -471,6 +471,18 @@ export default function SkuDetail() {
   const southeastTransit = (inv?.southeastTransit ?? 0);
   const southcentralTransit = (inv?.southcentralTransit ?? 0);
 
+  // 在途批次汇总（四仓在途为0时，在途总数来自批次明细）
+  const transitBatchTotal = inv?.transitBatches?.length
+    ? inv.transitBatches.reduce((s, b) => s + (b.qty || 0), 0)
+    : 0;
+  const regionTransitSum = eastTransitNew + westTransitNew + southeastTransit + southcentralTransit;
+  // 在途副标题：四仓有值显示四仓，否则显示批次来源
+  const transitSub = regionTransitSum > 0
+    ? `美东${eastTransitNew}+美西${westTransitNew}+东南${southeastTransit}+中南${southcentralTransit}`
+    : transitBatchTotal > 0
+      ? `在途批次 ${transitBatchTotal} 件${inv?.transitBatches?.length ? ` · ${inv.transitBatches.length} 批` : ""}`
+      : "暂无在途";
+
   return (
     <div className="space-y-6">
       {/* ═══════ 1. 头部信息 ═══════ */}
@@ -658,7 +670,7 @@ export default function SkuDetail() {
                   return <KpiCard key={key} label="30天销量" value={_30dTotal.toLocaleString()} sub={`日均 ${_30dDaily.toFixed(1)} 件 · 近30天累计`} icon="ri-bar-chart-2-line" />;
                 }
                 case "inStock": return <KpiCard key={key} label="在库库存" value={allStock.toLocaleString()} sub={`美东${eastStock} + 美西${westStock} + 东南${southeastStock} + 中南${southcentralStock}`} icon="ri-archive-drawer-line" tooltip="公式: 美东在库 + 美西在库 + 东南在库 + 中南在库" />;
-                case "inTransit": return <KpiCard key={key} label="在途库存" value={allTransit.toLocaleString()} sub={`美东${eastTransitNew}+美西${westTransitNew}+东南${southeastTransit}+中南${southcentralTransit}`} icon="ri-ship-line" tone="secondary" tooltip="公式: 美东在途 + 美西在途 + 东南在途 + 中南在途" />;
+                case "inTransit": return <KpiCard key={key} label="在途库存" value={allTransit.toLocaleString()} sub={transitSub} icon="ri-ship-line" tone="secondary" tooltip="公式: 四仓在途之和; 四仓为0时取在途批次汇总" />;
                 case "totalStock": return <KpiCard key={key} label="总库存" value={allAvailable.toLocaleString()} sub={`在库${allStock}+在途${allTransit}，自动汇总`} icon="ri-archive-line" tone="accent" tooltip="公式: 在库库存 + 在途库存" />;
                 case "stockSalesRatio": return <KpiCard key={key} label="存销比" value={String(stockSalesRatio)} sub="总库存/月销" icon="ri-pie-chart-box-line" tooltip="公式: 总库存 ÷ 月销量" />;
                 default: return null;
@@ -1390,7 +1402,7 @@ export default function SkuDetail() {
           <div className="rounded-lg border border-secondary-200/70 bg-secondary-50/60 p-3">
             <div className="text-[11px] text-foreground-500">在途合计</div>
             <div className="mono-num mt-1 font-heading text-[18px] font-bold text-foreground-950">{allTransit.toLocaleString()}</div>
-            <div className="text-[11px] text-foreground-500">四仓在途汇总</div>
+            <div className="text-[11px] text-foreground-500">{regionTransitSum > 0 ? "四仓在途汇总" : transitBatchTotal > 0 ? `在途批次 ${inv?.transitBatches?.length ?? 0} 批` : "暂无在途"}</div>
           </div>
           <div className="rounded-lg border border-accent-200/70 bg-accent-50/60 p-3">
             <div className="text-[11px] text-foreground-500">总库存（自动汇总）</div>
@@ -1406,6 +1418,35 @@ export default function SkuDetail() {
             <DataTile label="在库可售天数" value={`${formatCoverDays(daysOfCoverOnHand)} 天`} />
           </div>
         )}
+        {/* 在途批次明细（四仓在途为0但有批次时展示） */}
+        {regionTransitSum === 0 && transitBatchTotal > 0 && inv?.transitBatches?.length ? (
+          <div className="mt-4 rounded-lg border border-secondary-200/70 bg-secondary-50/40 p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-foreground-700">
+              <i className="ri-ship-2-line text-secondary-600" aria-hidden />
+              在途批次明细（共 {inv.transitBatches.length} 批 · {transitBatchTotal} 件）
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wider text-foreground-500">
+                    <th className="px-2 py-1.5">物流商 / 目的仓</th>
+                    <th className="px-2 py-1.5 text-right">数量</th>
+                    <th className="px-2 py-1.5">预计到仓</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inv.transitBatches.map((b, i) => (
+                    <tr key={i} className="border-t border-background-200/60">
+                      <td className="px-2 py-1.5">{b.warehouse || "-"}</td>
+                      <td className="mono-num px-2 py-1.5 text-right font-medium">{b.qty.toLocaleString()}</td>
+                      <td className="px-2 py-1.5 text-foreground-600">{b.etaDate || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
       </Section>
       )}
 
