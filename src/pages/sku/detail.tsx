@@ -37,7 +37,9 @@ const mskuStoreOf = (sku: SkuMaster, m: string): string =>
 const mskuAsinOf = (sku: SkuMaster, m: string): string | undefined => {
   const individual = sku.mskuAsins?.[m];
   if (individual) return individual;
-  return sku.linkType === "follow" ? sku.asin : undefined;
+  // 优先用 MSKU 级别的链接类型，没有则回退父级
+  const mLinkType = sku.mskuLinkTypes?.[m] ?? sku.linkType;
+  return mLinkType === "follow" ? sku.asin : undefined;
 };
 
 // 告警类型 → 诊断页分组 key（与诊断页 tab 类型 profit/sales 对齐）
@@ -1507,7 +1509,32 @@ export default function SkuDetail() {
                   </div>
                   <div>
                     <label className={labelCls}>MSKU</label>
-                    <input className={inputCls} value={editSku.msku ?? ""} onChange={(e) => updateEditSku({ msku: e.target.value })} />
+                    <div className="flex flex-wrap gap-1 rounded-md border border-background-200 bg-background-50 px-2.5 py-1.5 min-h-[36px] items-center">
+                      {editSku.msku
+                        ? (() => {
+                            const allMs = editSku.msku.split(/[,\s，、·]+/).map((m) => m.trim()).filter(Boolean);
+                            const display = allMs.length > 3 ? allMs.slice(0, 3) : allMs;
+                            const remaining = allMs.length - display.length;
+                            return (
+                              <>
+                                {display.map((m) => (
+                                  <span key={m} className="mono-num inline-block rounded-[8px] bg-background-100 px-2 py-0.5 text-[12px] text-foreground-600">
+                                    {m}
+                                    <span className="ml-1 text-[10px] text-foreground-400">{mskuStoreOf(editSku, m)}</span>
+                                  </span>
+                                ))}
+                                {remaining > 0 && (
+                                  <span className="mono-num inline-block rounded-[8px] bg-background-100 px-2 py-0.5 text-[12px] text-foreground-400">
+                                    等 {remaining} 个
+                                  </span>
+                                )}
+                              </>
+                            );
+                          })()
+                        : <span className="text-[13px] text-foreground-400">—</span>
+                      }
+                    </div>
+                    <p className="mt-0.5 text-[10px] text-foreground-400">MSKU 通过运营表导入，如需修改请重新导入</p>
                   </div>
                   <div>
                     <label className={labelCls}>ASIN</label>

@@ -65,6 +65,10 @@ groupSku?: string;           // 所属父SKU分组，空/未设置表示自己�
    *  导入「SKU标识符」时按行保留，展示/筛选时优先取此值，缺失则回退 store。
    *  向后兼容：旧数据无此字段时一律用父级 store。 */
   mskuStores?: Record<string, string>;
+  /** 各 MSKU 对应的独立链接类型（MSKU -> "main"|"follow"|"backup"）。
+   *  导入「SKU标识符」时按行保留，ASIN 显示逻辑据此判断是否回退父级 ASIN。
+   *  向后兼容：旧数据无此字段时回退到父级 linkType。 */
+  mskuLinkTypes?: Record<string, "main" | "follow" | "backup">;
   /** 各 MSKU 独立的动态指标（按 MSKU 行保留，不取平均）。
    *  导入「销量导入」「运营数据导入」时按行写入，展示层展开 MSKU 时优先取此值。
    *  向后兼容：旧数据无此字段时回退到家族级快照。 */

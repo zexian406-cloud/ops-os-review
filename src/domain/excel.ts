@@ -106,7 +106,7 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
     const c = buildColumnMap(
       [
         "sku", "msku", "name", "asin", "store", "price", "shippingFee", "fob", "costStorage",
-        "fulfillment", "upc", "category", "launchDate",
+        "fulfillment", "upc", "category", "launchDate", "linkType",
         "packageLength", "packageWidth", "packageHeight", "packageWeight", "unitsPerBox",
         "productUrl", "competitorUrls",
       ],
@@ -132,6 +132,7 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
       const upc = str(pickCell(row, c.upc)) || undefined;
       const category = str(pickCell(row, c.category)) || undefined;
       const launchDate = str(pickCell(row, c.launchDate)) || undefined;
+      const linkType = normalizeLinkType(pickCell(row, c.linkType));
       const packageLength = num(pickCell(row, c.packageLength)) > 0 ? num(pickCell(row, c.packageLength)) : undefined;
       const packageWidth = num(pickCell(row, c.packageWidth)) > 0 ? num(pickCell(row, c.packageWidth)) : undefined;
       const packageHeight = num(pickCell(row, c.packageHeight)) > 0 ? num(pickCell(row, c.packageHeight)) : undefined;
@@ -166,6 +167,7 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
           costFob,
           costStorage,
           fulfillment,
+          linkType,
           saleStatus: "active",
           productUrl,
           competitorUrls: competitorUrls && competitorUrls.length > 0 ? competitorUrls : undefined,
@@ -176,6 +178,8 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
         recordMskuAsin(rec, msku, asin);
         // FIX: 父行 MSKU 也记录售价/运费/销售总价，展开子项时各 MSKU 显示自身价格
         recordMskuPrice(rec, msku, price, shippingFee, listPrice);
+        // FIX: 父行 MSKU 也记录链接类型，ASIN 显示逻辑据此判断是否回退父级
+        recordMskuLinkType(rec, msku, linkType);
         skuMaster.push(rec);
       } else {
         // 再次出现（同一「SKU」系列下的多变体行）→ 合并进首条记录，绝不另建独立主键。
@@ -193,6 +197,8 @@ export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
           recordMskuAsin(existing, msku, asin);
           // FIX: 各 MSKU 独立售价/运费/销售总价：按行保留到 mskuMetrics（首次出现为准）
           recordMskuPrice(existing, msku, price, shippingFee, listPrice);
+          // FIX: 各 MSKU 独立链接类型：按行保留到 mskuLinkTypes（首次出现为准）
+          recordMskuLinkType(existing, msku, linkType);
           // 父级 store 回填：首行店铺为空/占位（'-'）时，用后续行的店铺补齐
           if ((!existing.store || existing.store === "-") && store && store !== "-") {
             existing.store = store;
@@ -632,6 +638,16 @@ const normalizeFulfillment = (v: unknown): "FBA" | "FBM" | "mixed" => {
   return "FBM"; // 用户主要做FBM
 };
 
+/** 统一链接类型：支持中文映射，空值返回 undefined（不设置） */
+const normalizeLinkType = (v: unknown): "main" | "follow" | "backup" | undefined => {
+  const val = str(v).toLowerCase();
+  if (!val) return undefined;
+  if (val === "main" || val === "主链接" || val === "主") return "main";
+  if (val === "follow" || val === "跟卖" || val === "跟卖链接") return "follow";
+  if (val === "backup" || val === "备用" || val === "备用链接") return "backup";
+  return "main"; // 默认主链接
+};
+
 /**
  * 把某行的 MSKU（可能逗号/空格/顿号/间隔号分隔多值）对应的店铺记录到父记录的 mskuStores。
  * 同一 MSKU 重复出现且店铺不同 → 首次出现为准（first-wins），保证确定性、可重复导入幂等。
@@ -658,6 +674,20 @@ export function recordMskuAsin(existing: SkuMaster, mskuRaw: string | undefined,
   for (const t of tokens) {
     if (!existing.mskuAsins) existing.mskuAsins = {};
     if (!(t in existing.mskuAsins)) existing.mskuAsins[t] = asinVal; // first-wins
+  }
+}
+
+/**
+ * 把某行的 MSKU 对应的链接类型记录到父记录的 mskuLinkTypes。
+ * first-wins：同一 MSKU 重复出现时首次链接类型为准。
+ * ASIN 显示逻辑据此判断：仅 follow（跟卖）才回退父级 ASIN，非跟卖必须有独立 ASIN。
+ */
+export function recordMskuLinkType(existing: SkuMaster, mskuRaw: string | undefined, linkType: "main" | "follow" | "backup" | undefined): void {
+  if (!mskuRaw || !linkType) return;
+  const tokens = mskuRaw.split(/[,\s，、·]+/).map((t) => t.trim()).filter(Boolean);
+  for (const t of tokens) {
+    if (!existing.mskuLinkTypes) existing.mskuLinkTypes = {};
+    if (!(t in existing.mskuLinkTypes)) existing.mskuLinkTypes[t] = linkType; // first-wins
   }
 }
 

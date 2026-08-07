@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import ReactGridLayout, { type Layout } from "react-grid-layout";
 import {
   SKU_LABELS,
@@ -50,6 +50,19 @@ export default function SkuLayoutCustomizer({
   onReset,
 }: SkuLayoutCustomizerProps) {
   const [tab, setTab] = useState<"layout" | "coreKpi" | "coverageKpi" | "qualityKpi">("layout");
+
+  // 响应式宽度：测量容器实际宽度，避免硬编码导致预览与实际页面比例不一致
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(800);
+  useEffect(() => {
+    const el = gridContainerRef.current;
+    if (!el) return;
+    const update = () => setContainerWidth(el.clientWidth - 24);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [tab]);
 
   // 构建 react-grid-layout 的 layout 数组（仅包含可见区块）
   const rglLayout: Layout[] = useMemo(() => {
@@ -171,18 +184,17 @@ export default function SkuLayoutCustomizer({
 
           {/* 拖拽布局编辑器 */}
           {visibleKeys.length > 0 ? (
-            <div className="rounded-xl border border-background-200 bg-background-100/50 p-3">
+            <div ref={gridContainerRef} className="rounded-xl border border-background-200 bg-background-100/50 p-3">
               <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-foreground-400">
                 <i className="ri-drag-move-2-line" aria-hidden />
                 拖拽区块调整位置，拖拽右下角调整大小
               </div>
-              <div className="overflow-x-auto">
-                <ReactGridLayout
+              <ReactGridLayout
                   className="layout"
                   layout={rglLayout}
                   cols={12}
                   rowHeight={40}
-                  width={680}
+                  width={containerWidth}
                   margin={[8, 8]}
                   containerPadding={[0, 0]}
                   onLayoutChange={handleLayoutChange}
@@ -205,7 +217,6 @@ export default function SkuLayoutCustomizer({
                     </div>
                   ))}
                 </ReactGridLayout>
-              </div>
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-background-300 bg-background-50 p-8 text-center text-[13px] text-foreground-400">
