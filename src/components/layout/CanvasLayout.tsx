@@ -28,13 +28,31 @@ const CanvasItemContext = createContext<CanvasItemContextValue>({ customizing: f
  * </CanvasLayout>
  *
  * 注意：key 必须直接设在 <CanvasItem> 上，且与 layout 中的 i 值一致。
- * CanvasItem 不再添加额外的 DOM 层——它直接渲染 children，
- * GridLayout 会将它作为直接子元素处理。
+ *
+ * ReactGridLayout v2 的 GridItem 通过 React.cloneElement 向子元素注入
+ * className（含 "react-grid-item"）和 style（含 transform 定位），
+ * CanvasItem 必须接收并转发这些 props，否则所有卡片会堆叠在 0,0 位置。
  */
-export function CanvasItem({ itemKey, children }: { itemKey: string; children: React.ReactNode }) {
+export function CanvasItem({
+  itemKey,
+  children,
+  className: injectedClassName,
+  style: injectedStyle,
+}: {
+  itemKey: string;
+  children: React.ReactNode;
+  /** 由 GridItem 通过 cloneElement 注入，含 react-grid-item 等定位类 */
+  className?: string;
+  /** 由 GridItem 通过 cloneElement 注入，含 transform 定位样式 */
+  style?: React.CSSProperties;
+}) {
   const ctx = useContext(CanvasItemContext);
   return (
-    <div className="canvas-item-wrapper" data-item-key={itemKey}>
+    <div
+      className={`canvas-item-wrapper ${injectedClassName ?? ""}`}
+      style={injectedStyle}
+      data-item-key={itemKey}
+    >
       {ctx.customizing && (ctx.onHideItem || ctx.onResetItemSize || ctx.onResetItemPosition) && (
         <CardMenu
           itemKey={itemKey}
