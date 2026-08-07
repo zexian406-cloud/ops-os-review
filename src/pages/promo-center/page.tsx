@@ -80,7 +80,16 @@ export default function PromoCenterPage() {
   const rglLayout: Layout[] = useMemo(() => {
     return visibleKeys.map((key) => {
       const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 6 };
-      return { i: key, x: item.x, y: item.y, w: item.w, h: item.h, minW: 3, maxW: 12, minH: 2 };
+      return {
+        i: key,
+        x: Math.max(Math.min(item.x, 12), 0),
+        y: Math.max(item.y, 0),
+        w: Math.min(Math.max(item.w, 2), 12),
+        h: Math.max(item.h, 2),
+        minW: 2,
+        maxW: 12,
+        minH: 2,
+      };
     });
   }, [visibleKeys, gridLayout]);
   const handleLayoutChange = useCallback((layout: Layout[]) => {

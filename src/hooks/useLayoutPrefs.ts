@@ -143,6 +143,50 @@ export interface GridItemLayout {
   h: number;
 }
 
+/* ────────── 布局数据校验 ──────────
+ * 确保所有布局项满足: w >= 1, h >= 1, x >= 0, y >= 0
+ * 非法数据自动回退到默认值，防止卡片宽度为 0 导致挤压
+ */
+const MIN_W = 1;
+const MIN_H = 1;
+
+function normalizeLayoutItem(
+  item: Partial<GridItemLayout> | undefined,
+  fallback: GridItemLayout,
+): GridItemLayout {
+  const w = Number(item?.w);
+  const h = Number(item?.h);
+  const x = Number(item?.x);
+  const y = Number(item?.y);
+  return {
+    w: Number.isFinite(w) && w >= MIN_W ? Math.min(w, 12) : fallback.w,
+    h: Number.isFinite(h) && h >= MIN_H ? h : fallback.h,
+    x: Number.isFinite(x) && x >= 0 ? Math.min(x, 12) : fallback.x,
+    y: Number.isFinite(y) && y >= 0 ? y : fallback.y,
+  };
+}
+
+function normalizeGridLayout(
+  stored: Record<string, Partial<GridItemLayout>> | undefined,
+  defaults: Record<string, GridItemLayout>,
+): Record<string, GridItemLayout> {
+  if (!stored || typeof stored !== "object") return { ...defaults };
+  const result: Record<string, GridItemLayout> = {};
+  // Validate all stored items against defaults
+  for (const key of Object.keys(defaults)) {
+    const fallback = defaults[key];
+    const storedItem = stored[key];
+    result[key] = normalizeLayoutItem(storedItem, fallback);
+  }
+  // Also keep any extra keys that exist in stored but not in defaults
+  for (const key of Object.keys(stored)) {
+    if (!result[key]) {
+      result[key] = normalizeLayoutItem(stored[key], { x: 0, y: 0, w: 12, h: 6 });
+    }
+  }
+  return result;
+}
+
 export const SKU_LABELS: Record<SkuDetailSectionKey, string> = {
   header: "头部信息",
   discountBanner: "折扣横幅",
@@ -282,22 +326,31 @@ const DEFAULT_SKU_VISIBLE: SkuDetailSectionKey[] = [
   "relatedTodos",
 ];
 
-const STORAGE_KEY = "aos-layout-prefs-v5";
+const STORAGE_KEY = "aos-layout-prefs-v6";
 
 function loadPrefs(): LayoutPrefs {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<LayoutPrefs>;
+      // Validate all grid layout data — discard corrupted items, fall back to defaults
+      const dashboardGrid = normalizeGridLayout(
+        parsed.dashboard?.gridLayout as Record<string, Partial<GridItemLayout>> | undefined,
+        DEFAULT_DASHBOARD_GRID_LAYOUT,
+      );
+      const skuGrid = normalizeGridLayout(
+        parsed.skuDetail?.gridLayout as Record<string, Partial<GridItemLayout>> | undefined,
+        DEFAULT_SKU_GRID_LAYOUT,
+      );
       return {
         dashboard: {
           visible: parsed.dashboard?.visible ?? DEFAULT_DASHBOARD_VISIBLE,
           kpiSlots: parsed.dashboard?.kpiSlots ?? [...DEFAULT_KPI_SLOTS],
-          gridLayout: parsed.dashboard?.gridLayout ?? { ...DEFAULT_DASHBOARD_GRID_LAYOUT },
+          gridLayout: dashboardGrid,
         },
         skuDetail: {
           visible: parsed.skuDetail?.visible ?? DEFAULT_SKU_VISIBLE,
-          gridLayout: parsed.skuDetail?.gridLayout ?? { ...DEFAULT_SKU_GRID_LAYOUT },
+          gridLayout: skuGrid,
         },
         shipment: {
           kpiSlots: parsed.shipment?.kpiSlots ?? [...DEFAULT_SHIPMENT_KPI_SLOTS],
@@ -353,7 +406,9 @@ export function useDashboardLayout() {
     setPrefs((prev) => {
       const gridLayout = { ...prev.dashboard.gridLayout };
       for (const item of layout) {
-        gridLayout[item.i] = { x: item.x, y: item.y, w: item.w, h: item.h };
+        // Normalize: clamp w >= 1, h >= 1, x >= 0, y >= 0 before saving
+        const fallback = DEFAULT_DASHBOARD_GRID_LAYOUT[item.i as DashboardSectionKey] ?? { x: 0, y: 0, w: 12, h: 6 };
+        gridLayout[item.i] = normalizeLayoutItem(item, fallback);
       }
       const next = { ...prev, dashboard: { ...prev.dashboard, gridLayout } };
       savePrefs(next);
@@ -362,13 +417,15 @@ export function useDashboardLayout() {
   }, []);
 
   const reset = useCallback(() => {
+    // Completely overwrite — do not merge with existing (potentially corrupted) data
     const next: LayoutPrefs = {
-      ...prefs,
       dashboard: { visible: [...DEFAULT_DASHBOARD_VISIBLE], kpiSlots: [...DEFAULT_KPI_SLOTS], gridLayout: { ...DEFAULT_DASHBOARD_GRID_LAYOUT } },
+      skuDetail: { ...loadPrefs().skuDetail },
+      shipment: { ...loadPrefs().shipment },
     };
     savePrefs(next);
     setPrefs(next);
-  }, [prefs]);
+  }, []);
 
   const applyTemplate = useCallback((templateId: LayoutTemplateId) => {
     setPrefs((prev) => {
@@ -448,19 +505,23 @@ export function useSkuDetailLayout() {
   }, []);
 
   const reset = useCallback(() => {
+    // Completely overwrite — do not merge with existing (potentially corrupted) data
     const next: LayoutPrefs = {
-      ...prefs,
+      dashboard: { ...loadPrefs().dashboard },
       skuDetail: { visible: [...DEFAULT_SKU_VISIBLE], gridLayout: { ...DEFAULT_SKU_GRID_LAYOUT } },
+      shipment: { ...loadPrefs().shipment },
     };
     savePrefs(next);
     setPrefs(next);
-  }, [prefs]);
+  }, []);
 
   const setGridLayout = useCallback((layout: { i: string; x: number; y: number; w: number; h: number }[]) => {
     setPrefs((prev) => {
       const gridLayout = { ...prev.skuDetail.gridLayout };
       for (const item of layout) {
-        gridLayout[item.i] = { x: item.x, y: item.y, w: item.w, h: item.h };
+        // Normalize: clamp w >= 1, h >= 1, x >= 0, y >= 0 before saving
+        const fallback = DEFAULT_SKU_GRID_LAYOUT[item.i as SkuDetailSectionKey] ?? { x: 0, y: 0, w: 12, h: 6 };
+        gridLayout[item.i] = normalizeLayoutItem(item, fallback);
       }
       const next = { ...prev, skuDetail: { ...prev.skuDetail, gridLayout } };
       savePrefs(next);

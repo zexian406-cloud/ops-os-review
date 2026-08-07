@@ -201,13 +201,14 @@ export default function SkuDetail() {
   const rglLayout: Layout[] = useMemo(() => {
     return visibleKeys.map((key) => {
       const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 4 };
+      // Clamp all values to prevent 0-width/height cards from corrupting the layout
       return {
         i: key,
-        x: item.x,
-        y: item.y,
-        w: item.w,
-        h: item.h,
-        minW: 3,
+        x: Math.max(Math.min(item.x, 12), 0),
+        y: Math.max(item.y, 0),
+        w: Math.min(Math.max(item.w, 2), 12),
+        h: Math.max(item.h, 2),
+        minW: 2,
         maxW: 12,
         minH: 2,
       };

@@ -25,6 +25,43 @@ export interface GridItemLayout {
   h: number;
 }
 
+/* ────────── 布局数据校验 ──────────
+ * 确保所有布局项满足: w >= 1, h >= 1, x >= 0, y >= 0
+ * 非法数据自动回退到默认值，防止卡片宽度为 0 导致挤压
+ */
+function normalizeLayoutItem(
+  item: Partial<GridItemLayout> | undefined,
+  fallback: GridItemLayout,
+): GridItemLayout {
+  const w = Number(item?.w);
+  const h = Number(item?.h);
+  const x = Number(item?.x);
+  const y = Number(item?.y);
+  return {
+    w: Number.isFinite(w) && w >= 1 ? Math.min(w, 12) : fallback.w,
+    h: Number.isFinite(h) && h >= 1 ? h : fallback.h,
+    x: Number.isFinite(x) && x >= 0 ? Math.min(x, 12) : fallback.x,
+    y: Number.isFinite(y) && y >= 0 ? y : fallback.y,
+  };
+}
+
+function normalizeGridLayout(
+  stored: Record<string, Partial<GridItemLayout>> | undefined,
+  defaults: Record<string, GridItemLayout>,
+): Record<string, GridItemLayout> {
+  if (!stored || typeof stored !== "object") return { ...defaults };
+  const result: Record<string, GridItemLayout> = {};
+  for (const key of Object.keys(defaults)) {
+    result[key] = normalizeLayoutItem(stored[key], defaults[key]);
+  }
+  for (const key of Object.keys(stored)) {
+    if (!result[key]) {
+      result[key] = normalizeLayoutItem(stored[key], { x: 0, y: 0, w: 12, h: 6 });
+    }
+  }
+  return result;
+}
+
 interface PageLayout {
   visible: string[];
   gridLayout: Record<string, GridItemLayout>;
@@ -34,7 +71,7 @@ interface LayoutStore {
   pages: Record<PageId, PageLayout>;
 }
 
-const STORAGE_KEY = "aos-page-layout-v4";
+const STORAGE_KEY = "aos-page-layout-v5";
 
 /* ────────── 各页面默认区块 ────────── */
 export const DEFAULT_SECTIONS: Record<PageId, string[]> = {
@@ -207,7 +244,11 @@ function getPageLayout(pageId: PageId): PageLayout {
   // 合并新增区块（新功能上线后默认显示）
   const allKeys = new Set([...defaults, ...Object.keys(existing.gridLayout || {})]);
   const visible = Array.from(allKeys).filter((k) => existing.visible.includes(k));
-  const gridLayout = { ...defaultGrid, ...(existing.gridLayout || {}) };
+  // Validate all grid layout data — discard corrupted items, fall back to defaults
+  const gridLayout = normalizeGridLayout(
+    existing.gridLayout as Record<string, Partial<GridItemLayout>> | undefined,
+    defaultGrid,
+  );
   return { visible, gridLayout };
 }
 
@@ -235,9 +276,12 @@ export function usePageLayout(pageId: PageId) {
 
   const setGridLayout = useCallback((layout: { i: string; x: number; y: number; w: number; h: number }[]) => {
     setPrefs((prev) => {
+      const defaultGrid = getDefaultGridLayout(pageId);
       const gridLayout = { ...prev.gridLayout };
       for (const item of layout) {
-        gridLayout[item.i] = { x: item.x, y: item.y, w: item.w, h: item.h };
+        // Normalize: clamp w >= 1, h >= 1, x >= 0, y >= 0 before saving
+        const fallback = defaultGrid[item.i] ?? { x: 0, y: 0, w: 12, h: 6 };
+        gridLayout[item.i] = normalizeLayoutItem(item, fallback);
       }
       const next = { ...prev, gridLayout };
       setPageLayout(pageId, next);
@@ -246,6 +290,7 @@ export function usePageLayout(pageId: PageId) {
   }, [pageId]);
 
   const reset = useCallback(() => {
+    // Completely overwrite — do not merge with existing (potentially corrupted) data
     const defaults = DEFAULT_SECTIONS[pageId] ?? [];
     const next: PageLayout = { visible: [...defaults], gridLayout: getDefaultGridLayout(pageId) };
     setPageLayout(pageId, next);

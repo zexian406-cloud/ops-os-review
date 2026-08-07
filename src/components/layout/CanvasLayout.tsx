@@ -38,6 +38,10 @@ export default function CanvasLayout({
 }: CanvasLayoutProps) {
   const { width, containerRef, mounted } = useContainerWidth();
 
+  // Safety: never render GridLayout with width=0 — causes all cards to collapse
+  const safeWidth = width > 0 ? width : 0;
+  const canRender = mounted && safeWidth > 0;
+
   // ── 为每个子元素包裹下拉菜单 ──
   const wrappedChildren = React.Children.map(children, (child) => {
     if (!React.isValidElement(child)) return child;
@@ -59,11 +63,11 @@ export default function CanvasLayout({
 
   return (
     <div ref={containerRef} className="canvas-layout-wrapper">
-      {mounted && (
+      {canRender && (
         <GridLayout
           className={`canvas-layout ${customizing ? "canvas-layout-editing" : "canvas-layout-viewing"}`}
           layout={layout}
-          width={width}
+          width={safeWidth}
           cols={12}
           rowHeight={40}
           margin={[12, 12]}
