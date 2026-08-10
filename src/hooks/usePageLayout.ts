@@ -71,7 +71,7 @@ interface LayoutStore {
   pages: Record<PageId, PageLayout>;
 }
 
-const STORAGE_KEY = "aos-page-layout-v7";
+const STORAGE_KEY = "aos-page-layout-v8";
 
 /* ────────── 各页面默认区块 ────────── */
 export const DEFAULT_SECTIONS: Record<PageId, string[]> = {

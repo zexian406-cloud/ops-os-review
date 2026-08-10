@@ -95,7 +95,7 @@ interface CanvasLayoutProps {
  * 子元素直接传递给 GridLayout，不做额外包装（包装会改变 key 导致匹配失败）。
  * 页面应使用 <CanvasItem key={key} itemKey={key}> 包装每个区块。
  */
-const FREE_FORM_COMPACTOR = getCompactor(null, false, true);
+const FREE_FORM_COMPACTOR = getCompactor(null, false, false);
 
 export default function CanvasLayout({
   layout,

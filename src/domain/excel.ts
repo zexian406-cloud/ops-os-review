@@ -82,9 +82,9 @@ export interface ImportResult {
  * 列名全部走 matchColumn 模糊匹配（规则 H）：领星 / Amazon 后台导出的列名
  * 可能是 FOB / 采购价 / 产品成本 / 含税成本 等，不再写死精确列名。
  */
-export function parseOperationExcel(buffer: ArrayBuffer): ImportResult {
+export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): ImportResult {
   const wb = XLSX.read(buffer, { type: "array" });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = customDate || new Date().toISOString().slice(0, 10);
 
   // 字段识别结果汇总（逻辑字段 → 实际表头）
   const columnMap: Record<string, string> = {};

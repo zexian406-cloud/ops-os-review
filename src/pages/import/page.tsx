@@ -166,6 +166,12 @@ export default function ImportPage() {
   const [importMsg, setImportMsg] = useState<{ tone: "ok" | "err"; msg: string } | null>(null);
   const [importCounts, setImportCounts] = useState<Record<string, number>>({});
 
+  /* 导入日期范围（用户可指定数据对应的日期，默认今天） */
+  const todayStr = () => new Date().toISOString().slice(0, 10);
+  const [importDateStart, setImportDateStart] = useState(todayStr);
+  const [importDateEnd, setImportDateEnd] = useState(todayStr);
+  const importDateLabel = importDateStart === importDateEnd ? importDateStart : `${importDateStart} ~ ${importDateEnd}`;
+
   /* 导入模式选择 */
   const [modeModal, setModeModal] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -243,7 +249,7 @@ export default function ImportPage() {
     setParsing(true);
     try {
       const buf = await file.arrayBuffer();
-      const parsed = parseOperationExcel(buf);
+      const parsed = parseOperationExcel(buf, importDateStart);
 
       // 字段识别结果先展示（即使被阻断也展示，供用户确认规则 H 的匹配情况）
       setResult(parsed);
@@ -426,7 +432,7 @@ export default function ImportPage() {
     setImporting("sales");
     try {
       const rows = await parseExcelFile(file);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = importDateStart;
       // 合并原运营数据导入字段：msku/asin/store/name/productUrl/competitorUrls
       const cm = buildColumnMap(
         ["sku", "msku", "asin", "store", "name", "sales7d", "sales30d", "rating", "reviewCount", "adRatio", "returnRate", "refundRate", "productUrl", "competitorUrls"],
@@ -568,7 +574,7 @@ export default function ImportPage() {
       if (skuCreated > 0) parts.push(`新建SKU ${skuCreated} 个`);
       if (skuUpdated > 0) parts.push(`更新SKU ${skuUpdated} 个`);
       parts.push(`快照 ${snapshots.length} 条`);
-      setImportMsg({ tone: "ok", msg: `导入成功 · ${parts.join(" · ")}（${today}）` });
+      setImportMsg({ tone: "ok", msg: `导入成功 · ${parts.join(" · ")}（${importDateLabel}）` });
       setImportCounts((prev) => ({ ...prev, snapshots: (prev.snapshots ?? 0) + snapshots.length }));
     } catch (err) {
       setImportMsg({ tone: "err", msg: err instanceof Error ? err.message : String(err) });
@@ -583,7 +589,7 @@ export default function ImportPage() {
     setImporting("fba");
     try {
       const rows = await parseExcelFile(file);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = importDateStart;
       const cm = buildColumnMap(["sku", "fbaStock"], headersOf(rows));
       if (!cm.sku) {
         setImportMsg({ tone: "err", msg: "未识别到 SKU 列，已阻断导入。请检查表头（SKU / 产品SKU / SKU码 均可识别）。" });
@@ -607,7 +613,7 @@ export default function ImportPage() {
         });
       }
       await upsertInventoryLayers(layers);
-      setImportMsg({ tone: "ok", msg: `导入成功 · ${layers.length} 条 FBA 库存明细（${today}）` });
+      setImportMsg({ tone: "ok", msg: `导入成功 · ${layers.length} 条 FBA 库存明细（${importDateLabel}）` });
       setImportCounts((prev) => ({ ...prev, inventory: (prev.inventory ?? 0) + layers.length }));
     } catch (err) {
       setImportMsg({ tone: "err", msg: err instanceof Error ? err.message : String(err) });
@@ -621,7 +627,7 @@ export default function ImportPage() {
     setImporting("warehouse");
     try {
       const rows = await parseExcelFile(file);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = importDateStart;
       const cm = buildColumnMap(["sku", "warehouse", "qty"], headersOf(rows));
       if (!cm.sku) {
         setImportMsg({ tone: "err", msg: "未识别到 SKU 列，已阻断导入。请检查表头（SKU / 产品SKU / SKU码 均可识别）。" });
@@ -695,7 +701,7 @@ export default function ImportPage() {
       const unmappedMsg = unmapped.size > 0
         ? `（${unmapped.size} 个仓库未识别区域，请在「仓库映射」标签页配置）`
         : "";
-      setImportMsg({ tone: "ok", msg: `导入成功 · ${layers.length} 个 SKU 的仓库明细（${today}）${unmappedMsg}` });
+      setImportMsg({ tone: "ok", msg: `导入成功 · ${layers.length} 个 SKU 的仓库明细（${importDateLabel}）${unmappedMsg}` });
       setImportCounts((prev) => ({ ...prev, inventory: (prev.inventory ?? 0) + layers.length }));
     } catch (err) {
       setImportMsg({ tone: "err", msg: err instanceof Error ? err.message : String(err) });
@@ -709,7 +715,7 @@ export default function ImportPage() {
     setImporting("transit_detail");
     try {
       const rows = await parseExcelFile(file);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = importDateStart;
       const cm = buildColumnMap(["sku", "provider", "dest", "etaDate", "shipDate", "qty", "statusText"], headersOf(rows));
       if (!cm.sku) {
         setImportMsg({ tone: "err", msg: "未识别到 SKU 列，已阻断导入。请检查表头（SKU / 产品SKU / SKU码 均可识别）。" });
@@ -754,7 +760,7 @@ export default function ImportPage() {
       }
       await upsertInventoryLayers(layers);
       const totalBatches = [...skuBatches.values()].reduce((s, b) => s + b.length, 0);
-      setImportMsg({ tone: "ok", msg: `导入成功 · ${skuBatches.size} 个 SKU · ${totalBatches} 条在途批次（${today}）` });
+      setImportMsg({ tone: "ok", msg: `导入成功 · ${skuBatches.size} 个 SKU · ${totalBatches} 条在途批次（${importDateLabel}）` });
     } catch (err) {
       setImportMsg({ tone: "err", msg: err instanceof Error ? err.message : String(err) });
     } finally {
@@ -767,7 +773,7 @@ export default function ImportPage() {
     setImporting("factory");
     try {
       const rows = await parseExcelFile(file);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = importDateStart;
       const cm = buildColumnMap(["sku", "factoryName", "qty", "totalQty", "deliveryDate", "factoryStatus"], headersOf(rows));
       if (!cm.sku) {
         setImportMsg({ tone: "err", msg: "未识别到 SKU 列，已阻断导入。请检查表头（SKU / 产品SKU / SKU码 均可识别）。" });
@@ -808,7 +814,7 @@ export default function ImportPage() {
       }
       await upsertInventoryLayers(layers);
       const totalBatches = [...skuBatches.values()].reduce((s, b) => s + b.length, 0);
-      setImportMsg({ tone: "ok", msg: `导入成功 · ${skuBatches.size} 个 SKU · ${totalBatches} 条工厂批次（${today}）` });
+      setImportMsg({ tone: "ok", msg: `导入成功 · ${skuBatches.size} 个 SKU · ${totalBatches} 条工厂批次（${importDateLabel}）` });
     } catch (err) {
       setImportMsg({ tone: "err", msg: err instanceof Error ? err.message : String(err) });
     } finally {
@@ -1167,6 +1173,37 @@ export default function ImportPage() {
         </span>
       </div>
 
+      {/* ── 数据日期选择器 ── */}
+      <div className="flex flex-wrap items-center gap-3 rounded-[14px] border border-background-200/70 bg-background-100/50 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <i className="ri-calendar-range-line text-[16px] text-foreground-500" aria-hidden />
+          <span className="text-[13px] font-medium text-foreground-700">数据日期：</span>
+        </div>
+        <input
+          type="date"
+          value={importDateStart}
+          onChange={(e) => setImportDateStart(e.target.value)}
+          className="rounded-md border border-background-300/70 bg-background-50 px-3 py-1.5 text-[13px] text-foreground-700 focus:border-primary-500 focus:outline-none cursor-pointer"
+        />
+        <span className="text-[11px] text-foreground-400">至</span>
+        <input
+          type="date"
+          value={importDateEnd}
+          onChange={(e) => setImportDateEnd(e.target.value)}
+          className="rounded-md border border-background-300/70 bg-background-50 px-3 py-1.5 text-[13px] text-foreground-700 focus:border-primary-500 focus:outline-none cursor-pointer"
+        />
+        <button
+          type="button"
+          onClick={() => { setImportDateStart(todayStr()); setImportDateEnd(todayStr()); }}
+          className="rounded-md border border-background-300/70 bg-background-50 px-2.5 py-1 text-[11px] font-medium text-foreground-500 hover:bg-background-100 hover:text-foreground-800 cursor-pointer whitespace-nowrap"
+        >
+          重置为今天
+        </button>
+        <span className="text-[11px] text-foreground-400">
+          快照和库存记录将标记为起始日期，方便按时间追溯历史数据。
+        </span>
+      </div>
+
       {/* ── Tab 切换器 ── */}
       <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-background-300/70 bg-background-100/70 px-1 py-1">
         {tabDefs.map((t) => (
@@ -1380,7 +1417,7 @@ export default function ImportPage() {
                 </div>
                 {!error && (
                   <div className="rounded-lg border border-accent-200 bg-accent-100/60 px-4 py-3 text-[13px] text-accent-900">
-                    <div className="font-semibold">✓ 导入成功（{result.today}）</div>
+                    <div className="font-semibold">✓ 导入成功（{importDateLabel}）</div>
                     <div className="mt-1 text-[12px]">
                       SKU {result.skuMaster.length} 个 · 快照 {result.dailySnapshot.length} 条 · 分仓 {result.inventoryLayer.length} 条
                       {result.transitBatches.size > 0 && ` · 在途批次 ${[...result.transitBatches.values()].reduce((s, b) => s + b.length, 0)} 条`}
