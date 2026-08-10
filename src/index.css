@@ -467,38 +467,20 @@ h1, h2, h3, h4, h5, h6 {
   display: none;
 }
 
-/* ── 拖拽手柄 ── */
-.canvas-drag-handle {
-  position: absolute;
-  top: 6px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 18px;
-  border-radius: 6px;
-  background: oklch(var(--background-100) / 0.7);
-  color: oklch(var(--foreground-400));
-  font-size: 13px;
-  opacity: 0;
-  transition: opacity 0.2s, background 0.2s;
-  pointer-events: none;
+/* ── 画布布局容器 ── */
+.canvas-layout-wrapper {
+  min-height: 100%;
+  overflow: visible;
+  position: relative;
+}
+/* 自定义模式下显示拖拽光标 */
+.canvas-layout-editing .react-grid-item {
   cursor: grab;
 }
-.canvas-item-wrapper:hover .canvas-drag-handle {
-  opacity: 0.8;
-  background: oklch(var(--background-200) / 0.8);
-}
-.canvas-drag-handle:active {
+.canvas-layout-editing .react-grid-item.react-draggable-dragging {
   cursor: grabbing;
 }
-/* 拖拽时显示移动光标 */
-.canvas-layout .react-grid-item {
-  cursor: grab;
-}
-.canvas-layout .react-grid-item.react-draggable-dragging {
-  cursor: grabbing;
+/* 浏览模式下禁用拖拽光标 */
+.canvas-layout-viewing .react-grid-item {
+  cursor: default;
 }

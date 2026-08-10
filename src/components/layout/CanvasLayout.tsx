@@ -53,10 +53,6 @@ export function CanvasItem({
       style={injectedStyle}
       data-item-key={itemKey}
     >
-      {/* 拖拽手柄提示 — hover 时显示，引导用户拖动卡片 */}
-      <div className="canvas-drag-handle no-drag" aria-hidden>
-        <i className="ri-drag-move-2-line" />
-      </div>
       {ctx.customizing && (ctx.onHideItem || ctx.onResetItemSize || ctx.onResetItemPosition) && (
         <CardMenu
           itemKey={itemKey}
@@ -89,7 +85,9 @@ interface CanvasLayoutProps {
  * v2 关键：
  * - gridConfig / dragConfig / resizeConfig 替代 v1 的 cols/rowHeight/isDraggable
  * - compactor 替代 compactType + preventCollision
- * - getCompactor(null, false, true) = 无压缩 + 禁止重叠
+ * - getCompactor(null, false, true) = 无压缩 + 禁止重叠 + 阻止碰撞
+ *   preventCollision: true → 拖拽时碰到其他卡片会被阻止（弹回），
+ *   不会推挤其他卡片，也不会产生重叠
  *
  * 防覆盖机制：
  * - GridLayout 的 onLayoutChange 在挂载时也会触发，会覆盖正确的默认布局
@@ -99,7 +97,7 @@ interface CanvasLayoutProps {
  * 子元素直接传递给 GridLayout，不做额外包装（包装会改变 key 导致匹配失败）。
  * 页面应使用 <CanvasItem key={key} itemKey={key}> 包装每个区块。
  */
-const FREE_FORM_COMPACTOR = getCompactor(null, false, false);
+const FREE_FORM_COMPACTOR = getCompactor(null, false, true);
 
 export default function CanvasLayout({
   layout,
@@ -166,9 +164,10 @@ export default function CanvasLayout({
             layout={internalLayout}
             width={safeWidth}
             gridConfig={{ cols: 12, rowHeight: 40, margin: [12, 12], containerPadding: [0, 0] }}
-            dragConfig={{ enabled: true, cancel: 'input, textarea, select, button, a, .no-drag, [role="button"], .ri-' }}
+            dragConfig={{ enabled: customizing, cancel: 'input, textarea, select, button, a, .no-drag, [role="button"], .ri-' }}
             resizeConfig={{ enabled: customizing }}
             compactor={FREE_FORM_COMPACTOR}
+            autoSize={true}
             onLayoutChange={handleLayoutChange}
             onDragStop={handleDragStop}
             onResizeStop={handleResizeStop}
