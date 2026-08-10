@@ -203,6 +203,15 @@ export default function ImportPage() {
     return [fmtDate(mon), fmtDate(sun)];
   };
 
+  /* 上上周：上上周一 ~ 上上周日 */
+  const lastLastWeekRange = (): [string, string] => {
+    const mon = getMonday(new Date());
+    mon.setDate(mon.getDate() - 14);
+    const sun = new Date(mon);
+    sun.setDate(sun.getDate() + 6);
+    return [fmtDate(mon), fmtDate(sun)];
+  };
+
   const [importDateStart, setImportDateStart] = useState(todayStr);
   const [importDateEnd, setImportDateEnd] = useState(todayStr);
   const importDateLabel = importDateStart === importDateEnd ? importDateStart : `${importDateStart} ~ ${importDateEnd}`;
@@ -1290,6 +1299,17 @@ export default function ImportPage() {
             >
               上周
             </button>
+            <button
+              type="button"
+              onClick={() => { const [s, e] = lastLastWeekRange(); setImportDateStart(s); setImportDateEnd(e); }}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer whitespace-nowrap transition-colors ${
+                importDateStart === lastLastWeekRange()[0]
+                  ? "bg-secondary-500 text-white"
+                  : "border border-background-300/70 bg-background-50 text-foreground-500 hover:bg-background-100 hover:text-foreground-800"
+              }`}
+            >
+              上上周
+            </button>
           </div>
         </div>
         {/* 日期冲突警告 */}
@@ -1298,13 +1318,13 @@ export default function ImportPage() {
             <i className="ri-error-warning-line mt-0.5 text-[14px] text-secondary-700" aria-hidden />
             <div className="flex-1 text-[12px]">
               <span className="font-semibold text-secondary-800">该日期已有 {conflictCount} 条快照数据。</span>
-              <span className="text-secondary-600"> 继续导入将与现有数据合并（新值覆盖旧值）。如需导入上周数据，请点击「上周」按钮选择上周日期，避免覆盖本周数据。</span>
+              <span className="text-secondary-600"> 继续导入将与现有数据合并（新值覆盖旧值）。如需导入其他周数据，请点击「上周」或「上上周」按钮选择对应日期，避免覆盖本周数据。</span>
             </div>
           </div>
         ) : (
           <div className="mt-2 flex items-center gap-1.5 text-[11px] text-foreground-400">
             <i className="ri-information-line" aria-hidden />
-            <span>快照和库存记录将标记为起始日期。<strong className="text-foreground-600">导入上周数据时请选择上周的日期</strong>，否则会与本周数据合并覆盖。</span>
+            <span>快照和库存记录将标记为起始日期。<strong className="text-foreground-600">数据按日期独立保存，不同日期不会互相覆盖</strong>，Dashboard 自动生成环比对比。</span>
           </div>
         )}
       </div>
@@ -1402,7 +1422,7 @@ export default function ImportPage() {
             </div>
             <ul className="mt-2 space-y-1.5 pl-5 text-[12px]">
               <li><strong>周一上午：</strong>依次导入「周销量」「FBA 库存明细」「仓库明细」「在途明细」（各点一次上传即可）</li>
-              <li><strong>数据日期选择：</strong>导入本周数据点「本周」按钮，补导上周数据点「上周」按钮——日期不同则数据独立保存、不会覆盖，Dashboard 自动生成环比对比</li>
+              <li><strong>数据日期选择：</strong>导入本周数据点「本周」，补导上周点「上周」，补导上上周点「上上周」——日期不同则数据独立保存、不会覆盖，Dashboard 自动生成环比对比</li>
               <li><strong>周销量模板已含 MSKU 级指标：</strong>同一 SKU 的不同 MSKU 各占一行，填写各自的评分/广告费比/退货率/退款率，系统自动按 MSKU 独立存储，不再串用</li>
               <li><strong>每月初或头程变动时：</strong>导入「头程更新」；FOB 变动请在「SKU 标识符」表里更新</li>
               <li><strong>产品链接/竞品链接：</strong>在「SKU 标识符」或「周销量」表中填写，竞品链接多个用换行分隔，导入后 SKU 详情页可点击跳转</li>
@@ -1792,7 +1812,7 @@ export default function ImportPage() {
                 <i className="ri-error-warning-line mt-0.5 text-[14px] text-secondary-700" aria-hidden />
                 <div className="flex-1 text-[12px] text-secondary-700">
                   <span className="font-semibold">警告：该日期已有 {conflictCount} 条数据。</span>
-                  继续导入将合并覆盖。如要导入上周数据，请先关闭此弹窗，点击「上周」按钮选择正确日期。
+                  继续导入将合并覆盖。如要导入其他周数据，请先关闭此弹窗，点击「上周」或「上上周」按钮选择正确日期。
                 </div>
               </div>
             )}
