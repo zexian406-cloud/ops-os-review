@@ -15,7 +15,10 @@ export type DashboardSectionKey =
 export type SkuDetailSectionKey =
   | "header"
   | "discountBanner"
-  | "kpiCards"
+  | "kpiCore"
+  | "kpiCoverage"
+  | "kpiQuality"
+  | "kpiOrderRatio"
   | "editData"
   | "profitAnalysis"
   | "costWaterfall"
@@ -190,7 +193,10 @@ function normalizeGridLayout(
 export const SKU_LABELS: Record<SkuDetailSectionKey, string> = {
   header: "头部信息",
   discountBanner: "折扣横幅",
-  kpiCards: "KPI 卡片",
+  kpiCore: "核心 KPI",
+  kpiCoverage: "覆盖 KPI",
+  kpiQuality: "质量 KPI",
+  kpiOrderRatio: "订单占比",
   editData: "数据编辑",
   profitAnalysis: "利润分析",
   costWaterfall: "成本瀑布图",
@@ -207,19 +213,22 @@ export const SKU_LABELS: Record<SkuDetailSectionKey, string> = {
  *  h 值基于 rowHeight=40px + margin=12px，内容溢出可滚动，用户可拖拽调整
  *  默认布局混合全宽 + 左右并排，避免纯竖版 */
 const DEFAULT_SKU_GRID_LAYOUT: Record<SkuDetailSectionKey, GridItemLayout> = {
-  header:         { x: 0, y: 0,  w: 12, h: 4 },
-  discountBanner: { x: 0, y: 4,  w: 12, h: 2 },
-  kpiCards:       { x: 0, y: 6,  w: 12, h: 10 },
-  editData:       { x: 0, y: 16, w: 6,  h: 8 },
-  profitAnalysis: { x: 6, y: 16, w: 6,  h: 8 },
-  costWaterfall:  { x: 0, y: 24, w: 6,  h: 10 },
-  promoShipment:  { x: 6, y: 24, w: 6,  h: 10 },
-  mixedReplenish: { x: 0, y: 34, w: 6,  h: 8 },
-  inventory:      { x: 6, y: 34, w: 6,  h: 8 },
-  listing:        { x: 0, y: 42, w: 12, h: 20 },
-  weekOverWeek:   { x: 0, y: 62, w: 6,  h: 4 },
-  historyCharts:  { x: 6, y: 62, w: 6,  h: 8 },
-  relatedTodos:   { x: 0, y: 70, w: 12, h: 6 },
+  header:          { x: 0, y: 0,  w: 12, h: 4 },
+  discountBanner:  { x: 0, y: 4,  w: 12, h: 2 },
+  kpiCore:         { x: 0, y: 6,  w: 12, h: 3 },
+  kpiCoverage:     { x: 0, y: 9,  w: 12, h: 3 },
+  kpiQuality:      { x: 0, y: 12, w: 12, h: 3 },
+  kpiOrderRatio:   { x: 0, y: 15, w: 12, h: 4 },
+  editData:        { x: 0, y: 19, w: 6,  h: 8 },
+  profitAnalysis:  { x: 6, y: 19, w: 6,  h: 8 },
+  costWaterfall:   { x: 0, y: 27, w: 6,  h: 10 },
+  promoShipment:   { x: 6, y: 27, w: 6,  h: 10 },
+  mixedReplenish:  { x: 0, y: 37, w: 6,  h: 8 },
+  inventory:       { x: 6, y: 37, w: 6,  h: 8 },
+  listing:         { x: 0, y: 45, w: 12, h: 20 },
+  weekOverWeek:    { x: 0, y: 65, w: 6,  h: 4 },
+  historyCharts:   { x: 6, y: 65, w: 6,  h: 8 },
+  relatedTodos:    { x: 0, y: 73, w: 12, h: 6 },
 };
 
 /* ────────── Dashboard 默认画布布局 ──────────
@@ -268,7 +277,10 @@ const DEFAULT_DASHBOARD_VISIBLE: DashboardSectionKey[] = [
 const DEFAULT_SKU_VISIBLE: SkuDetailSectionKey[] = [
   "header",
   "discountBanner",
-  "kpiCards",
+  "kpiCore",
+  "kpiCoverage",
+  "kpiQuality",
+  "kpiOrderRatio",
   "editData",
   "profitAnalysis",
   "costWaterfall",
@@ -281,7 +293,7 @@ const DEFAULT_SKU_VISIBLE: SkuDetailSectionKey[] = [
   "relatedTodos",
 ];
 
-const STORAGE_KEY = "aos-layout-prefs-v10";
+const STORAGE_KEY = "aos-layout-prefs-v11";
 
 function loadPrefs(): LayoutPrefs {
   try {

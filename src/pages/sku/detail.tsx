@@ -649,11 +649,9 @@ export default function SkuDetail() {
             </CanvasItem>
           )}
 
-      {/* ═══════ 3. KPI 卡片（全部合并） ═══════ */}
-      {latest && visibleKeys.includes("kpiCards") && (
-      <CanvasItem key="kpiCards" itemKey="kpiCards">
-      <div className="space-y-2">
-        {/* ── 核心 KPI ── */}
+      {/* ═══════ 3a. 核心 KPI ═══════ */}
+      {latest && visibleKeys.includes("kpiCore") && (
+      <CanvasItem key="kpiCore" itemKey="kpiCore">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {CORE_KPI_ORDER.map((key) => {
               switch (key) {
@@ -677,8 +675,12 @@ export default function SkuDetail() {
               }
             })}
         </div>
+      </CanvasItem>
+      )}
 
-        {/* ── 覆盖 KPI ── */}
+      {/* ═══════ 3b. 覆盖 KPI ═══════ */}
+      {latest && visibleKeys.includes("kpiCoverage") && (
+      <CanvasItem key="kpiCoverage" itemKey="kpiCoverage">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {COVERAGE_KPI_ORDER.map((key) => {
               switch (key) {
@@ -693,8 +695,12 @@ export default function SkuDetail() {
               }
             })}
         </div>
+      </CanvasItem>
+      )}
 
-        {/* ── 质量 KPI ── */}
+      {/* ═══════ 3c. 质量 KPI ═══════ */}
+      {latest && visibleKeys.includes("kpiQuality") && (
+      <CanvasItem key="kpiQuality" itemKey="kpiQuality">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
             {QUALITY_KPI_ORDER.map((key) => {
               switch (key) {
@@ -714,8 +720,12 @@ export default function SkuDetail() {
               }
             })}
         </div>
+      </CanvasItem>
+      )}
 
-        {/* ── 自然订单 / 广告订单占比 ── */}
+      {/* ═══════ 3d. 订单占比 ═══════ */}
+      {latest && visibleKeys.includes("kpiOrderRatio") && (
+      <CanvasItem key="kpiOrderRatio" itemKey="kpiOrderRatio">
         {(() => {
             const ad = latest.adRatio;
             const organic = Math.max(0, Math.min(100, 100 - ad));
@@ -766,7 +776,6 @@ export default function SkuDetail() {
               </div>
             );
           })()}
-        </div>
       </CanvasItem>
       )}
 
