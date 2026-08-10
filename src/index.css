@@ -479,7 +479,10 @@ h1, h2, h3, h4, h5, h6 {
 .canvas-layout-editing .react-grid-item.react-draggable-dragging {
   cursor: grabbing;
 }
-/* 浏览模式下禁用拖拽光标 */
+/* 浏览模式：拖拽始终可用，显示 grab 光标提示 */
 .canvas-layout-viewing .react-grid-item {
-  cursor: default;
+  cursor: grab;
+}
+.canvas-layout-viewing .react-grid-item.react-draggable-dragging {
+  cursor: grabbing;
 }

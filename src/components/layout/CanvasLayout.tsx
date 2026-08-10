@@ -86,9 +86,16 @@ interface CanvasLayoutProps {
  * - gridConfig / dragConfig / resizeConfig 替代 v1 的 cols/rowHeight/isDraggable
  * - compactor 替代 compactType + preventCollision
  * - getCompactor(null, false, false) = 无压缩 + 禁止重叠 + 允许推挤
+ *   参数顺序: (compactType, allowOverlap, preventCollision)
  *   preventCollision: false → 拖拽时碰到其他卡片会推挤它们让路（不弹回），
  *   allowOverlap: false → 最终布局不会有重叠
  *   配合 CSS overflow 控制内容不溢出卡片边界
+ *
+ * 拖拽策略：
+ * - 拖拽始终启用 (dragConfig.enabled: true)，用户可随时自由拖动卡片
+ * - cancel 选择器阻止从交互元素 (button/a/input 等) 拖拽，防止误触
+ * - 缩放手柄仅在自定义模式下显示 (resizeConfig.enabled: customizing)
+ * - 自定义模式额外提供: KPI 指标切换、模块显隐、卡片菜单等功能
  *
  * 防覆盖机制：
  * - GridLayout 的 onLayoutChange 在挂载时也会触发，会覆盖正确的默认布局
@@ -165,7 +172,7 @@ export default function CanvasLayout({
             layout={internalLayout}
             width={safeWidth}
             gridConfig={{ cols: 12, rowHeight: 40, margin: [12, 12], containerPadding: [0, 0] }}
-            dragConfig={{ enabled: customizing, cancel: 'input, textarea, select, button, a, .no-drag, [role="button"], .ri-' }}
+            dragConfig={{ enabled: true, cancel: 'input, textarea, select, button, a, .no-drag, [role="button"]' }}
             resizeConfig={{ enabled: customizing }}
             compactor={FREE_FORM_COMPACTOR}
             autoSize={true}
