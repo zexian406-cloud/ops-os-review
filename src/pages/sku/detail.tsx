@@ -28,10 +28,7 @@ const lifecycleLabel: Record<string, string> = { new: "新品", growth: "成长"
 const saleStatusLabel: Record<string, string> = { active: "在售", clearance: "清货", paused: "暂停", discontinued: "停售" };
 const linkTypeLabel: Record<string, string> = { main: "主链接", follow: "跟卖", backup: "备用" };
 
-/* ── KPI 卡片固定顺序（画布模式下不再支持单独排序） ── */
-const CORE_KPI_ORDER = ["dailySales7d", "monthlySales", "inStock", "inTransit", "totalStock", "stockSalesRatio"];
-const COVERAGE_KPI_ORDER = ["coverDays", "coverOnHand", "coverWithTransit", "leadTime"];
-const QUALITY_KPI_ORDER = ["rating", "reviewCount", "returnRate", "adRatio", "refundFee"];
+/* ── KPI 卡片：每个指标独立 CanvasItem，可单独拖动 ── */
 
 /** 取某 MSKU 的展示店铺：优先 mskuStores（导入保留的各 MSKU 店铺），否则回退 sku.store。 */
 const mskuStoreOf = (sku: SkuMaster, m: string): string =>
@@ -197,9 +194,29 @@ export default function SkuDetail() {
     resetItemSize, resetItemPosition,
   } = useSkuDetailLayout();
 
+  // ── 计算实际渲染的 section keys ──
+  // 某些 section 有额外条件（latest、skuWow、促销数据等），条件不满足时不渲染。
+  // rglLayout 只包含实际渲染的 key，避免 layout 和 children 不匹配导致拖动异常和空白。
+  const renderedKeys = useMemo(() => {
+    const kpiKeys: SkuDetailSectionKey[] = [
+      "kpiSales7d", "kpiSales30d", "kpiInStock", "kpiInTransit",
+      "kpiTotalStock", "kpiStockRatio", "kpiCoverDays", "kpiCoverOnHand",
+      "kpiCoverTransit", "kpiLeadTime", "kpiRating", "kpiReviewCount",
+      "kpiReturnRate", "kpiAdRatio", "kpiRefundFee", "kpiOrderRatio",
+    ];
+    return visibleKeys.filter((key) => {
+      // KPI 区块需要 latest 存在
+      if (kpiKeys.includes(key)) return !!latest;
+      if (key === "discountBanner") return !!latest && !!activeOrUpcomingPromo?.discountPrice && activeOrUpcomingPromo.discountPrice > 0;
+      if (key === "mixedReplenish") return sku.fulfillment === "mixed" && (!!fbaReplenish || !!fbmReplenish);
+      if (key === "weekOverWeek") return !!skuWow;
+      return true;
+    }) as SkuDetailSectionKey[];
+  }, [visibleKeys, latest, activeOrUpcomingPromo, sku, fbaReplenish, fbmReplenish, skuWow]);
+
   // ── 构建 ReactGridLayout 布局数组 ──
   const rglLayout: Layout[] = useMemo(() => {
-    return visibleKeys.map((key) => {
+    return renderedKeys.map((key) => {
       const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 4 };
       // Clamp all values to prevent 0-width/height cards from corrupting the layout
       return {
@@ -213,7 +230,7 @@ export default function SkuDetail() {
         minH: 2,
       };
     });
-  }, [visibleKeys, gridLayout]);
+  }, [renderedKeys, gridLayout]);
 
   const handleLayoutChange = useCallback((layout: Layout[]) => {
     setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
@@ -649,81 +666,132 @@ export default function SkuDetail() {
             </CanvasItem>
           )}
 
-      {/* ═══════ 3a. 核心 KPI ═══════ */}
-      {latest && visibleKeys.includes("kpiCore") && (
-      <CanvasItem key="kpiCore" itemKey="kpiCore">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-            {CORE_KPI_ORDER.map((key) => {
-              switch (key) {
-                case "dailySales7d": {
-                  const _7dTotal = latest.dailySales7d * 7;
-                  const _7dDaily = latest.dailySales7d;
-                  console.log("[销量卡片] 7天销量", { sku: skuId, dailySales7d原始值: latest.dailySales7d, 主值_7天总量: _7dTotal, 小字_日均: _7dDaily, monthlySales原始值: latest.monthlySales, 数据来源: latest.date, focusMsku });
-                  return <KpiCard key={key} label="7天销量" value={_7dTotal.toFixed(0)} sub={`日均 ${_7dDaily.toFixed(1)} 件 · 近7天累计`} icon="ri-shopping-cart-2-line" tone={salesDelta > 10 ? "primary" : salesDelta < -10 ? "warn" : "primary"} />;
-                }
-                case "monthlySales": {
-                  const _30dTotal = latest.monthlySales;
-                  const _30dDaily = latest.monthlySales / 30;
-                  console.log("[销量卡片] 30天销量", { sku: skuId, monthlySales原始值: latest.monthlySales, 主值_30天总量: _30dTotal, 小字_日均: _30dDaily, 数据来源: latest.date, focusMsku });
-                  return <KpiCard key={key} label="30天销量" value={_30dTotal.toLocaleString()} sub={`日均 ${_30dDaily.toFixed(1)} 件 · 近30天累计`} icon="ri-bar-chart-2-line" />;
-                }
-                case "inStock": return <KpiCard key={key} label="在库库存" value={allStock.toLocaleString()} sub={`美东${eastStock} + 美西${westStock} + 东南${southeastStock} + 中南${southcentralStock}`} icon="ri-archive-drawer-line" tooltip="公式: 美东在库 + 美西在库 + 东南在库 + 中南在库" />;
-                case "inTransit": return <KpiCard key={key} label="在途库存" value={allTransit.toLocaleString()} sub={transitSub} icon="ri-ship-line" tone="secondary" tooltip="公式: 四仓在途之和; 四仓为0时取在途批次汇总" />;
-                case "totalStock": return <KpiCard key={key} label="总库存" value={allAvailable.toLocaleString()} sub={`在库${allStock}+在途${allTransit}，自动汇总`} icon="ri-archive-line" tone="accent" tooltip="公式: 在库库存 + 在途库存" />;
-                case "stockSalesRatio": return <KpiCard key={key} label="存销比" value={String(stockSalesRatio)} sub="总库存/月销" icon="ri-pie-chart-box-line" tooltip="公式: 总库存 ÷ 月销量" />;
-                default: return null;
-              }
-            })}
-        </div>
+      {/* ═══════ 3. KPI 指标（每个独立可拖动） ═══════ */}
+
+      {/* 7天销量 */}
+      {latest && visibleKeys.includes("kpiSales7d") && (
+      <CanvasItem key="kpiSales7d" itemKey="kpiSales7d">
+        {(() => {
+          const _7dTotal = latest.dailySales7d * 7;
+          const _7dDaily = latest.dailySales7d;
+          return <KpiCard label="7天销量" value={_7dTotal.toFixed(0)} sub={`日均 ${_7dDaily.toFixed(1)} 件 · 近7天累计`} icon="ri-shopping-cart-2-line" tone={salesDelta > 10 ? "primary" : salesDelta < -10 ? "warn" : "primary"} />;
+        })()}
       </CanvasItem>
       )}
 
-      {/* ═══════ 3b. 覆盖 KPI ═══════ */}
-      {latest && visibleKeys.includes("kpiCoverage") && (
-      <CanvasItem key="kpiCoverage" itemKey="kpiCoverage">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {COVERAGE_KPI_ORDER.map((key) => {
-              switch (key) {
-                case "coverDays": {
-                  const noSales = !Number.isFinite(coverDays);
-                  return <KpiCard key={key} label="综合覆盖" value={`${formatCoverDays(coverDays)} 天`} sub={noSales ? COVER_NO_SALES_SUB : `日均${dailySales.toFixed(1)}`} icon="ri-timer-line" tone={noSales ? "secondary" : (coverDays < 60 ? "warn" : "accent")} tooltip="公式: 总库存 ÷ 日均销量" />;
-                }
-                case "coverOnHand": return <KpiCard key={key} label="在库覆盖" value={`${formatCoverDays(daysOfCoverOnHand)} 天`} sub={Number.isFinite(daysOfCoverOnHand) ? "仅算在库" : COVER_NO_SALES_SUB} icon="ri-archive-drawer-line" tooltip="公式: 在库库存 ÷ 日均销量" />;
-                case "coverWithTransit": return <KpiCard key={key} label="含在途覆盖" value={`${formatCoverDays(daysOfCoverWithTransit)} 天`} sub={Number.isFinite(daysOfCoverWithTransit) ? "含在途" : COVER_NO_SALES_SUB} icon="ri-ship-line" tone="secondary" tooltip="公式: (在库+在途) ÷ 日均销量" />;
-                case "leadTime": return <KpiCard key={key} label="Lead Time" value={`${sku.leadTimeDays ?? 40} 天`} sub={`安全库存 ${sku.safetyStockDays ?? 30} 天`} icon="ri-time-line" tone="secondary" tooltip={`安全库存公式: LeadTime × 日均 × ${sku.fulfillment === "FBM" ? "50%(FBM)" : "20%(FBA)"}`} />;
-                default: return null;
-              }
-            })}
-        </div>
+      {/* 30天销量 */}
+      {latest && visibleKeys.includes("kpiSales30d") && (
+      <CanvasItem key="kpiSales30d" itemKey="kpiSales30d">
+        {(() => {
+          const _30dTotal = latest.monthlySales;
+          const _30dDaily = latest.monthlySales / 30;
+          return <KpiCard label="30天销量" value={_30dTotal.toLocaleString()} sub={`日均 ${_30dDaily.toFixed(1)} 件 · 近30天累计`} icon="ri-bar-chart-2-line" />;
+        })()}
       </CanvasItem>
       )}
 
-      {/* ═══════ 3c. 质量 KPI ═══════ */}
-      {latest && visibleKeys.includes("kpiQuality") && (
-      <CanvasItem key="kpiQuality" itemKey="kpiQuality">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-            {QUALITY_KPI_ORDER.map((key) => {
-              switch (key) {
-                case "rating": return <KpiCard key={key} label="评分" value={latest.rating > 0 ? latest.rating.toFixed(1) : "N/A"} sub={skuWow ? deltaArrow(skuWow.ratingDelta) : "目标 4.0+"} icon="ri-star-line" tone={latest.rating > 0 && latest.rating < 3.8 ? "danger" : latest.rating > 0 && latest.rating < 4.0 ? "warn" : "accent"} />;
-                case "reviewCount": return <KpiCard key={key} label="Review 数" value={latest.reviewCount != null ? latest.reviewCount.toLocaleString() : "N/A"} sub="累计" icon="ri-chat-3-line" />;
-                case "returnRate": return sku.fulfillment === "mixed" ? (
-                  <React.Fragment key={key}>
-                    <KpiCard label="退款率" value={refundMissing ? "缺失" : `${(latest.refundRate ?? 0).toFixed(1)}%`} sub={refundMissing ? "未导入" : ((latest.refundRate ?? 0) > 5 ? "⚠ 需关注" : "正常")} icon="ri-refund-2-line" tone={refundMissing ? "secondary" : ((latest.refundRate ?? 0) > 8 ? "danger" : (latest.refundRate ?? 0) > 5 ? "warn" : "accent")} />
-                    <KpiCard label="FBA退货率" value={costMissing ? "缺失" : `${calcReturnRate.toFixed(1)}%`} sub={costMissing ? "成本缺失" : (calcReturnRate > 5 ? "⚠ 需关注" : "正常")} icon="ri-arrow-go-back-line" tone={costMissing ? "secondary" : (calcReturnRate > 8 ? "danger" : calcReturnRate > 5 ? "warn" : "accent")} />
-                  </React.Fragment>
-                ) : (
-                  <KpiCard key={key} label="退款率" value={refundMissing ? "缺失" : `${(latest.refundRate ?? 0).toFixed(1)}%`} sub={refundMissing ? "未导入" : ((latest.refundRate ?? 0) > 5 ? "⚠ 需关注" : "正常")} icon="ri-refund-2-line" tone={refundMissing ? "secondary" : ((latest.refundRate ?? 0) > 8 ? "danger" : (latest.refundRate ?? 0) > 5 ? "warn" : "accent")} />
-                );
-                case "adRatio": return <KpiCard key={key} label="广告费比" value={`${latest.adRatio.toFixed(1)}%`} sub={skuWow ? deltaArrow(skuWow.adRatioDelta, true) : `阈值 ${config?.adRatioThreshold ?? 10}%`} icon="ri-megaphone-line" tone={latest.adRatio > (config?.adRatioThreshold ?? 10) * 2 ? "danger" : latest.adRatio > (config?.adRatioThreshold ?? 10) ? "warn" : "accent"} />;
-                case "refundFee": return <KpiCard key={key} label="退款费" value={`${returnFee.toFixed(2)}`} sub="近30天估算" icon="ri-refund-2-line" />;
-                default: return null;
-              }
-            })}
-        </div>
+      {/* 在库库存 */}
+      {latest && visibleKeys.includes("kpiInStock") && (
+      <CanvasItem key="kpiInStock" itemKey="kpiInStock">
+        <KpiCard label="在库库存" value={allStock.toLocaleString()} sub={`美东${eastStock}+美西${westStock}+东南${southeastStock}+中南${southcentralStock}`} icon="ri-archive-drawer-line" tooltip="公式: 美东在库 + 美西在库 + 东南在库 + 中南在库" />
       </CanvasItem>
       )}
 
-      {/* ═══════ 3d. 订单占比 ═══════ */}
+      {/* 在途库存 */}
+      {latest && visibleKeys.includes("kpiInTransit") && (
+      <CanvasItem key="kpiInTransit" itemKey="kpiInTransit">
+        <KpiCard label="在途库存" value={allTransit.toLocaleString()} sub={transitSub} icon="ri-ship-line" tone="secondary" tooltip="公式: 四仓在途之和; 四仓为0时取在途批次汇总" />
+      </CanvasItem>
+      )}
+
+      {/* 总库存 */}
+      {latest && visibleKeys.includes("kpiTotalStock") && (
+      <CanvasItem key="kpiTotalStock" itemKey="kpiTotalStock">
+        <KpiCard label="总库存" value={allAvailable.toLocaleString()} sub={`在库${allStock}+在途${allTransit}`} icon="ri-archive-line" tone="accent" tooltip="公式: 在库库存 + 在途库存" />
+      </CanvasItem>
+      )}
+
+      {/* 存销比 */}
+      {latest && visibleKeys.includes("kpiStockRatio") && (
+      <CanvasItem key="kpiStockRatio" itemKey="kpiStockRatio">
+        <KpiCard label="存销比" value={String(stockSalesRatio)} sub="总库存/月销" icon="ri-pie-chart-box-line" tooltip="公式: 总库存 ÷ 月销量" />
+      </CanvasItem>
+      )}
+
+      {/* 综合覆盖 */}
+      {latest && visibleKeys.includes("kpiCoverDays") && (
+      <CanvasItem key="kpiCoverDays" itemKey="kpiCoverDays">
+        {(() => {
+          const noSales = !Number.isFinite(coverDays);
+          return <KpiCard label="综合覆盖" value={`${formatCoverDays(coverDays)} 天`} sub={noSales ? COVER_NO_SALES_SUB : `日均${dailySales.toFixed(1)}`} icon="ri-timer-line" tone={noSales ? "secondary" : (coverDays < 60 ? "warn" : "accent")} tooltip="公式: 总库存 ÷ 日均销量" />;
+        })()}
+      </CanvasItem>
+      )}
+
+      {/* 在库覆盖 */}
+      {latest && visibleKeys.includes("kpiCoverOnHand") && (
+      <CanvasItem key="kpiCoverOnHand" itemKey="kpiCoverOnHand">
+        <KpiCard label="在库覆盖" value={`${formatCoverDays(daysOfCoverOnHand)} 天`} sub={Number.isFinite(daysOfCoverOnHand) ? "仅算在库" : COVER_NO_SALES_SUB} icon="ri-archive-drawer-line" tooltip="公式: 在库库存 ÷ 日均销量" />
+      </CanvasItem>
+      )}
+
+      {/* 含在途覆盖 */}
+      {latest && visibleKeys.includes("kpiCoverTransit") && (
+      <CanvasItem key="kpiCoverTransit" itemKey="kpiCoverTransit">
+        <KpiCard label="含在途覆盖" value={`${formatCoverDays(daysOfCoverWithTransit)} 天`} sub={Number.isFinite(daysOfCoverWithTransit) ? "含在途" : COVER_NO_SALES_SUB} icon="ri-ship-line" tone="secondary" tooltip="公式: (在库+在途) ÷ 日均销量" />
+      </CanvasItem>
+      )}
+
+      {/* Lead Time */}
+      {latest && visibleKeys.includes("kpiLeadTime") && (
+      <CanvasItem key="kpiLeadTime" itemKey="kpiLeadTime">
+        <KpiCard label="Lead Time" value={`${sku.leadTimeDays ?? 40} 天`} sub={`安全库存 ${sku.safetyStockDays ?? 30} 天`} icon="ri-time-line" tone="secondary" tooltip={`安全库存公式: LeadTime × 日均 × ${sku.fulfillment === "FBM" ? "50%(FBM)" : "20%(FBA)"}`} />
+      </CanvasItem>
+      )}
+
+      {/* 评分 */}
+      {latest && visibleKeys.includes("kpiRating") && (
+      <CanvasItem key="kpiRating" itemKey="kpiRating">
+        <KpiCard label="评分" value={latest.rating > 0 ? latest.rating.toFixed(1) : "N/A"} sub={skuWow ? deltaArrow(skuWow.ratingDelta) : "目标 4.0+"} icon="ri-star-line" tone={latest.rating > 0 && latest.rating < 3.8 ? "danger" : latest.rating > 0 && latest.rating < 4.0 ? "warn" : "accent"} />
+      </CanvasItem>
+      )}
+
+      {/* Review 数 */}
+      {latest && visibleKeys.includes("kpiReviewCount") && (
+      <CanvasItem key="kpiReviewCount" itemKey="kpiReviewCount">
+        <KpiCard label="Review 数" value={latest.reviewCount != null ? latest.reviewCount.toLocaleString() : "N/A"} sub="累计" icon="ri-chat-3-line" />
+      </CanvasItem>
+      )}
+
+      {/* 退款率 */}
+      {latest && visibleKeys.includes("kpiReturnRate") && (
+      <CanvasItem key="kpiReturnRate" itemKey="kpiReturnRate">
+        {sku.fulfillment === "mixed" ? (
+          <div className="grid grid-cols-2 gap-2 h-full">
+            <KpiCard label="退款率" value={refundMissing ? "缺失" : `${(latest.refundRate ?? 0).toFixed(1)}%`} sub={refundMissing ? "未导入" : ((latest.refundRate ?? 0) > 5 ? "⚠ 需关注" : "正常")} icon="ri-refund-2-line" tone={refundMissing ? "secondary" : ((latest.refundRate ?? 0) > 8 ? "danger" : (latest.refundRate ?? 0) > 5 ? "warn" : "accent")} />
+            <KpiCard label="FBA退货率" value={costMissing ? "缺失" : `${calcReturnRate.toFixed(1)}%`} sub={costMissing ? "成本缺失" : (calcReturnRate > 5 ? "⚠ 需关注" : "正常")} icon="ri-arrow-go-back-line" tone={costMissing ? "secondary" : (calcReturnRate > 8 ? "danger" : calcReturnRate > 5 ? "warn" : "accent")} />
+          </div>
+        ) : (
+          <KpiCard label="退款率" value={refundMissing ? "缺失" : `${(latest.refundRate ?? 0).toFixed(1)}%`} sub={refundMissing ? "未导入" : ((latest.refundRate ?? 0) > 5 ? "⚠ 需关注" : "正常")} icon="ri-refund-2-line" tone={refundMissing ? "secondary" : ((latest.refundRate ?? 0) > 8 ? "danger" : (latest.refundRate ?? 0) > 5 ? "warn" : "accent")} />
+        )}
+      </CanvasItem>
+      )}
+
+      {/* 广告费比 */}
+      {latest && visibleKeys.includes("kpiAdRatio") && (
+      <CanvasItem key="kpiAdRatio" itemKey="kpiAdRatio">
+        <KpiCard label="广告费比" value={`${latest.adRatio.toFixed(1)}%`} sub={skuWow ? deltaArrow(skuWow.adRatioDelta, true) : `阈值 ${config?.adRatioThreshold ?? 10}%`} icon="ri-megaphone-line" tone={latest.adRatio > (config?.adRatioThreshold ?? 10) * 2 ? "danger" : latest.adRatio > (config?.adRatioThreshold ?? 10) ? "warn" : "accent"} />
+      </CanvasItem>
+      )}
+
+      {/* 退款费 */}
+      {latest && visibleKeys.includes("kpiRefundFee") && (
+      <CanvasItem key="kpiRefundFee" itemKey="kpiRefundFee">
+        <KpiCard label="退款费" value={`${returnFee.toFixed(2)}`} sub="近30天估算" icon="ri-refund-2-line" />
+      </CanvasItem>
+      )}
+
+      {/* 订单占比 */}
       {latest && visibleKeys.includes("kpiOrderRatio") && (
       <CanvasItem key="kpiOrderRatio" itemKey="kpiOrderRatio">
         {(() => {

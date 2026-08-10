@@ -15,9 +15,21 @@ export type DashboardSectionKey =
 export type SkuDetailSectionKey =
   | "header"
   | "discountBanner"
-  | "kpiCore"
-  | "kpiCoverage"
-  | "kpiQuality"
+  | "kpiSales7d"
+  | "kpiSales30d"
+  | "kpiInStock"
+  | "kpiInTransit"
+  | "kpiTotalStock"
+  | "kpiStockRatio"
+  | "kpiCoverDays"
+  | "kpiCoverOnHand"
+  | "kpiCoverTransit"
+  | "kpiLeadTime"
+  | "kpiRating"
+  | "kpiReviewCount"
+  | "kpiReturnRate"
+  | "kpiAdRatio"
+  | "kpiRefundFee"
   | "kpiOrderRatio"
   | "editData"
   | "profitAnalysis"
@@ -193,9 +205,21 @@ function normalizeGridLayout(
 export const SKU_LABELS: Record<SkuDetailSectionKey, string> = {
   header: "头部信息",
   discountBanner: "折扣横幅",
-  kpiCore: "核心 KPI",
-  kpiCoverage: "覆盖 KPI",
-  kpiQuality: "质量 KPI",
+  kpiSales7d: "7天销量",
+  kpiSales30d: "30天销量",
+  kpiInStock: "在库库存",
+  kpiInTransit: "在途库存",
+  kpiTotalStock: "总库存",
+  kpiStockRatio: "存销比",
+  kpiCoverDays: "综合覆盖",
+  kpiCoverOnHand: "在库覆盖",
+  kpiCoverTransit: "含在途覆盖",
+  kpiLeadTime: "Lead Time",
+  kpiRating: "评分",
+  kpiReviewCount: "Review 数",
+  kpiReturnRate: "退款率",
+  kpiAdRatio: "广告费比",
+  kpiRefundFee: "退款费",
   kpiOrderRatio: "订单占比",
   editData: "数据编辑",
   profitAnalysis: "利润分析",
@@ -213,22 +237,34 @@ export const SKU_LABELS: Record<SkuDetailSectionKey, string> = {
  *  h 值基于 rowHeight=40px + margin=12px，内容溢出可滚动，用户可拖拽调整
  *  默认布局混合全宽 + 左右并排，避免纯竖版 */
 const DEFAULT_SKU_GRID_LAYOUT: Record<SkuDetailSectionKey, GridItemLayout> = {
-  header:          { x: 0, y: 0,  w: 12, h: 4 },
-  discountBanner:  { x: 0, y: 4,  w: 12, h: 2 },
-  kpiCore:         { x: 0, y: 6,  w: 12, h: 3 },
-  kpiCoverage:     { x: 0, y: 9,  w: 12, h: 3 },
-  kpiQuality:      { x: 0, y: 12, w: 12, h: 3 },
-  kpiOrderRatio:   { x: 0, y: 15, w: 12, h: 4 },
-  editData:        { x: 0, y: 19, w: 6,  h: 8 },
-  profitAnalysis:  { x: 6, y: 19, w: 6,  h: 8 },
-  costWaterfall:   { x: 0, y: 27, w: 6,  h: 10 },
-  promoShipment:   { x: 6, y: 27, w: 6,  h: 10 },
-  mixedReplenish:  { x: 0, y: 37, w: 6,  h: 8 },
-  inventory:       { x: 6, y: 37, w: 6,  h: 8 },
-  listing:         { x: 0, y: 45, w: 12, h: 20 },
-  weekOverWeek:    { x: 0, y: 65, w: 6,  h: 4 },
-  historyCharts:   { x: 6, y: 65, w: 6,  h: 8 },
-  relatedTodos:    { x: 0, y: 73, w: 12, h: 6 },
+  header:          { x: 0,  y: 0,  w: 12, h: 4 },
+  discountBanner:  { x: 0,  y: 4,  w: 12, h: 2 },
+  kpiSales7d:      { x: 0,  y: 6,  w: 2,  h: 3 },
+  kpiSales30d:     { x: 2,  y: 6,  w: 2,  h: 3 },
+  kpiInStock:      { x: 4,  y: 6,  w: 2,  h: 3 },
+  kpiInTransit:    { x: 6,  y: 6,  w: 2,  h: 3 },
+  kpiTotalStock:   { x: 8,  y: 6,  w: 2,  h: 3 },
+  kpiStockRatio:   { x: 10, y: 6,  w: 2,  h: 3 },
+  kpiCoverDays:    { x: 0,  y: 9,  w: 3,  h: 3 },
+  kpiCoverOnHand:  { x: 3,  y: 9,  w: 3,  h: 3 },
+  kpiCoverTransit: { x: 6,  y: 9,  w: 3,  h: 3 },
+  kpiLeadTime:     { x: 9,  y: 9,  w: 3,  h: 3 },
+  kpiRating:       { x: 0,  y: 12, w: 2,  h: 3 },
+  kpiReviewCount:  { x: 2,  y: 12, w: 2,  h: 3 },
+  kpiReturnRate:   { x: 4,  y: 12, w: 4,  h: 3 },
+  kpiAdRatio:      { x: 8,  y: 12, w: 2,  h: 3 },
+  kpiRefundFee:    { x: 10, y: 12, w: 2,  h: 3 },
+  kpiOrderRatio:   { x: 0,  y: 15, w: 12, h: 4 },
+  editData:        { x: 0,  y: 19, w: 6,  h: 8 },
+  profitAnalysis:  { x: 6,  y: 19, w: 6,  h: 8 },
+  costWaterfall:   { x: 0,  y: 27, w: 6,  h: 10 },
+  promoShipment:   { x: 6,  y: 27, w: 6,  h: 10 },
+  mixedReplenish:  { x: 0,  y: 37, w: 6,  h: 8 },
+  inventory:       { x: 6,  y: 37, w: 6,  h: 8 },
+  listing:         { x: 0,  y: 45, w: 12, h: 20 },
+  weekOverWeek:    { x: 0,  y: 65, w: 6,  h: 4 },
+  historyCharts:   { x: 6,  y: 65, w: 6,  h: 8 },
+  relatedTodos:    { x: 0,  y: 73, w: 12, h: 6 },
 };
 
 /* ────────── Dashboard 默认画布布局 ──────────
@@ -277,9 +313,21 @@ const DEFAULT_DASHBOARD_VISIBLE: DashboardSectionKey[] = [
 const DEFAULT_SKU_VISIBLE: SkuDetailSectionKey[] = [
   "header",
   "discountBanner",
-  "kpiCore",
-  "kpiCoverage",
-  "kpiQuality",
+  "kpiSales7d",
+  "kpiSales30d",
+  "kpiInStock",
+  "kpiInTransit",
+  "kpiTotalStock",
+  "kpiStockRatio",
+  "kpiCoverDays",
+  "kpiCoverOnHand",
+  "kpiCoverTransit",
+  "kpiLeadTime",
+  "kpiRating",
+  "kpiReviewCount",
+  "kpiReturnRate",
+  "kpiAdRatio",
+  "kpiRefundFee",
   "kpiOrderRatio",
   "editData",
   "profitAnalysis",
@@ -293,7 +341,7 @@ const DEFAULT_SKU_VISIBLE: SkuDetailSectionKey[] = [
   "relatedTodos",
 ];
 
-const STORAGE_KEY = "aos-layout-prefs-v11";
+const STORAGE_KEY = "aos-layout-prefs-v12";
 
 function loadPrefs(): LayoutPrefs {
   try {
