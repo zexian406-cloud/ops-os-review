@@ -466,23 +466,45 @@ h1, h2, h3, h4, h5, h6 {
   display: none;
 }
 
+/* ── 拖拽手柄条（自定义模式下显示） ── */
+.canvas-drag-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  background: oklch(var(--primary-100) / 0.6);
+  border-bottom: 1px solid oklch(var(--primary-300) / 0.3);
+  border-radius: 12px 12px 0 0;
+  cursor: grab;
+  font-size: 11px;
+  font-weight: 500;
+  color: oklch(var(--primary-700));
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background 0.15s;
+}
+.canvas-drag-bar:hover {
+  background: oklch(var(--primary-100));
+}
+.canvas-drag-bar:active {
+  cursor: grabbing;
+}
+.canvas-drag-bar i {
+  font-size: 14px;
+}
+
 /* ── 画布布局容器 ── */
 .canvas-layout-wrapper {
   min-height: 100%;
   overflow: visible;
   position: relative;
 }
-/* 自定义模式下显示拖拽光标 */
+/* 自定义模式下：拖拽光标只在手柄上 */
 .canvas-layout-editing .react-grid-item {
-  cursor: grab;
+  cursor: default;
 }
-.canvas-layout-editing .react-grid-item.react-draggable-dragging {
-  cursor: grabbing;
-}
-/* 浏览模式：拖拽始终可用，显示 grab 光标提示 */
+/* 浏览模式：默认光标 */
 .canvas-layout-viewing .react-grid-item {
-  cursor: grab;
-}
-.canvas-layout-viewing .react-grid-item.react-draggable-dragging {
-  cursor: grabbing;
+  cursor: default;
 }

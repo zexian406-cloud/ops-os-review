@@ -53,6 +53,12 @@ export function CanvasItem({
       style={injectedStyle}
       data-item-key={itemKey}
     >
+      {ctx.customizing && (
+        <div className="drag-handle canvas-drag-bar">
+          <i className="ri-drag-move-2-line" aria-hidden />
+          <span>拖动移动</span>
+        </div>
+      )}
       {ctx.customizing && (ctx.onHideItem || ctx.onResetItemSize || ctx.onResetItemPosition) && (
         <CardMenu
           itemKey={itemKey}
@@ -92,8 +98,9 @@ interface CanvasLayoutProps {
  *   配合 CSS overflow 控制内容不溢出卡片边界
  *
  * 拖拽策略：
- * - 拖拽始终启用 (dragConfig.enabled: true)，用户可随时自由拖动卡片
- * - cancel 选择器阻止从交互元素 (button/a/input 等) 拖拽，防止误触
+ * - 拖拽仅在自定义模式下启用 (dragConfig.enabled: customizing)
+ * - 使用 handle 指定拖拽手柄 (.drag-handle)，只有从手柄才能拖动卡片
+ * - cancel 选择器作为额外保护，阻止从交互元素拖拽
  * - 缩放手柄仅在自定义模式下显示 (resizeConfig.enabled: customizing)
  * - 自定义模式额外提供: KPI 指标切换、模块显隐、卡片菜单等功能
  *
@@ -172,7 +179,7 @@ export default function CanvasLayout({
             layout={internalLayout}
             width={safeWidth}
             gridConfig={{ cols: 12, rowHeight: 40, margin: [12, 12], containerPadding: [0, 0] }}
-            dragConfig={{ enabled: true, cancel: 'input, textarea, select, button, a, .no-drag, [role="button"]' }}
+            dragConfig={{ enabled: customizing, handle: '.drag-handle', cancel: 'input, textarea, select, button, a, .no-drag' }}
             resizeConfig={{ enabled: customizing }}
             compactor={FREE_FORM_COMPACTOR}
             autoSize={true}
