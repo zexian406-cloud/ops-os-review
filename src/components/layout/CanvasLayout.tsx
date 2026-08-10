@@ -85,9 +85,10 @@ interface CanvasLayoutProps {
  * v2 关键：
  * - gridConfig / dragConfig / resizeConfig 替代 v1 的 cols/rowHeight/isDraggable
  * - compactor 替代 compactType + preventCollision
- * - getCompactor(null, false, true) = 无压缩 + 禁止重叠 + 阻止碰撞
- *   preventCollision: true → 拖拽时碰到其他卡片会被阻止（弹回），
- *   不会推挤其他卡片，也不会产生重叠
+ * - getCompactor(null, false, false) = 无压缩 + 禁止重叠 + 允许推挤
+ *   preventCollision: false → 拖拽时碰到其他卡片会推挤它们让路（不弹回），
+ *   allowOverlap: false → 最终布局不会有重叠
+ *   配合 CSS overflow 控制内容不溢出卡片边界
  *
  * 防覆盖机制：
  * - GridLayout 的 onLayoutChange 在挂载时也会触发，会覆盖正确的默认布局
@@ -97,7 +98,7 @@ interface CanvasLayoutProps {
  * 子元素直接传递给 GridLayout，不做额外包装（包装会改变 key 导致匹配失败）。
  * 页面应使用 <CanvasItem key={key} itemKey={key}> 包装每个区块。
  */
-const FREE_FORM_COMPACTOR = getCompactor(null, false, true);
+const FREE_FORM_COMPACTOR = getCompactor(null, false, false);
 
 export default function CanvasLayout({
   layout,

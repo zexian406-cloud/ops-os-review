@@ -355,19 +355,18 @@ h1, h2, h3, h4, h5, h6 {
 /* ── 卡片内容填满高度 ── */
 .canvas-item-wrapper {
   height: 100%;
-  overflow: auto;
   position: relative;
 }
 
-/* ── 浏览模式 ── */
+/* ── 浏览模式：内容溢出时滚动 ── */
 .canvas-layout-viewing .react-grid-item {
-  overflow: visible;
+  overflow: auto;
   border-radius: 14px;
 }
 
-/* ── 编辑模式：虚线边框 + 悬停高亮 ── */
+/* ── 编辑模式：裁剪溢出内容 + 虚线边框 ── */
 .canvas-layout-editing .react-grid-item {
-  overflow: visible;
+  overflow: hidden;
   border: 2px dashed oklch(var(--primary-400) / 0.5);
   border-radius: 12px;
   background: oklch(var(--background-50) / 0.6);

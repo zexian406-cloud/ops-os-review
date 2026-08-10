@@ -223,17 +223,19 @@ const DEFAULT_SKU_GRID_LAYOUT: Record<SkuDetailSectionKey, GridItemLayout> = {
 };
 
 /* ────────── Dashboard 默认画布布局 ──────────
- * 紧凑布局：三列并排 + 宽窄搭配，不遮挡视野 */
+ * h 值基于 rowHeight=40px + margin=12px 计算
+ * 每个卡片的高度足够容纳实际内容，避免溢出重叠
+ * h=5 → 248px, h=8 → 404px, h=9 → 456px, h=4 → 196px */
 const DEFAULT_DASHBOARD_GRID_LAYOUT: Record<DashboardSectionKey, GridItemLayout> = {
-  kpi:         { x: 0, y: 0,  w: 12, h: 4 },
-  todo:        { x: 0, y: 4,  w: 4,  h: 8 },
-  opsLogs:     { x: 4, y: 4,  w: 4,  h: 8 },
-  riskBuckets: { x: 8, y: 4,  w: 4,  h: 8 },
-  weekCompare: { x: 0, y: 12, w: 8,  h: 7 },
-  alerts:      { x: 8, y: 12, w: 4,  h: 7 },
-  promotions:  { x: 0, y: 19, w: 6,  h: 7 },
-  shipment:    { x: 6, y: 19, w: 6,  h: 7 },
-  wowBar:      { x: 0, y: 26, w: 12, h: 3 },
+  kpi:         { x: 0, y: 0,  w: 12, h: 5 },
+  todo:        { x: 0, y: 5,  w: 4,  h: 9 },
+  opsLogs:     { x: 4, y: 5,  w: 4,  h: 9 },
+  riskBuckets: { x: 8, y: 5,  w: 4,  h: 9 },
+  weekCompare: { x: 0, y: 14, w: 8,  h: 9 },
+  alerts:      { x: 8, y: 14, w: 4,  h: 9 },
+  promotions:  { x: 0, y: 23, w: 6,  h: 8 },
+  shipment:    { x: 6, y: 23, w: 6,  h: 8 },
+  wowBar:      { x: 0, y: 31, w: 12, h: 4 },
 };
 
 interface LayoutPrefs {
@@ -279,7 +281,7 @@ const DEFAULT_SKU_VISIBLE: SkuDetailSectionKey[] = [
   "relatedTodos",
 ];
 
-const STORAGE_KEY = "aos-layout-prefs-v9";
+const STORAGE_KEY = "aos-layout-prefs-v10";
 
 function loadPrefs(): LayoutPrefs {
   try {
