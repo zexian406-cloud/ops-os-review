@@ -194,47 +194,8 @@ export default function SkuDetail() {
     resetItemSize, resetItemPosition,
   } = useSkuDetailLayout();
 
-  // ── 计算实际渲染的 section keys ──
-  // 某些 section 有额外条件（latest、skuWow、促销数据等），条件不满足时不渲染。
-  // rglLayout 只包含实际渲染的 key，避免 layout 和 children 不匹配导致拖动异常和空白。
-  const renderedKeys = useMemo(() => {
-    const kpiKeys: SkuDetailSectionKey[] = [
-      "kpiSales7d", "kpiSales30d", "kpiInStock", "kpiInTransit",
-      "kpiTotalStock", "kpiStockRatio", "kpiCoverDays", "kpiCoverOnHand",
-      "kpiCoverTransit", "kpiLeadTime", "kpiRating", "kpiReviewCount",
-      "kpiReturnRate", "kpiAdRatio", "kpiRefundFee", "kpiOrderRatio",
-    ];
-    return visibleKeys.filter((key) => {
-      // KPI 区块需要 latest 存在
-      if (kpiKeys.includes(key)) return !!latest;
-      if (key === "discountBanner") return !!latest && !!activeOrUpcomingPromo?.discountPrice && activeOrUpcomingPromo.discountPrice > 0;
-      if (key === "mixedReplenish") return sku.fulfillment === "mixed" && (!!fbaReplenish || !!fbmReplenish);
-      if (key === "weekOverWeek") return !!skuWow;
-      return true;
-    }) as SkuDetailSectionKey[];
-  }, [visibleKeys, latest, activeOrUpcomingPromo, sku, fbaReplenish, fbmReplenish, skuWow]);
-
-  // ── 构建 ReactGridLayout 布局数组 ──
-  const rglLayout: Layout[] = useMemo(() => {
-    return renderedKeys.map((key) => {
-      const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 4 };
-      // Clamp all values to prevent 0-width/height cards from corrupting the layout
-      return {
-        i: key,
-        x: Math.max(Math.min(item.x, 12), 0),
-        y: Math.max(item.y, 0),
-        w: Math.min(Math.max(item.w, 2), 12),
-        h: Math.max(item.h, 2),
-        minW: 2,
-        maxW: 12,
-        minH: 2,
-      };
-    });
-  }, [renderedKeys, gridLayout]);
-
-  const handleLayoutChange = useCallback((layout: Layout[]) => {
-    setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
-  }, [setGridLayout]);
+  // ── renderedKeys / rglLayout / handleLayoutChange 移至 calc 解构之后定义 ──
+  // （依赖 fbaReplenish / fbmReplenish，在 calc 解构前引用会触发 TDZ 错误导致白屏）
 
   // ── 关联待办 ──
   const [relatedTodos, setRelatedTodos] = useState<TodoItem[]>([]);
@@ -454,6 +415,45 @@ export default function SkuDetail() {
       promoCost: weekPromoCost.total,
     });
   }, [sku, focusedSnap, inv, activeOrUpcomingPromo, config, weekPromoCost]);
+
+  // ── 计算实际渲染的 section keys ──
+  // 必须在所有 early return 之前调用 hooks（React hooks 规则）
+  // 使用 calc?.fbaReplenish 避免引用 calc 解构前的变量（TDZ）
+  const renderedKeys = useMemo(() => {
+    const kpiKeys: SkuDetailSectionKey[] = [
+      "kpiSales7d", "kpiSales30d", "kpiInStock", "kpiInTransit",
+      "kpiTotalStock", "kpiStockRatio", "kpiCoverDays", "kpiCoverOnHand",
+      "kpiCoverTransit", "kpiLeadTime", "kpiRating", "kpiReviewCount",
+      "kpiReturnRate", "kpiAdRatio", "kpiRefundFee", "kpiOrderRatio",
+    ];
+    return visibleKeys.filter((key) => {
+      if (kpiKeys.includes(key)) return !!latest;
+      if (key === "discountBanner") return !!latest && !!activeOrUpcomingPromo?.discountPrice && activeOrUpcomingPromo.discountPrice > 0;
+      if (key === "mixedReplenish") return sku?.fulfillment === "mixed" && (!!calc?.fbaReplenish || !!calc?.fbmReplenish);
+      if (key === "weekOverWeek") return !!skuWow;
+      return true;
+    }) as SkuDetailSectionKey[];
+  }, [visibleKeys, latest, activeOrUpcomingPromo, sku, calc, skuWow]);
+
+  const rglLayout: Layout[] = useMemo(() => {
+    return renderedKeys.map((key) => {
+      const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 4 };
+      return {
+        i: key,
+        x: Math.max(Math.min(item.x, 12), 0),
+        y: Math.max(item.y, 0),
+        w: Math.min(Math.max(item.w, 2), 12),
+        h: Math.max(item.h, 2),
+        minW: 2,
+        maxW: 12,
+        minH: 2,
+      };
+    });
+  }, [renderedKeys, gridLayout]);
+
+  const handleLayoutChange = useCallback((layout: Layout[]) => {
+    setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
+  }, [setGridLayout]);
 
   if (loading) return <div className="text-sm text-foreground-500">加载中...</div>;
 
