@@ -29,30 +29,37 @@ const CanvasItemContext = createContext<CanvasItemContextValue>({ customizing: f
  *
  * 注意：key 必须直接设在 <CanvasItem> 上，且与 layout 中的 i 值一致。
  *
- * ReactGridLayout v2 的 GridItem 通过 React.cloneElement 向子元素注入
- * className（含 "react-grid-item"）和 style（含 transform 定位），
- * CanvasItem 必须接收并转发这些 props，否则所有卡片会堆叠在 0,0 位置。
+ * ReactGridLayout v2 的 GridItem 通过 React.cloneElement 向子元素注入：
+ * - ref（elementRef）：DraggableCore 通过 nodeRef 定位 DOM 节点，
+ *   若不转发 ref → nodeRef.current 为 null → handleDragStart 抛异常，拖拽完全不工作
+ * - className（含 "react-grid-item"）：定位类，不转发则卡片堆叠在 0,0
+ * - style（含 transform 定位）：定位样式，不转发则卡片无法定位
+ *
+ * DraggableCore 通过 Resizable 的 cloneElement 注入：
+ * - onMouseDown / onMouseUp / onTouchEnd：拖拽事件处理，
+ *   若不转发 → mousedown 事件无法触达 DraggableCore，拖拽无响应
+ *
+ * 因此 CanvasItem 必须使用 forwardRef 转发 ref，并通过 ...rest 展开所有额外 props。
  */
-export function CanvasItem({
-  itemKey,
-  children,
-  className: injectedClassName,
-  style: injectedStyle,
-}: {
+type CanvasItemProps = Omit<React.HTMLAttributes<HTMLDivElement>, "children"> & {
   itemKey: string;
   children: React.ReactNode;
-  /** 由 GridItem 通过 cloneElement 注入，含 react-grid-item 等定位类 */
-  className?: string;
-  /** 由 GridItem 通过 cloneElement 注入，含 transform 定位样式 */
-  style?: React.CSSProperties;
-}) {
-  const ctx = useContext(CanvasItemContext);
-  return (
-    <div
-      className={`canvas-item-wrapper ${injectedClassName ?? ""}`}
-      style={injectedStyle}
-      data-item-key={itemKey}
-    >
+};
+
+export const CanvasItem = React.forwardRef<HTMLDivElement, CanvasItemProps>(
+  function CanvasItem(
+    { itemKey, children, className: injectedClassName, style: injectedStyle, ...rest },
+    ref
+  ) {
+    const ctx = useContext(CanvasItemContext);
+    return (
+      <div
+        ref={ref}
+        className={`canvas-item-wrapper ${injectedClassName ?? ""}`}
+        style={injectedStyle}
+        data-item-key={itemKey}
+        {...rest}
+      >
       {ctx.customizing && (
         <div className="drag-handle canvas-drag-bar">
           <i className="ri-drag-move-2-line" aria-hidden />
@@ -68,9 +75,10 @@ export function CanvasItem({
         />
       )}
       {children}
-    </div>
-  );
-}
+      </div>
+    );
+  }
+);
 
 interface CanvasLayoutProps {
   layout: Layout[];
