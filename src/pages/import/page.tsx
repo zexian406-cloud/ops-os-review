@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import * as XLSX from "xlsx";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
@@ -168,9 +168,19 @@ export default function ImportPage() {
 
   /* 导入日期范围（用户可指定数据对应的日期，默认今天） */
   const todayStr = () => new Date().toISOString().slice(0, 10);
+  const lastWeekStr = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().slice(0, 10);
+  };
   const [importDateStart, setImportDateStart] = useState(todayStr);
   const [importDateEnd, setImportDateEnd] = useState(todayStr);
   const importDateLabel = importDateStart === importDateEnd ? importDateStart : `${importDateStart} ~ ${importDateEnd}`;
+
+  /* 日期冲突检测：检查所选日期是否已有快照数据 */
+  const [existingDates, setExistingDates] = useState<Set<string>>(new Set());
+  const [dateConflict, setDateConflict] = useState(false);
+  const [conflictCount, setConflictCount] = useState(0);
 
   /* 导入模式选择 */
   const [modeModal, setModeModal] = useState(false);
@@ -204,6 +214,14 @@ export default function ImportPage() {
   const [clearing, setClearing] = useState(false);
   const [clearMsg, setClearMsg] = useState<string | null>(null);
 
+  /* 加载已有快照日期，用于冲突检测 */
+  const loadExistingDates = useCallback(async () => {
+    const snaps = await db.dailySnapshot.toArray();
+    const dates = new Set(snaps.map((s) => s.date));
+    setExistingDates(dates);
+    return dates;
+  }, []);
+
   useEffect(() => {
     getCloudConfig().then((c) => {
       if (c) {
@@ -219,18 +237,37 @@ export default function ImportPage() {
         setSelectedShopId(allShops[0].id);
       }
     });
+    loadExistingDates();
   }, []);
 
-  // 导入完成后自动同步店铺记录
+  /* 日期变更时检查冲突 */
+  useEffect(() => {
+    const check = async () => {
+      const dates = existingDates.size > 0 ? existingDates : await loadExistingDates();
+      if (dates.has(importDateStart)) {
+        const count = await db.dailySnapshot.where("date").equals(importDateStart).count();
+        setDateConflict(true);
+        setConflictCount(count);
+      } else {
+        setDateConflict(false);
+        setConflictCount(0);
+      }
+    };
+    check();
+  }, [importDateStart, existingDates, loadExistingDates]);
+
+  // 导入完成后自动同步店铺记录 + 刷新已有日期
   const prevImporting = useRef<string | null>(null);
   useEffect(() => {
     if (prevImporting.current !== null && importing === null) {
       ensureDefaultShops().then(() => {
         getAllShops().then(setShops);
       });
+      loadExistingDates();
+      db.dailySnapshot.count().then((n) => setImportCounts((prev) => ({ ...prev, snapshots: n })));
     }
     prevImporting.current = importing;
-  }, [importing]);
+  }, [importing, loadExistingDates]);
 
   /* ────────── 通用 Excel 解析 ────────── */
   const parseExcelFile = async (file: File) => {
@@ -1174,34 +1211,66 @@ export default function ImportPage() {
       </div>
 
       {/* ── 数据日期选择器 ── */}
-      <div className="flex flex-wrap items-center gap-3 rounded-[14px] border border-background-200/70 bg-background-100/50 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <i className="ri-calendar-range-line text-[16px] text-foreground-500" aria-hidden />
-          <span className="text-[13px] font-medium text-foreground-700">数据日期：</span>
+      <div className="rounded-[14px] border border-background-200/70 bg-background-100/50 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <i className="ri-calendar-range-line text-[16px] text-foreground-500" aria-hidden />
+            <span className="text-[13px] font-medium text-foreground-700">数据日期：</span>
+          </div>
+          <input
+            type="date"
+            value={importDateStart}
+            onChange={(e) => setImportDateStart(e.target.value)}
+            className="rounded-md border border-background-300/70 bg-background-50 px-3 py-1.5 text-[13px] text-foreground-700 focus:border-primary-500 focus:outline-none cursor-pointer"
+          />
+          <span className="text-[11px] text-foreground-400">至</span>
+          <input
+            type="date"
+            value={importDateEnd}
+            onChange={(e) => setImportDateEnd(e.target.value)}
+            className="rounded-md border border-background-300/70 bg-background-50 px-3 py-1.5 text-[13px] text-foreground-700 focus:border-primary-500 focus:outline-none cursor-pointer"
+          />
+          {/* 快速选择按钮 */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => { setImportDateStart(todayStr()); setImportDateEnd(todayStr()); }}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer whitespace-nowrap transition-colors ${
+                importDateStart === todayStr()
+                  ? "bg-primary-500 text-white"
+                  : "border border-background-300/70 bg-background-50 text-foreground-500 hover:bg-background-100 hover:text-foreground-800"
+              }`}
+            >
+              本周
+            </button>
+            <button
+              type="button"
+              onClick={() => { const d = lastWeekStr(); setImportDateStart(d); setImportDateEnd(d); }}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer whitespace-nowrap transition-colors ${
+                importDateStart === lastWeekStr()
+                  ? "bg-accent-500 text-white"
+                  : "border border-background-300/70 bg-background-50 text-foreground-500 hover:bg-background-100 hover:text-foreground-800"
+              }`}
+            >
+              上周
+            </button>
+          </div>
         </div>
-        <input
-          type="date"
-          value={importDateStart}
-          onChange={(e) => setImportDateStart(e.target.value)}
-          className="rounded-md border border-background-300/70 bg-background-50 px-3 py-1.5 text-[13px] text-foreground-700 focus:border-primary-500 focus:outline-none cursor-pointer"
-        />
-        <span className="text-[11px] text-foreground-400">至</span>
-        <input
-          type="date"
-          value={importDateEnd}
-          onChange={(e) => setImportDateEnd(e.target.value)}
-          className="rounded-md border border-background-300/70 bg-background-50 px-3 py-1.5 text-[13px] text-foreground-700 focus:border-primary-500 focus:outline-none cursor-pointer"
-        />
-        <button
-          type="button"
-          onClick={() => { setImportDateStart(todayStr()); setImportDateEnd(todayStr()); }}
-          className="rounded-md border border-background-300/70 bg-background-50 px-2.5 py-1 text-[11px] font-medium text-foreground-500 hover:bg-background-100 hover:text-foreground-800 cursor-pointer whitespace-nowrap"
-        >
-          重置为今天
-        </button>
-        <span className="text-[11px] text-foreground-400">
-          快照和库存记录将标记为起始日期，方便按时间追溯历史数据。
-        </span>
+        {/* 日期冲突警告 */}
+        {dateConflict ? (
+          <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-secondary-300 bg-secondary-50 px-3 py-2">
+            <i className="ri-error-warning-line mt-0.5 text-[14px] text-secondary-700" aria-hidden />
+            <div className="flex-1 text-[12px]">
+              <span className="font-semibold text-secondary-800">该日期已有 {conflictCount} 条快照数据。</span>
+              <span className="text-secondary-600"> 继续导入将与现有数据合并（新值覆盖旧值）。如需导入上周数据，请点击「上周」按钮选择上周日期，避免覆盖本周数据。</span>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-foreground-400">
+            <i className="ri-information-line" aria-hidden />
+            <span>快照和库存记录将标记为起始日期。<strong className="text-foreground-600">导入上周数据时请选择上周的日期</strong>，否则会与本周数据合并覆盖。</span>
+          </div>
+        )}
       </div>
 
       {/* ── Tab 切换器 ── */}
@@ -1251,7 +1320,7 @@ export default function ImportPage() {
               {
                 icon: "ri-bar-chart-line",
                 title: "2. 周销量（每周一，合并原运营数据导入）",
-                body: "从 Amazon 后台导出近7天日均销量和近30天销量，导入即可。系统会自动创建新的日期快照，上周数据不会覆盖——Dashboard 自动算本周 vs 上周的环比变化。模板已含 ASIN/品名/MSKU/店铺/评分/评论数/广告费比/退货率/退款率/产品链接/竞品链接，按 MSKU 行填写可展示各变体独立指标和自然/广告订单占比；不写 SKU 时可直接以 ASIN 或 MSKU 匹配；品名/店铺/链接等信息会自动写入 SKU 主档（已存在则仅补空），竞品链接多个用换行分隔。",
+                body: "从 Amazon 后台导出近7天日均销量和近30天销量，导入即可。系统会自动创建新的日期快照，上周数据不会覆盖——Dashboard 自动算本周 vs 上周的环比变化。注意：导入前请确认「数据日期」选择正确——本周数据选「本周」，上周数据选「上周」，否则同一天的数据会合并覆盖。模板已含 ASIN/品名/MSKU/店铺/评分/评论数/广告费比/退货率/退款率/产品链接/竞品链接，按 MSKU 行填写可展示各变体独立指标和自然/广告订单占比；不写 SKU 时可直接以 ASIN 或 MSKU 匹配；品名/店铺/链接等信息会自动写入 SKU 主档（已存在则仅补空），竞品链接多个用换行分隔。",
               },
               {
                 icon: "ri-archive-line",
@@ -1297,6 +1366,7 @@ export default function ImportPage() {
             </div>
             <ul className="mt-2 space-y-1.5 pl-5 text-[12px]">
               <li><strong>周一上午：</strong>依次导入「周销量」「FBA 库存明细」「仓库明细」「在途明细」（各点一次上传即可）</li>
+              <li><strong>数据日期选择：</strong>导入本周数据点「本周」按钮，补导上周数据点「上周」按钮——日期不同则数据独立保存、不会覆盖，Dashboard 自动生成环比对比</li>
               <li><strong>周销量模板已含 MSKU 级指标：</strong>同一 SKU 的不同 MSKU 各占一行，填写各自的评分/广告费比/退货率/退款率，系统自动按 MSKU 独立存储，不再串用</li>
               <li><strong>每月初或头程变动时：</strong>导入「头程更新」；FOB 变动请在「SKU 标识符」表里更新</li>
               <li><strong>产品链接/竞品链接：</strong>在「SKU 标识符」或「周销量」表中填写，竞品链接多个用换行分隔，导入后 SKU 详情页可点击跳转</li>
@@ -1676,7 +1746,20 @@ export default function ImportPage() {
               <p className="mt-1 text-sm text-foreground-500">
                 文件：{pendingFile.name}
               </p>
+              <p className="mt-0.5 text-[12px] text-foreground-400">
+                数据日期：<span className="font-medium text-foreground-600">{importDateLabel}</span>
+              </p>
             </div>
+            {/* 日期冲突警告 */}
+            {dateConflict && (
+              <div className="mt-3 flex items-start gap-2 rounded-lg border border-secondary-300 bg-secondary-50 px-3 py-2">
+                <i className="ri-error-warning-line mt-0.5 text-[14px] text-secondary-700" aria-hidden />
+                <div className="flex-1 text-[12px] text-secondary-700">
+                  <span className="font-semibold">警告：该日期已有 {conflictCount} 条数据。</span>
+                  继续导入将合并覆盖。如要导入上周数据，请先关闭此弹窗，点击「上周」按钮选择正确日期。
+                </div>
+              </div>
+            )}
             <div className="mt-5 space-y-3">
               <button
                 type="button"

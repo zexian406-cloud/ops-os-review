@@ -358,9 +358,9 @@ h1, h2, h3, h4, h5, h6 {
   position: relative;
 }
 
-/* ── 浏览模式：内容溢出时滚动 ── */
+/* ── 浏览模式：自动测高使内容贴合卡片，隐藏溢出（滚动条会挤占宽度影响测高） ── */
 .canvas-layout-viewing .react-grid-item {
-  overflow: auto;
+  overflow: hidden;
   border-radius: 14px;
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, createContext, useContext } from "react";
 import { GridLayout, useContainerWidth, getCompactor, type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -139,10 +139,22 @@ export default function CanvasLayout({
   // 仅在用户拖拽/缩放完成（onDragStop / onResizeStop）时才持久化。
   const [internalLayout, setInternalLayout] = useState<Layout[]>(layout);
 
+  // ── ref 镜像内部布局 ──
+  // measureAndAdjust / handleResizeStop 通过 ref 读取最新的 internalLayout，避免闭包过期
+  const internalLayoutRef = useRef(internalLayout);
+  internalLayoutRef.current = internalLayout;
+
+  // ── 记录用户手动调整过高度的卡片 key ──
+  // 自动测高会跳过这些卡片，尊重用户的手动设定。
+  // 仅在外部布局变化（重置/显隐模块）时清空，切换浏览/编辑模式不清空。
+  const manuallyResizedRef = useRef<Set<string>>(new Set());
+
   // 外部 layout 变化时（重置、显隐模块）同步到内部状态
   const layoutKey = JSON.stringify(layout);
   useEffect(() => {
     setInternalLayout(layout);
+    // 外部布局变化视为一次重置：清空手动调整记录，重新启用自动测高
+    manuallyResizedRef.current = new Set();
   }, [layoutKey]);
 
   // Safety: never render GridLayout with width=0 — causes all cards to collapse
@@ -165,14 +177,109 @@ export default function CanvasLayout({
     });
   }, []);
 
-  // onDragStop / onResizeStop: 用户交互完成，持久化到父组件
+  // onDragStop: 用户拖拽完成，持久化到父组件
   const handleDragStop = useCallback((newLayout: Layout) => {
     onLayoutChange([...newLayout] as Layout[]);
   }, [onLayoutChange]);
 
+  // onResizeStop: 用户缩放完成，持久化到父组件
+  // 同时记录被手动调整高度的卡片：仅 h 变化视为手动缩放（位置变化不算），
+  // 之后自动测高会跳过这些卡片，尊重用户的手动设定
   const handleResizeStop = useCallback((newLayout: Layout) => {
-    onLayoutChange([...newLayout] as Layout[]);
+    const newLayoutArr = [...newLayout] as Layout[];
+    const prevByI = new Map(internalLayoutRef.current.map((it) => [it.i, it]));
+    for (const item of newLayoutArr) {
+      const prev = prevByI.get(item.i);
+      if (prev && prev.h !== item.h) {
+        manuallyResizedRef.current.add(item.i);
+      }
+    }
+    onLayoutChange(newLayoutArr);
   }, [onLayoutChange]);
+
+  // ── 自动测高 ──
+  // 浏览模式下测量每张卡片的自然内容高度，反推所需 h 并更新布局，
+  // 使卡片高度贴合内容（避免内容被裁剪或留白过多）。
+  // 栅格公式：卡片像素高度 = h * rowHeight + (h-1) * marginY = h*40 + (h-1)*12 = 52h - 12
+  // 反推：h = ceil((naturalHeight + 12) / 52)，最小 2 行
+  const measureAndAdjust = useCallback(() => {
+    if (customizing || !canRender) return;
+    const wrapper = containerRef.current;
+    if (!wrapper) return;
+
+    const gridItems = wrapper.querySelectorAll<HTMLElement>(".react-grid-item");
+    if (!gridItems.length) return;
+
+    const currentLayout = internalLayoutRef.current;
+    if (!currentLayout.length) return;
+    const layoutByI = new Map(currentLayout.map((it) => [it.i, it]));
+
+    // 浅拷贝当前布局，仅在确实需要调整时才替换状态
+    let changed = false;
+    const nextLayout = currentLayout.map((it) => ({ ...it }));
+    const nextByI = new Map(nextLayout.map((it) => [it.i, it]));
+
+    gridItems.forEach((gridItem) => {
+      // GridLayout v2 通过 cloneElement 把 "react-grid-item" 类名注入到 CanvasItem，
+      // 因此 .react-grid-item 与 .canvas-item-wrapper 通常是同一个元素；
+      // 这里同时兼容「同一元素」与「嵌套子元素」两种 DOM 结构。
+      const inner: HTMLElement | null = gridItem.classList.contains("canvas-item-wrapper")
+        ? gridItem
+        : gridItem.querySelector<HTMLElement>(".canvas-item-wrapper");
+      if (!inner) return;
+
+      const key = inner.dataset.itemKey ?? gridItem.dataset.itemKey;
+      if (!key) return;
+
+      // 跳过用户手动调整过高度的卡片
+      if (manuallyResizedRef.current.has(key)) return;
+
+      const layoutItem = layoutByI.get(key);
+      if (!layoutItem) return;
+
+      // 临时把内部容器设为 auto 以读取自然内容高度，测完立即还原。
+      // overflow 设为 hidden 防止滚动条挤占宽度从而影响高度测量。
+      const prevHeight = inner.style.height;
+      const prevOverflow = inner.style.overflow;
+      inner.style.height = "auto";
+      inner.style.overflow = "hidden";
+      const naturalHeight = inner.offsetHeight;
+      inner.style.height = prevHeight;
+      inner.style.overflow = prevOverflow;
+
+      if (naturalHeight <= 0) return;
+
+      const neededH = Math.max(2, Math.ceil((naturalHeight + 12) / 52));
+      if (neededH !== layoutItem.h) {
+        const target = nextByI.get(key);
+        if (target) {
+          target.h = neededH;
+          changed = true;
+        }
+      }
+    });
+
+    if (changed) {
+      setInternalLayout(nextLayout);
+    }
+  }, [customizing, canRender, containerRef]);
+
+  // useLayoutEffect：在绘制前同步测量并调整高度，避免视觉闪烁。
+  // React 18/19 中 useLayoutEffect 内的 setState 会同步重渲染（先于 paint），
+  // 因此用户不会看到旧的错误高度。
+  // 另设延时重测，处理图表等异步渲染的内容（recharts 等通常在 mount 后才完成布局）。
+  useLayoutEffect(() => {
+    if (customizing || !canRender) return;
+
+    measureAndAdjust();
+
+    const timeouts = [200, 600, 1500].map((delay) =>
+      window.setTimeout(() => measureAndAdjust(), delay)
+    );
+    return () => {
+      timeouts.forEach((id) => window.clearTimeout(id));
+    };
+  }, [customizing, canRender, measureAndAdjust, internalLayout]);
 
   // Context value for CanvasItem children
   const ctxValue = useRef<CanvasItemContextValue>({ customizing, onHideItem, onResetItemSize, onResetItemPosition });
