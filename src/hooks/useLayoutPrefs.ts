@@ -234,37 +234,44 @@ export const SKU_LABELS: Record<SkuDetailSectionKey, string> = {
 };
 
 /** 默认网格布局：12列自由画布，compactType=null 不自动压缩
- *  h 值基于 rowHeight=40px + margin=12px，内容溢出可滚动，用户可拖拽调整
- *  默认布局混合全宽 + 左右并排，避免纯竖版 */
+ *  h 值基于 rowHeight=40px + margin=12px
+ *  编辑模式下 drag bar 占 26px，实际可用高度 = h*40+(h-1)*12 - 26
+ *  KpiCard 内容高度 ~156px → h=4(170px可用) 最合适
+ *  各板块根据实际内容量定制 h 值 */
 const DEFAULT_SKU_GRID_LAYOUT: Record<SkuDetailSectionKey, GridItemLayout> = {
-  header:          { x: 0,  y: 0,  w: 12, h: 4 },
-  discountBanner:  { x: 0,  y: 4,  w: 12, h: 2 },
-  kpiSales7d:      { x: 0,  y: 6,  w: 2,  h: 3 },
-  kpiSales30d:     { x: 2,  y: 6,  w: 2,  h: 3 },
-  kpiInStock:      { x: 4,  y: 6,  w: 2,  h: 3 },
-  kpiInTransit:    { x: 6,  y: 6,  w: 2,  h: 3 },
-  kpiTotalStock:   { x: 8,  y: 6,  w: 2,  h: 3 },
-  kpiStockRatio:   { x: 10, y: 6,  w: 2,  h: 3 },
-  kpiCoverDays:    { x: 0,  y: 9,  w: 3,  h: 3 },
-  kpiCoverOnHand:  { x: 3,  y: 9,  w: 3,  h: 3 },
-  kpiCoverTransit: { x: 6,  y: 9,  w: 3,  h: 3 },
-  kpiLeadTime:     { x: 9,  y: 9,  w: 3,  h: 3 },
-  kpiRating:       { x: 0,  y: 12, w: 2,  h: 3 },
-  kpiReviewCount:  { x: 2,  y: 12, w: 2,  h: 3 },
-  kpiReturnRate:   { x: 4,  y: 12, w: 4,  h: 3 },
-  kpiAdRatio:      { x: 8,  y: 12, w: 2,  h: 3 },
-  kpiRefundFee:    { x: 10, y: 12, w: 2,  h: 3 },
-  kpiOrderRatio:   { x: 0,  y: 15, w: 12, h: 4 },
-  editData:        { x: 0,  y: 19, w: 6,  h: 8 },
-  profitAnalysis:  { x: 6,  y: 19, w: 6,  h: 8 },
-  costWaterfall:   { x: 0,  y: 27, w: 6,  h: 10 },
-  promoShipment:   { x: 6,  y: 27, w: 6,  h: 10 },
-  mixedReplenish:  { x: 0,  y: 37, w: 6,  h: 8 },
-  inventory:       { x: 6,  y: 37, w: 6,  h: 8 },
-  listing:         { x: 0,  y: 45, w: 12, h: 20 },
-  weekOverWeek:    { x: 0,  y: 65, w: 6,  h: 4 },
-  historyCharts:   { x: 6,  y: 65, w: 6,  h: 8 },
-  relatedTodos:    { x: 0,  y: 73, w: 12, h: 6 },
+  header:          { x: 0,  y: 0,  w: 12, h: 5 },   // 标题+MSKU+标签+价格，需 5
+  discountBanner:  { x: 0,  y: 5,  w: 12, h: 2 },   // 折扣横幅一行
+  // 第1行: 6个核心 KPI，每个 w=2 h=4
+  kpiSales7d:      { x: 0,  y: 7,  w: 2,  h: 4 },
+  kpiSales30d:     { x: 2,  y: 7,  w: 2,  h: 4 },
+  kpiInStock:      { x: 4,  y: 7,  w: 2,  h: 4 },
+  kpiInTransit:    { x: 6,  y: 7,  w: 2,  h: 4 },
+  kpiTotalStock:   { x: 8,  y: 7,  w: 2,  h: 4 },
+  kpiStockRatio:   { x: 10, y: 7,  w: 2,  h: 4 },
+  // 第2行: 4个覆盖 KPI，每个 w=3 h=4
+  kpiCoverDays:    { x: 0,  y: 11, w: 3,  h: 4 },
+  kpiCoverOnHand:  { x: 3,  y: 11, w: 3,  h: 4 },
+  kpiCoverTransit: { x: 6,  y: 11, w: 3,  h: 4 },
+  kpiLeadTime:     { x: 9,  y: 11, w: 3,  h: 4 },
+  // 第3行: 5个质量 KPI，退款率 mixed 模式更宽
+  kpiRating:       { x: 0,  y: 15, w: 2,  h: 4 },
+  kpiReviewCount:  { x: 2,  y: 15, w: 2,  h: 4 },
+  kpiReturnRate:   { x: 4,  y: 15, w: 4,  h: 4 },
+  kpiAdRatio:      { x: 8,  y: 15, w: 2,  h: 4 },
+  kpiRefundFee:    { x: 10, y: 15, w: 2,  h: 4 },
+  // 订单占比：含可视化条，需更多高度
+  kpiOrderRatio:   { x: 0,  y: 19, w: 12, h: 5 },
+  // 主体内容区
+  editData:        { x: 0,  y: 24, w: 6,  h: 7 },   // 可折叠编辑区
+  profitAnalysis:  { x: 6,  y: 24, w: 6,  h: 9 },   // 利润分析含图表
+  costWaterfall:   { x: 0,  y: 33, w: 6,  h: 8 },   // 成本瀑布图
+  promoShipment:   { x: 6,  y: 33, w: 6,  h: 8 },   // 促销发货建议
+  mixedReplenish:  { x: 0,  y: 41, w: 6,  h: 7 },   // 混卖补货 FBA+FBM
+  inventory:       { x: 6,  y: 41, w: 6,  h: 7 },   // 库存分析表
+  listing:         { x: 0,  y: 48, w: 12, h: 18 },  // Listing 优化大区块
+  weekOverWeek:    { x: 0,  y: 66, w: 6,  h: 3 },   // 上期对比一行
+  historyCharts:   { x: 6,  y: 66, w: 6,  h: 8 },   // 周环比三列
+  relatedTodos:    { x: 0,  y: 74, w: 12, h: 6 },   // 关联待办列表
 };
 
 /* ────────── Dashboard 默认画布布局 ──────────
@@ -341,7 +348,7 @@ const DEFAULT_SKU_VISIBLE: SkuDetailSectionKey[] = [
   "relatedTodos",
 ];
 
-const STORAGE_KEY = "aos-layout-prefs-v12";
+const STORAGE_KEY = "aos-layout-prefs-v13";
 
 function loadPrefs(): LayoutPrefs {
   try {
