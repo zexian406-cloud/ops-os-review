@@ -168,11 +168,41 @@ export default function ImportPage() {
 
   /* 导入日期范围（用户可指定数据对应的日期，默认今天） */
   const todayStr = () => new Date().toISOString().slice(0, 10);
-  const lastWeekStr = () => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7);
-    return d.toISOString().slice(0, 10);
+
+  /* 计算周一日期：getDay() 返回 0=周日..6=周六，统一换算到周一 */
+  const getMonday = (base: Date): Date => {
+    const d = new Date(base);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day; // 周日回到上一个周一，其他天回到本周一
+    d.setDate(d.getDate() + diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
   };
+
+  const fmtDate = (d: Date): string => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  /* 本周：周一 ~ 周日 */
+  const thisWeekRange = (): [string, string] => {
+    const mon = getMonday(new Date());
+    const sun = new Date(mon);
+    sun.setDate(sun.getDate() + 6);
+    return [fmtDate(mon), fmtDate(sun)];
+  };
+
+  /* 上周：上周一 ~ 上周日 */
+  const lastWeekRange = (): [string, string] => {
+    const mon = getMonday(new Date());
+    mon.setDate(mon.getDate() - 7);
+    const sun = new Date(mon);
+    sun.setDate(sun.getDate() + 6);
+    return [fmtDate(mon), fmtDate(sun)];
+  };
+
   const [importDateStart, setImportDateStart] = useState(todayStr);
   const [importDateEnd, setImportDateEnd] = useState(todayStr);
   const importDateLabel = importDateStart === importDateEnd ? importDateStart : `${importDateStart} ~ ${importDateEnd}`;
@@ -240,21 +270,27 @@ export default function ImportPage() {
     loadExistingDates();
   }, []);
 
-  /* 日期变更时检查冲突 */
+  /* 日期变更时检查冲突：直接查询数据库，不依赖 existingDates 状态（避免空 Set 导致无限循环） */
   useEffect(() => {
+    let cancelled = false;
     const check = async () => {
-      const dates = existingDates.size > 0 ? existingDates : await loadExistingDates();
-      if (dates.has(importDateStart)) {
+      try {
         const count = await db.dailySnapshot.where("date").equals(importDateStart).count();
-        setDateConflict(true);
-        setConflictCount(count);
-      } else {
-        setDateConflict(false);
-        setConflictCount(0);
+        if (cancelled) return;
+        if (count > 0) {
+          setDateConflict(true);
+          setConflictCount(count);
+        } else {
+          setDateConflict(false);
+          setConflictCount(0);
+        }
+      } catch {
+        // date 索引不存在时静默跳过
       }
     };
     check();
-  }, [importDateStart, existingDates, loadExistingDates]);
+    return () => { cancelled = true; };
+  }, [importDateStart]);
 
   // 导入完成后自动同步店铺记录 + 刷新已有日期
   const prevImporting = useRef<string | null>(null);
@@ -1234,9 +1270,9 @@ export default function ImportPage() {
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => { setImportDateStart(todayStr()); setImportDateEnd(todayStr()); }}
+              onClick={() => { const [s, e] = thisWeekRange(); setImportDateStart(s); setImportDateEnd(e); }}
               className={`rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer whitespace-nowrap transition-colors ${
-                importDateStart === todayStr()
+                importDateStart === thisWeekRange()[0]
                   ? "bg-primary-500 text-white"
                   : "border border-background-300/70 bg-background-50 text-foreground-500 hover:bg-background-100 hover:text-foreground-800"
               }`}
@@ -1245,9 +1281,9 @@ export default function ImportPage() {
             </button>
             <button
               type="button"
-              onClick={() => { const d = lastWeekStr(); setImportDateStart(d); setImportDateEnd(d); }}
+              onClick={() => { const [s, e] = lastWeekRange(); setImportDateStart(s); setImportDateEnd(e); }}
               className={`rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer whitespace-nowrap transition-colors ${
-                importDateStart === lastWeekStr()
+                importDateStart === lastWeekRange()[0]
                   ? "bg-accent-500 text-white"
                   : "border border-background-300/70 bg-background-50 text-foreground-500 hover:bg-background-100 hover:text-foreground-800"
               }`}
