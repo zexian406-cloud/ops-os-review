@@ -53,6 +53,10 @@ export function CanvasItem({
       style={injectedStyle}
       data-item-key={itemKey}
     >
+      {/* 拖拽手柄提示 — hover 时显示，引导用户拖动卡片 */}
+      <div className="canvas-drag-handle no-drag" aria-hidden>
+        <i className="ri-drag-move-2-line" />
+      </div>
       {ctx.customizing && (ctx.onHideItem || ctx.onResetItemSize || ctx.onResetItemPosition) && (
         <CardMenu
           itemKey={itemKey}
@@ -162,7 +166,7 @@ export default function CanvasLayout({
             layout={internalLayout}
             width={safeWidth}
             gridConfig={{ cols: 12, rowHeight: 40, margin: [12, 12], containerPadding: [0, 0] }}
-            dragConfig={{ enabled: customizing }}
+            dragConfig={{ enabled: true, cancel: 'input, textarea, select, button, a, .no-drag, [role="button"], .ri-' }}
             resizeConfig={{ enabled: customizing }}
             compactor={FREE_FORM_COMPACTOR}
             onLayoutChange={handleLayoutChange}
