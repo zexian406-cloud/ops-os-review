@@ -27,6 +27,60 @@ const deltaArrow = (cur: number, prev: number, inverse = false) => {
   return <span className={`font-semibold ${color}`}>{arrow} {fmt(Math.abs(d))}</span>;
 };
 
+/* ────────── 时间维度工具 ────────── */
+type Dimension = "date" | "week" | "month";
+
+/** 获取 ISO 周号：返回 "YYYY-Www" 格式 */
+function getWeekKey(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = (tmp.getUTCDay() + 6) % 7; // 周一=0
+  tmp.setUTCDate(tmp.getUTCDate() - dayNum + 3); // 定位到本周四
+  const firstThu = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 4));
+  const weekNum = 1 + Math.round(((tmp.getTime() - firstThu.getTime()) / 86400000 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
+  return `${tmp.getUTCFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+}
+
+/** 获取月号：返回 "YYYY-MM" 格式 */
+function getMonthKey(dateStr: string): string {
+  return dateStr.slice(0, 7);
+}
+
+/** 根据维度获取分组 key */
+function getPeriodKey(dateStr: string, dim: Dimension): string {
+  if (dim === "week") return getWeekKey(dateStr);
+  if (dim === "month") return getMonthKey(dateStr);
+  return dateStr;
+}
+
+/** 获取周期的可读标签 */
+function getPeriodLabel(key: string, dim: Dimension): string {
+  if (dim === "date") return key;
+  if (dim === "month") {
+    const [y, m] = key.split("-");
+    return `${y}年${parseInt(m)}月`;
+  }
+  // week: "2026-W32" → "2026 第32周"
+  const [y, w] = key.split("-W");
+  return `${y} 第${parseInt(w)}周`;
+}
+
+/** 获取周期包含的日期范围标签 */
+function getPeriodRange(key: string, dim: Dimension, datesInPeriod: string[]): string {
+  if (dim === "date") return key;
+  if (datesInPeriod.length === 0) return "";
+  const sorted = [...datesInPeriod].sort();
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  if (first === last) return first;
+  // 格式化为 MM/DD
+  const fmtMd = (d: string) => {
+    const [, m, dd] = d.split("-");
+    return `${parseInt(m)}/${parseInt(dd)}`;
+  };
+  return `${fmtMd(first)} ~ ${fmtMd(last)}`;
+}
+
 /* ────────── 聚合计算 ────────── */
 interface AggMetrics {
   salesSum: number;       // 日均销量总和
@@ -40,8 +94,33 @@ interface AggMetrics {
   skuCount: number;       // SKU总数
 }
 
-function aggregate(snapshots: Map<string, DailySnapshot>): AggMetrics {
-  const vals = Array.from(snapshots.values());
+/** 聚合多个日期的快照数据。
+ *  对于周/月维度，同一 SKU 在不同日期的快照取最新一条。
+ */
+function aggregateSnapshots(
+  snapshots: DailySnapshot[],
+  datesInPeriod: string[],
+): Map<string, DailySnapshot> {
+  // 按 SKU 分组，每个 SKU 取该周期内最新日期的快照
+  const dateSet = new Set(datesInPeriod);
+  const bySku = new Map<string, DailySnapshot[]>();
+  for (const s of snapshots) {
+    if (!dateSet.has(s.date)) continue;
+    const arr = bySku.get(s.sku) ?? [];
+    arr.push(s);
+    bySku.set(s.sku, arr);
+  }
+  const result = new Map<string, DailySnapshot>();
+  for (const [sku, arr] of bySku) {
+    // 取最新日期的快照
+    arr.sort((a, b) => b.date.localeCompare(a.date));
+    result.set(sku, arr[0]);
+  }
+  return result;
+}
+
+function aggregate(snapMap: Map<string, DailySnapshot>): AggMetrics {
+  const vals = Array.from(snapMap.values());
   if (vals.length === 0) {
     return { salesSum: 0, salesCount: 0, avgAdRatio: 0, avgRating: 0, avgReturnRate: 0, avgProfitMargin: 0, totalStock: 0, totalAdSpend: 0, skuCount: 0 };
   }
@@ -103,29 +182,52 @@ function MetricCard({
 export default function HistoryPage() {
   const { snapshots, skuMaster, loading, reload } = useOpsData();
 
+  // 时间维度：单日 / 按周 / 按月
+  const [dimension, setDimension] = useState<Dimension>("date");
+
   // 获取所有唯一日期（降序）
   const allDates = useMemo(() => {
     const dates = Array.from(new Set(snapshots.map((s) => s.date))).sort((a, b) => b.localeCompare(a));
     return dates;
   }, [snapshots]);
 
-  // 选中的两个日期
-  const [curDate, setCurDate] = useState<string>("");
-  const [prevDate, setPrevDate] = useState<string>("");
+  // 按维度分组的周期
+  const periods = useMemo(() => {
+    const grouped = new Map<string, string[]>(); // key → dates in this period
+    for (const d of allDates) {
+      const key = getPeriodKey(d, dimension);
+      const arr = grouped.get(key) ?? [];
+      arr.push(d);
+      grouped.set(key, arr);
+    }
+    // 按周期 key 降序排列
+    const sorted = Array.from(grouped.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+    return sorted;
+  }, [allDates, dimension]);
+
+  // 选中的两个周期
+  const [curPeriod, setCurPeriod] = useState<string>("");
+  const [prevPeriod, setPrevPeriod] = useState<string>("");
   // SKU查找表
   const [skuMap, setSkuMap] = useState<Map<string, SkuMaster>>(new Map());
   // 搜索关键词
   const [search, setSearch] = useState("");
 
-  // 初始化默认日期：最新两个
+  // 维度切换时重置选择
   useEffect(() => {
-    if (allDates.length >= 2 && !curDate && !prevDate) {
-      setCurDate(allDates[0]);
-      setPrevDate(allDates[1]);
-    } else if (allDates.length >= 1 && !curDate) {
-      setCurDate(allDates[0]);
+    setCurPeriod("");
+    setPrevPeriod("");
+  }, [dimension]);
+
+  // 初始化默认周期：最新两个
+  useEffect(() => {
+    if (periods.length >= 2 && !curPeriod && !prevPeriod) {
+      setCurPeriod(periods[0][0]);
+      setPrevPeriod(periods[1][0]);
+    } else if (periods.length >= 1 && !curPeriod) {
+      setCurPeriod(periods[0][0]);
     }
-  }, [allDates, curDate, prevDate]);
+  }, [periods, curPeriod, prevPeriod]);
 
   // 加载SKU主档
   useEffect(() => {
@@ -135,22 +237,13 @@ export default function HistoryPage() {
     })();
   }, []);
 
-  // 按日期构建快照Map
-  const curSnapshots = useMemo(() => {
-    const map = new Map<string, DailySnapshot>();
-    for (const s of snapshots) {
-      if (s.date === curDate) map.set(s.sku, s);
-    }
-    return map;
-  }, [snapshots, curDate]);
+  // 当前周期和上期的日期列表
+  const curDates = useMemo(() => periods.find(([k]) => k === curPeriod)?.[1] ?? [], [periods, curPeriod]);
+  const prevDates = useMemo(() => periods.find(([k]) => k === prevPeriod)?.[1] ?? [], [periods, prevPeriod]);
 
-  const prevSnapshots = useMemo(() => {
-    const map = new Map<string, DailySnapshot>();
-    for (const s of snapshots) {
-      if (s.date === prevDate) map.set(s.sku, s);
-    }
-    return map;
-  }, [snapshots, prevDate]);
+  // 按周期聚合快照
+  const curSnapshots = useMemo(() => aggregateSnapshots(snapshots, curDates), [snapshots, curDates]);
+  const prevSnapshots = useMemo(() => aggregateSnapshots(snapshots, prevDates), [snapshots, prevDates]);
 
   // 聚合指标
   const curAgg = useMemo(() => aggregate(curSnapshots), [curSnapshots]);
@@ -234,7 +327,7 @@ export default function HistoryPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-foreground-950">历史对比</h1>
-            <p className="text-sm text-foreground-500">本周 vs 上周数据对比分析</p>
+            <p className="text-sm text-foreground-500">支持按日/周/月维度对比运营数据</p>
           </div>
         </div>
         <div className="rounded-2xl border border-background-200/70 bg-background-50 p-6">
@@ -256,6 +349,8 @@ export default function HistoryPage() {
     );
   }
 
+  const dimLabels: Record<Dimension, string> = { date: "单日", week: "按周", month: "按月" };
+
   return (
     <div className="mx-auto max-w-7xl p-6">
       {/* 标题 */}
@@ -265,44 +360,85 @@ export default function HistoryPage() {
         </div>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-foreground-950">历史对比</h1>
-          <p className="text-sm text-foreground-500">选择两个时间点，对比全站运营指标变化</p>
+          <p className="text-sm text-foreground-500">选择时间维度和周期，对比全站运营指标变化</p>
         </div>
         <Link to="/operations" className="rounded-lg border border-background-300 bg-background-50 px-3 py-1.5 text-[13px] font-medium text-foreground-700 hover:bg-background-100">
           <i className="ri-arrow-left-line mr-1" />返回
         </Link>
       </div>
 
-      {/* 日期选择器 */}
+      {/* 维度切换 + 周期选择器 */}
       <div className="mb-6 rounded-2xl border border-background-200/70 bg-background-50 p-4">
         <div className="flex flex-wrap items-end gap-4">
+          {/* 维度切换 */}
           <div>
-            <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-500">本期（最新）</label>
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-500">时间维度</label>
+            <div className="flex rounded-lg border border-background-200 bg-white p-0.5">
+              {(Object.keys(dimLabels) as Dimension[]).map((dim) => (
+                <button
+                  key={dim}
+                  type="button"
+                  onClick={() => setDimension(dim)}
+                  className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                    dimension === dim
+                      ? "bg-primary-500 text-white"
+                      : "text-foreground-600 hover:bg-background-100"
+                  }`}
+                >
+                  {dimLabels[dim]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 本期选择 */}
+          <div>
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-500">本期</label>
             <select
-              value={curDate}
-              onChange={(e) => setCurDate(e.target.value)}
+              value={curPeriod}
+              onChange={(e) => setCurPeriod(e.target.value)}
               className="rounded-lg border border-background-200 bg-white px-3 py-2 text-[13px] text-foreground-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200/50"
             >
-              {allDates.map((d) => <option key={d} value={d}>{d}</option>)}
+              {periods.map(([key, dates]) => (
+                <option key={key} value={key}>
+                  {getPeriodLabel(key, dimension)}
+                  {dimension !== "date" && dates.length > 1 ? `（${dates.length}次导入，${getPeriodRange(key, dimension, dates)}）` : ""}
+                </option>
+              ))}
             </select>
           </div>
+
+          {/* 上期选择 */}
           <div>
             <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-500">上期（对比基准）</label>
             <select
-              value={prevDate}
-              onChange={(e) => setPrevDate(e.target.value)}
+              value={prevPeriod}
+              onChange={(e) => setPrevPeriod(e.target.value)}
               className="rounded-lg border border-background-200 bg-white px-3 py-2 text-[13px] text-foreground-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200/50"
             >
-              {allDates.map((d) => <option key={d} value={d}>{d}</option>)}
+              {periods.map(([key, dates]) => (
+                <option key={key} value={key}>
+                  {getPeriodLabel(key, dimension)}
+                  {dimension !== "date" && dates.length > 1 ? `（${dates.length}次导入，${getPeriodRange(key, dimension, dates)}）` : ""}
+                </option>
+              ))}
             </select>
           </div>
           <div className="flex-1" />
           <div className="text-[12px] text-foreground-500">
-            共 {allDates.length} 个快照日期 · {skuCompareData.length} 个 SKU 参与对比
+            共 {periods.length} 个{dimLabels[dimension]}周期 · {allDates.length} 次导入 · {skuCompareData.length} 个 SKU
           </div>
         </div>
-        {curDate && prevDate && curDate === prevDate && (
+        {curPeriod && prevPeriod && curPeriod === prevPeriod && (
           <div className="mt-3 rounded-lg bg-secondary-50 px-3 py-2 text-[12px] text-secondary-700">
-            <i className="ri-information-line mr-1" />本期和上期选择了相同日期，对比结果将全部为 0。请选择不同的日期。
+            <i className="ri-information-line mr-1" />本期和上期选择了相同周期，对比结果将全部为 0。请选择不同的周期。
+          </div>
+        )}
+        {dimension !== "date" && curDates.length > 0 && (
+          <div className="mt-3 rounded-lg bg-primary-50 px-3 py-2 text-[12px] text-primary-700">
+            <i className="ri-information-line mr-1" />
+            {dimLabels[dimension]}维度下，同一 SKU 在该周期内多次导入的数据取最新一条快照进行对比。
+            本期含 {curDates.length} 次导入（{getPeriodRange(curPeriod, dimension, curDates)}），上期含 {prevDates.length} 次导入{prevDates.length > 0 ? `（${getPeriodRange(prevPeriod, dimension, prevDates)}）` : ""}。
           </div>
         )}
       </div>
@@ -342,10 +478,10 @@ export default function HistoryPage() {
         </div>
         <div className="mt-3 flex items-center justify-center gap-6 text-[12px]">
           <span className="flex items-center gap-1.5">
-            <span className="inline-block h-3 w-3 rounded-full bg-primary-500" />本期 ({curDate})
+            <span className="inline-block h-3 w-3 rounded-full bg-primary-500" />本期 ({curPeriod ? getPeriodLabel(curPeriod, dimension) : "—"})
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="inline-block h-3 w-3 rounded-full bg-background-400" />上期 ({prevDate})
+            <span className="inline-block h-3 w-3 rounded-full bg-background-400" />上期 ({prevPeriod ? getPeriodLabel(prevPeriod, dimension) : "—"})
           </span>
         </div>
       </div>
