@@ -311,6 +311,7 @@ export default function SkuDetail() {
   const [editListing, setEditListing] = useState(false);   // Listing 优化
   const [skuSaving, setSkuSaving] = useState(false);
   const [skuMsg, setSkuMsg] = useState<string | null>(null);
+  const [editProfit, setEditProfit] = useState(false); // 盈利分析编辑（需在 contentVersion useEffect 之前声明，避免 TDZ）
 
   // 编辑区域展开/折叠 → 递增 contentVersion → 触发 CanvasLayout 重新测高
   useEffect(() => { setContentVersion((v) => v + 1); }, [editProduct, editPackage, editListing, editOpen, editProfit, customizing]);
@@ -456,7 +457,6 @@ export default function SkuDetail() {
   }, [editSku, reload]);
 
   // ── 盈利分析编辑 ──
-  const [editProfit, setEditProfit] = useState(false);
   const [profitEdit, setProfitEdit] = useState<SkuMaster | null>(null);
   const [profitSaving, setProfitSaving] = useState(false);
   const [profitMsg, setProfitMsg] = useState<string | null>(null);
