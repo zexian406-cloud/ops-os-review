@@ -203,7 +203,7 @@ export default function CanvasLayout({
   // 栅格公式：卡片像素高度 = h * rowHeight + (h-1) * marginY = h*40 + (h-1)*12 = 52h - 12
   // 反推：h = ceil((naturalHeight + 12) / 52)，最小 2 行
   const measureAndAdjust = useCallback(() => {
-    if (customizing || !canRender) return;
+    if (!canRender) return;
     const wrapper = containerRef.current;
     if (!wrapper) return;
 
@@ -262,16 +262,20 @@ export default function CanvasLayout({
     if (changed) {
       setInternalLayout(nextLayout);
     }
-  }, [customizing, canRender, containerRef]);
+  }, [canRender, containerRef]);
 
   // useLayoutEffect：在绘制前同步测量并调整高度，避免视觉闪烁。
   // React 18/19 中 useLayoutEffect 内的 setState 会同步重渲染（先于 paint），
   // 因此用户不会看到旧的错误高度。
   // 另设延时重测，处理图表等异步渲染的内容（recharts 等通常在 mount 后才完成布局）。
   useLayoutEffect(() => {
-    if (customizing || !canRender) return;
+    if (!canRender) return;
 
     measureAndAdjust();
+
+    // 自定义模式下只做一次初始测量（含拖拽手柄高度），不做持续重测，
+    // 避免干扰用户手动拖拽/缩放。
+    if (customizing) return;
 
     const timeouts = [200, 600, 1500].map((delay) =>
       window.setTimeout(() => measureAndAdjust(), delay)
