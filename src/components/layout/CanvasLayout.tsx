@@ -121,6 +121,7 @@ interface CanvasLayoutProps {
  * 页面应使用 <CanvasItem key={key} itemKey={key}> 包装每个区块。
  */
 const FREE_FORM_COMPACTOR = getCompactor(null, false, false);
+const VERTICAL_COMPACTOR = getCompactor("vertical", false, false);
 
 export default function CanvasLayout({
   layout,
@@ -300,7 +301,7 @@ export default function CanvasLayout({
             gridConfig={{ cols: 12, rowHeight: 40, margin: [12, 12], containerPadding: [0, 0] }}
             dragConfig={{ enabled: customizing, handle: '.drag-handle', cancel: 'input, textarea, select, button, a, .no-drag' }}
             resizeConfig={{ enabled: customizing }}
-            compactor={FREE_FORM_COMPACTOR}
+            compactor={customizing ? FREE_FORM_COMPACTOR : VERTICAL_COMPACTOR}
             autoSize={true}
             onLayoutChange={handleLayoutChange}
             onDragStop={handleDragStop}
