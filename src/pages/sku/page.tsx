@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useCallback, useRef, type DragEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
-import { db, getAllShops } from "@/domain/db";
+import { db, getAllShops, ensureDefaultShops } from "@/domain/db";
 import { computeAll, computeWarehouseTotals, isCostFullyMissing, isReturnRateMissing } from "@/domain/calculator";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
@@ -516,9 +516,9 @@ export default function SkuList() {
     return Array.from(result).sort();
   }, [shops, skuMaster]);
 
-  // Load shops on mount
+  // Load shops on mount — ensure default shops exist first
   useEffect(() => {
-    getAllShops().then(setShops);
+    ensureDefaultShops().then(() => getAllShops().then(setShops));
   }, []);
 
   const shopNameMap = useMemo(() => {
@@ -1150,6 +1150,7 @@ export default function SkuList() {
               onChange={(e) => setBatchShopTarget(e.target.value)}
               className="mt-4 w-full rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-sm text-foreground-800 focus:border-primary-500 focus:outline-none cursor-pointer"
             >
+              <option value="" disabled>请选择目标店铺…</option>
               {shops.map((shop) => (
                 <option key={shop.id} value={shop.id}>{shop.name}</option>
               ))}

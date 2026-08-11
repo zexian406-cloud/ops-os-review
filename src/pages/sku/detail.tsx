@@ -12,7 +12,7 @@ import {
 import { computeAll, computeWeeklyPromoCost, isCostFullyMissing, isReturnRateMissing, formatCoverDays, COVER_NO_SALES_SUB } from "@/domain/calculator";
 import { useOpsData } from "@/domain/store";
 import { computeDiagnosis, type DiagnosisResult } from "@/domain/diagnosis";
-import { upsertSnapshots, db, addOpsLog, deleteOpsLog, getAllShops } from "@/domain/db";
+import { upsertSnapshots, db, addOpsLog, deleteOpsLog, getAllShops, ensureDefaultShops } from "@/domain/db";
 import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
@@ -300,7 +300,7 @@ export default function SkuDetail() {
 
   // ── 店铺列表（用于店铺下拉选择）──
   const [shops, setShops] = useState<Shop[]>([]);
-  useEffect(() => { getAllShops().then(setShops); }, []);
+  useEffect(() => { ensureDefaultShops().then(() => getAllShops().then(setShops)); }, []);
 
   // 店铺 ID → 店铺名称查找
   const shopNameOf = useCallback((id: string): string => {
@@ -1593,26 +1593,36 @@ export default function SkuDetail() {
                           const allMs = editSku.msku.split(/[,\s，、·]+/).map((m) => m.trim()).filter(Boolean);
                           return (
                             <div className="space-y-1.5">
-                              {allMs.map((m) => (
+                              {allMs.map((m) => {
+                                const currentStore = (editSku.mskuStores?.[m]) || editSku.store;
+                                const storeInList = shops.some((s) => s.id === currentStore);
+                                return (
                                 <div key={m} className="flex items-center gap-2">
                                   <span className="mono-num inline-block rounded-[8px] bg-background-100 px-2.5 py-1 text-[12px] text-foreground-600 shrink-0 min-w-[120px]">
                                     {m}
                                   </span>
                                   <select
                                     className="flex-1 rounded-md border border-background-200 bg-background-50 px-2 py-1 text-[12px] text-foreground-700 focus:border-primary-400 focus:outline-none cursor-pointer"
-                                    value={(editSku.mskuStores?.[m]) || editSku.store}
+                                    value={currentStore}
                                     onChange={(e) => {
                                       const newStores = { ...(editSku.mskuStores ?? {}) };
                                       newStores[m] = e.target.value;
                                       updateEditSku({ mskuStores: newStores });
                                     }}
                                   >
+                                    {shops.length === 0 && (
+                                      <option value="" disabled>加载中…</option>
+                                    )}
+                                    {!storeInList && currentStore && (
+                                      <option value={currentStore}>{currentStore}（未匹配）</option>
+                                    )}
                                     {shops.map((shop) => (
                                       <option key={shop.id} value={shop.id}>{shop.name}</option>
                                     ))}
                                   </select>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           );
                         })()
@@ -1645,6 +1655,12 @@ export default function SkuDetail() {
                   <div>
                     <label className={labelCls}>店铺</label>
                     <select className={selectCls} value={editSku.store} onChange={(e) => updateEditSku({ store: e.target.value })}>
+                      {shops.length === 0 && (
+                        <option value="" disabled>加载中…</option>
+                      )}
+                      {editSku.store && !shops.some((s) => s.id === editSku.store) && (
+                        <option value={editSku.store}>{editSku.store}（未匹配）</option>
+                      )}
                       {shops.map((shop) => (
                         <option key={shop.id} value={shop.id}>{shop.name}</option>
                       ))}
