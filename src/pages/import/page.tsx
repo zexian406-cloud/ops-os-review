@@ -1411,6 +1411,41 @@ export default function ImportPage() {
                 title: "7. 头程更新（每月/变动时）",
                 body: "头程费与配送费在此更新，覆盖已有值。FOB 产品成本请在「SKU 标识符」表里一并维护（不再有独立入口）。也可在「参数中心 → SKU 供应链参数」手动修改。",
               },
+              {
+                icon: "ri-stack-line",
+                title: "8. 综合运营表一键导入",
+                body: "「综合运营表」Tab 支持把上述 7 个 Sheet 放在一个 Excel 文件里一次性导入。上传后系统自动识别各 Sheet 并分别解析。导入前可选择两种模式：「覆盖导入」= Excel 所有字段直接写入，空单元格会清空已有数据（适合首次导入或全量更新）；「部分更新」= 空单元格不覆盖已有数据，已有的 FOB/售价/头程/配送费等固定信息会保留（适合只改部分参数或补导销量/库存）。建议日常补导用「部分更新」，首次建库用「覆盖导入」。",
+              },
+              {
+                icon: "ri-shield-check-line",
+                title: "9. 数据健康报告（每次导入自动校验）",
+                body: "导入前系统自动按 9 条规则校验数据：错误行（如发货方式不在 FBA/FBM/混发 中）自动跳过、警告项（如售价≤0、FOB 为空）自动标记但仍写入、提示项（如销量异常偏低）仅标记。校验结果以弹窗展示，必须点「确认并继续」才写入数据库。可在「数据健康」页查看最近一次导入的完整报告。",
+              },
+              {
+                icon: "ri-error-warning-line",
+                title: "10. 日期冲突检测",
+                body: "选择数据日期时，系统自动检查该日期是否已有快照数据。如果已有数据，会显示橙色警告并提示已有条数。继续导入会与现有数据合并（新值覆盖旧值），不会删除旧数据。如要导入不同周的数据，请先点击「上周」或「上上周」按钮切换日期。",
+              },
+              {
+                icon: "ri-map-2-line",
+                title: "11. 仓库映射配置",
+                body: "「仓库映射」Tab 用于将领星下载的仓库名称映射到美东/美西/东南/中南四个区域。导入仓库明细时系统自动匹配区域并汇总库存。首次导入时未映射的仓库会自动猜测区域，之后可手动修改。映射关系保存后对所有历史数据生效。",
+              },
+              {
+                icon: "ri-magic-line",
+                title: "12. 列名模糊匹配",
+                body: "系统支持模糊匹配 Excel 列名，无需精确对齐。例如：FOB / 采购价 / 产品成本 / 含税成本 均识别为 FOB 成本；SKU / 产品SKU / SKU码 均识别为 SKU；近7天销量 / 7天销量 / 周销量 均识别为 7 天销量。导入后可在结果面板查看字段识别情况，确认匹配是否正确。",
+              },
+              {
+                icon: "ri-github-line",
+                title: "13. GitHub 云端同步",
+                body: "本地数据默认存储在 IndexedDB（浏览器本地）。在下方 GitHub 配置区填入 Personal Access Token（需仓库读写权限）、仓库路径、分支和文件路径，点「保存并校验配置」后即可「保存到 GitHub 云端」或「从 GitHub 拉取」。Token 仅存本地，不通过任何服务器中转。建议每周备份一次。",
+              },
+              {
+                icon: "ri-download-cloud-line",
+                title: "14. 模板下载与清空数据",
+                body: "每个导入 Tab 下方可下载对应的 Excel 模板（含表头示例和数据验证），也可下载 CSV 模板。如需清空所有本地数据（包括 SKU 主档、快照、库存、促销等全部表），点击「清空本地数据」按钮，确认后执行——此操作不可撤销，请先保存到 GitHub 云端备份。",
+              },
             ].map((item) => (
               <div key={item.title} className="flex gap-3 rounded-lg border border-background-200/70 bg-background-50 p-4">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent-100 text-[16px] text-accent-700">
@@ -1431,12 +1466,17 @@ export default function ImportPage() {
             <ul className="mt-2 space-y-1.5 pl-5 text-[12px]">
               <li><strong>周一上午：</strong>依次导入「周销量」「FBA 库存明细」「仓库明细」「在途明细」（各点一次上传即可）</li>
               <li><strong>数据日期选择：</strong>导入本周数据点「本周」，补导上周点「上周」，补导上上周点「上上周」——日期不同则数据独立保存、不会覆盖，Dashboard 自动生成环比对比</li>
+              <li><strong>导入模式选择：</strong>首次建库用「覆盖导入」；日常补导销量/库存用「部分更新」——空单元格不会清空已有的 FOB/售价/头程等固定信息</li>
+              <li><strong>数据健康报告：</strong>每次导入前会弹出校验结果，售价≤0/FOB 为空等警告会标记但不会阻断，确认后点「继续导入」写入</li>
               <li><strong>周销量模板已含 MSKU 级指标：</strong>同一 SKU 的不同 MSKU 各占一行，填写各自的评分/广告费比/退货率/退款率，系统自动按 MSKU 独立存储，不再串用</li>
+              <li><strong>列名无需精确对齐：</strong>系统支持模糊匹配（FOB/采购价/产品成本 均可识别），导入后可在结果面板确认匹配情况</li>
               <li><strong>每月初或头程变动时：</strong>导入「头程更新」；FOB 变动请在「SKU 标识符」表里更新</li>
               <li><strong>产品链接/竞品链接：</strong>在「SKU 标识符」或「周销量」表中填写，竞品链接多个用换行分隔，导入后 SKU 详情页可点击跳转</li>
+              <li><strong>仓库映射：</strong>首次导入仓库明细前，在「仓库映射」Tab 检查仓库名称→区域映射是否正确，未映射的仓库会自动猜测</li>
               <li><strong>促销报名后：</strong>去「促销运营中心」添加促销活动并录入成本，促销时间线自动生成</li>
               <li><strong>日常：</strong>打开 Dashboard 看今天需要处理的事，风险中心看异常，发货决策中心看补货建议</li>
-              <li><strong>需要备份：</strong>在下方 GitHub 配置里点「保存到 GitHub 云端」</li>
+              <li><strong>每周备份：</strong>在下方 GitHub 配置里点「保存到 GitHub 云端」，防止本地数据丢失</li>
+              <li><strong>模板下载：</strong>每个导入 Tab 下方可下载 Excel/CSV 模板，含表头示例和数据验证</li>
             </ul>
           </div>
         </Section>
