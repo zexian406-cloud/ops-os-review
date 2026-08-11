@@ -1594,33 +1594,45 @@ export default function SkuDetail() {
                           return (
                             <div className="space-y-1.5">
                               {allMs.map((m) => {
-                                const currentStore = (editSku.mskuStores?.[m]) || editSku.store;
-                                const storeInList = shops.some((s) => s.id === currentStore);
+                                const currentStore = (editSku.mskuStores?.[m]) || editSku.store || "";
                                 return (
-                                <div key={m} className="flex items-center gap-2">
-                                  <span className="mono-num inline-block rounded-[8px] bg-background-100 px-2.5 py-1 text-[12px] text-foreground-600 shrink-0 min-w-[120px]">
-                                    {m}
-                                  </span>
-                                  <select
-                                    className="flex-1 rounded-md border border-background-200 bg-background-50 px-2 py-1 text-[12px] text-foreground-700 focus:border-primary-400 focus:outline-none cursor-pointer"
-                                    value={currentStore}
-                                    onChange={(e) => {
-                                      const newStores = { ...(editSku.mskuStores ?? {}) };
-                                      newStores[m] = e.target.value;
-                                      updateEditSku({ mskuStores: newStores });
-                                    }}
-                                  >
-                                    {shops.length === 0 && (
-                                      <option value="" disabled>加载中…</option>
-                                    )}
-                                    {!storeInList && currentStore && (
-                                      <option value={currentStore}>{currentStore}（未匹配）</option>
-                                    )}
-                                    {shops.map((shop) => (
-                                      <option key={shop.id} value={shop.id}>{shop.name}</option>
-                                    ))}
-                                  </select>
-                                </div>
+                                  <div key={m} className="flex items-center gap-2 flex-wrap">
+                                    <span className="mono-num inline-block rounded-[8px] bg-background-100 px-2.5 py-1 text-[12px] text-foreground-600 shrink-0 min-w-[100px]">
+                                      {m}
+                                    </span>
+                                    <div className="flex flex-wrap gap-1">
+                                      {shops.length === 0 && (
+                                        <span className="text-[11px] text-foreground-400">加载中…</span>
+                                      )}
+                                      {shops.map((shop) => {
+                                        const active = currentStore === shop.id;
+                                        return (
+                                          <button
+                                            key={shop.id}
+                                            type="button"
+                                            onClick={() => {
+                                              const newStores = { ...(editSku.mskuStores ?? {}) };
+                                              newStores[m] = shop.id;
+                                              updateEditSku({ mskuStores: newStores });
+                                            }}
+                                            className={[
+                                              "rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer transition-colors",
+                                              active
+                                                ? "bg-primary-500 text-white"
+                                                : "bg-background-100 text-foreground-600 hover:bg-background-200",
+                                            ].join(" ")}
+                                          >
+                                            {shop.name}
+                                          </button>
+                                        );
+                                      })}
+                                      {currentStore && !shops.some((s) => s.id === currentStore) && (
+                                        <span className="rounded-md bg-warning-100 px-2.5 py-1 text-[11px] text-warning-700">
+                                          {currentStore}（未匹配）
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
                                 );
                               })}
                             </div>
@@ -1654,17 +1666,34 @@ export default function SkuDetail() {
                   </div>
                   <div>
                     <label className={labelCls}>店铺</label>
-                    <select className={selectCls} value={editSku.store} onChange={(e) => updateEditSku({ store: e.target.value })}>
+                    <div className="flex flex-wrap gap-1">
                       {shops.length === 0 && (
-                        <option value="" disabled>加载中…</option>
+                        <span className="text-[11px] text-foreground-400">加载中…</span>
                       )}
+                      {shops.map((shop) => {
+                        const active = editSku.store === shop.id;
+                        return (
+                          <button
+                            key={shop.id}
+                            type="button"
+                            onClick={() => updateEditSku({ store: shop.id })}
+                            className={[
+                              "rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer transition-colors",
+                              active
+                                ? "bg-primary-500 text-white"
+                                : "bg-background-100 text-foreground-600 hover:bg-background-200",
+                            ].join(" ")}
+                          >
+                            {shop.name}
+                          </button>
+                        );
+                      })}
                       {editSku.store && !shops.some((s) => s.id === editSku.store) && (
-                        <option value={editSku.store}>{editSku.store}（未匹配）</option>
+                        <span className="rounded-md bg-warning-100 px-2.5 py-1 text-[11px] text-warning-700">
+                          {editSku.store}（未匹配）
+                        </span>
                       )}
-                      {shops.map((shop) => (
-                        <option key={shop.id} value={shop.id}>{shop.name}</option>
-                      ))}
-                    </select>
+                    </div>
                   </div>
                   <div>
                     <label className={labelCls}>配送方式</label>
