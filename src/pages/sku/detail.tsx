@@ -180,9 +180,13 @@ export default function SkuDetail() {
     const latestSnap = history[history.length - 1];
     const defaultLeadTime = config?.defaultLeadTime ?? 40;
     const defaultSafetyStockDays = config?.defaultSafetyStockDays ?? 30;
-    const prevCalc = computeAll({ sku, snap: prev, inv, defaultLeadTime, defaultSafetyStockDays });
-    const latestCalc = computeAll({ sku, snap: latestSnap, inv, defaultLeadTime, defaultSafetyStockDays });
-    return { prev, latest: latestSnap, prevCalc, latestCalc };
+    try {
+      const prevCalc = computeAll({ sku, snap: prev, inv, defaultLeadTime, defaultSafetyStockDays });
+      const latestCalc = computeAll({ sku, snap: latestSnap, inv, defaultLeadTime, defaultSafetyStockDays });
+      return { prev, latest: latestSnap, prevCalc, latestCalc };
+    } catch {
+      return { prev, latest: latestSnap, prevCalc: null, latestCalc: null };
+    }
   }, [history, sku, inv, config]);
 
   const activeOrUpcomingPromo = skuPromos.find((p) => p.status === "active" || p.status === "upcoming");
@@ -507,17 +511,24 @@ export default function SkuDetail() {
       .map(([weekStart, snap]) => {
         const d = new Date(weekStart);
         const label = `${d.getMonth() + 1}/${d.getDate()}`;
+        const _sales7d = snap.dailySales7d ?? 0;
+        const _profit = snap.profit ?? 0;
+        const _adSpend = snap.adSpend ?? 0;
+        const _profitMargin = snap.profitMargin ?? 0;
+        const _adRatio = snap.adRatio ?? 0;
+        const _rating = snap.rating ?? 0;
+        const _returnRate = snap.returnRate ?? 0;
         return {
           weekLabel: label,
-          weeklySales: Math.round(snap.dailySales7d * 7),
-          weeklyProfit: Number((snap.profit * snap.dailySales7d * 7).toFixed(2)),
-          weeklyAdSpend: Number((snap.adSpend).toFixed(2)),
-          profitMargin: Number(snap.profitMargin.toFixed(2)),
-          adRatio: Number(snap.adRatio.toFixed(2)),
-          rating: Number(snap.rating.toFixed(2)),
-          returnRate: Number(snap.returnRate.toFixed(2)),
-          stockOnHand: snap.stockOnHand,
-          stockInTransit: snap.stockInTransit,
+          weeklySales: Math.round(_sales7d * 7),
+          weeklyProfit: Number((_profit * _sales7d * 7).toFixed(2)),
+          weeklyAdSpend: Number(_adSpend.toFixed(2)),
+          profitMargin: Number(_profitMargin.toFixed(2)),
+          adRatio: Number(_adRatio.toFixed(2)),
+          rating: Number(_rating.toFixed(2)),
+          returnRate: Number(_returnRate.toFixed(2)),
+          stockOnHand: snap.stockOnHand ?? 0,
+          stockInTransit: snap.stockInTransit ?? 0,
         };
       });
   }, [history]);
@@ -902,7 +913,7 @@ export default function SkuDetail() {
       {/* 广告费比 */}
       {latest && visibleKeys.includes("kpiAdRatio") && (
       <CanvasItem key="kpiAdRatio" itemKey="kpiAdRatio">
-        <KpiCard label="广告费比" value={`${latest.adRatio.toFixed(1)}%`} sub={skuWow ? deltaArrow(skuWow.adRatioDelta, true) : `阈值 ${config?.adRatioThreshold ?? 10}%`} icon="ri-megaphone-line" tone={latest.adRatio > (config?.adRatioThreshold ?? 10) * 2 ? "danger" : latest.adRatio > (config?.adRatioThreshold ?? 10) ? "warn" : "accent"} />
+        <KpiCard label="广告费比" value={`${(latest.adRatio ?? 0).toFixed(1)}%`} sub={skuWow ? deltaArrow(skuWow.adRatioDelta, true) : `阈值 ${config?.adRatioThreshold ?? 10}%`} icon="ri-megaphone-line" tone={(latest.adRatio ?? 0) > (config?.adRatioThreshold ?? 10) * 2 ? "danger" : (latest.adRatio ?? 0) > (config?.adRatioThreshold ?? 10) ? "warn" : "accent"} />
       </CanvasItem>
       )}
 
@@ -1359,7 +1370,7 @@ export default function SkuDetail() {
                 <ProfitRow label="单件净利" value={`$${grossProfit.toFixed(2)}`} bold tone={grossProfit < 0 ? "text-red-600" : "text-accent-700"} />
                 <ProfitRow label="净利率" value={costMissing ? "成本缺失" : `${grossMargin.toFixed(1)}%`} bold tone={costMissing ? "text-foreground-400" : (grossMargin < 0 ? "text-red-600" : grossMargin < 5 ? "text-secondary-700" : "text-accent-700")} />
                 <div className="my-1.5 h-px bg-background-200/50" />
-                <ProfitRow label="广告费比" value={`${latest ? latest.adRatio.toFixed(1) : "0"}%`} />
+                <ProfitRow label="广告费比" value={`${latest ? (latest.adRatio ?? 0).toFixed(1) : "0"}%`} />
                 <ProfitRow label="退货率" value={costMissing ? "缺失" : `${calcReturnRate.toFixed(1)}%`} />
                 <ProfitRow label="退款率" value={refundMissing ? "缺失" : `${calcRefundRate.toFixed(1)}%`} />
               </div>
@@ -1399,7 +1410,7 @@ export default function SkuDetail() {
                 <ProfitRow label="折扣净利" value={`$${discountProfit.toFixed(2)}`} bold tone={discountProfit < 0 ? "text-red-600" : "text-accent-700"} />
                 <ProfitRow label="折扣利润率" value={costMissing ? "成本缺失" : `${discountMargin.toFixed(1)}%`} bold tone={costMissing ? "text-foreground-400" : (discountMargin < 0 ? "text-red-600" : discountMargin < 5 ? "text-secondary-700" : "text-accent-700")} />
                 <div className="my-1.5 h-px bg-background-200/50" />
-                <ProfitRow label="折扣费比" value={`${latest ? latest.adRatio.toFixed(1) : "0"}%`} />
+                <ProfitRow label="折扣费比" value={`${latest ? (latest.adRatio ?? 0).toFixed(1) : "0"}%`} />
                 <ProfitRow label="折扣广告费(估)" value={`$${discountAdEstimated.toFixed(2)}`} />
                 <ProfitRow label="折扣退款率" value={`${(calcRefundRate ?? 0).toFixed(1)}%`} />
                 <ProfitRow label="折扣退款费(估)" value={`$${discountReturnFeeEstimated.toFixed(2)}`} />
@@ -1620,8 +1631,8 @@ export default function SkuDetail() {
         </div>
         {latest && (
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <DataTile label="7天销量" value={latest.dailySales7d.toFixed(1)} sub="日均" />
-            <DataTile label="30天销量" value={latest.monthlySales.toLocaleString()} />
+            <DataTile label="7天销量" value={(latest.dailySales7d ?? 0).toFixed(1)} sub="日均" />
+            <DataTile label="30天销量" value={(latest.monthlySales ?? 0).toLocaleString()} />
             <DataTile label="存销比" value={String(stockSalesRatio)} />
             <DataTile label="在库可售天数" value={`${formatCoverDays(daysOfCoverOnHand)} 天`} />
           </div>
@@ -2146,7 +2157,19 @@ export default function SkuDetail() {
 
       {/* ═══════ 本周 vs 上周对比 ═══════ */}
       {visibleKeys.includes("historyCharts") && (
-      latest && prevSnap ? (
+      latest && prevSnap ? (() => {
+        const lSales = latest.dailySales7d ?? 0;
+        const pSales = prevSnap.dailySales7d ?? 0;
+        const lProfit = latest.profit ?? 0;
+        const pProfit = prevSnap.profit ?? 0;
+        const lMargin = latest.profitMargin ?? 0;
+        const pMargin = prevSnap.profitMargin ?? 0;
+        const lAd = latest.adRatio ?? 0;
+        const pAd = prevSnap.adRatio ?? 0;
+        const salesDelta = lSales - pSales;
+        const profitDelta = lProfit - pProfit;
+        const marginDelta = lMargin - pMargin;
+        return (
         <CanvasItem key="historyCharts" itemKey="historyCharts">
         <Section title="本周 vs 上周环比" icon="ri-bar-chart-grouped-line" subtitle="近7天数据对比">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -2161,19 +2184,19 @@ export default function SkuDetail() {
               <div className="space-y-3">
                 <div className="rounded-lg bg-background-100/70 px-3 py-2.5">
                   <div className="text-[11px] text-foreground-500">本周（近7天日均）</div>
-                  <div className="mono-num mt-0.5 text-[22px] font-bold text-foreground-950">{latest.dailySales7d.toFixed(1)}</div>
+                  <div className="mono-num mt-0.5 text-[22px] font-bold text-foreground-950">{lSales.toFixed(1)}</div>
                 </div>
                 <div className="rounded-lg bg-background-100/50 px-3 py-2.5">
                   <div className="text-[11px] text-foreground-500">上周（近7天日均）</div>
-                  <div className="mono-num mt-0.5 text-[22px] font-bold text-foreground-900">{prevSnap.dailySales7d.toFixed(1)}</div>
+                  <div className="mono-num mt-0.5 text-[22px] font-bold text-foreground-900">{pSales.toFixed(1)}</div>
                 </div>
                 <div className="flex items-center gap-2 text-[12px]">
                   <span className="text-foreground-500">变化</span>
-                  <span className={`mono-num font-semibold ${(latest.dailySales7d - prevSnap.dailySales7d) >= 0 ? 'text-accent-600' : 'text-red-500'}`}>
-                    {(latest.dailySales7d - prevSnap.dailySales7d) >= 0 ? '↑' : '↓'} {Math.abs(latest.dailySales7d - prevSnap.dailySales7d).toFixed(1)}
+                  <span className={`mono-num font-semibold ${salesDelta >= 0 ? 'text-accent-600' : 'text-red-500'}`}>
+                    {salesDelta >= 0 ? '↑' : '↓'} {Math.abs(salesDelta).toFixed(1)}
                   </span>
-                  <span className={`mono-num font-semibold ${(latest.dailySales7d - prevSnap.dailySales7d) >= 0 ? 'text-accent-600' : 'text-red-500'}`}>
-                    ({prevSnap.dailySales7d > 0 ? (((latest.dailySales7d - prevSnap.dailySales7d) / prevSnap.dailySales7d) * 100).toFixed(1) : '—'}%)
+                  <span className={`mono-num font-semibold ${salesDelta >= 0 ? 'text-accent-600' : 'text-red-500'}`}>
+                    ({pSales > 0 ? ((salesDelta / pSales) * 100).toFixed(1) : '—'}%)
                   </span>
                 </div>
               </div>
@@ -2190,16 +2213,16 @@ export default function SkuDetail() {
               <div className="space-y-3">
                 <div className="rounded-lg bg-background-100/70 px-3 py-2.5">
                   <div className="text-[11px] text-foreground-500">本周单件净利</div>
-                  <div className={`mono-num mt-0.5 text-[22px] font-bold ${latest.profit >= 0 ? 'text-accent-700' : 'text-red-600'}`}>${latest.profit.toFixed(2)}</div>
+                  <div className={`mono-num mt-0.5 text-[22px] font-bold ${lProfit >= 0 ? 'text-accent-700' : 'text-red-600'}`}>${lProfit.toFixed(2)}</div>
                 </div>
                 <div className="rounded-lg bg-background-100/50 px-3 py-2.5">
                   <div className="text-[11px] text-foreground-500">上周单件净利</div>
-                  <div className={`mono-num mt-0.5 text-[22px] font-bold ${prevSnap.profit >= 0 ? 'text-foreground-900' : 'text-red-600'}`}>${prevSnap.profit.toFixed(2)}</div>
+                  <div className={`mono-num mt-0.5 text-[22px] font-bold ${pProfit >= 0 ? 'text-foreground-900' : 'text-red-600'}`}>${pProfit.toFixed(2)}</div>
                 </div>
                 <div className="flex items-center gap-2 text-[12px]">
                   <span className="text-foreground-500">变化</span>
-                  <span className={`mono-num font-semibold ${(latest.profit - prevSnap.profit) >= 0 ? 'text-accent-600' : 'text-red-500'}`}>
-                    {(latest.profit - prevSnap.profit) >= 0 ? '↑' : '↓'} ${Math.abs(latest.profit - prevSnap.profit).toFixed(2)}
+                  <span className={`mono-num font-semibold ${profitDelta >= 0 ? 'text-accent-600' : 'text-red-500'}`}>
+                    {profitDelta >= 0 ? '↑' : '↓'} ${Math.abs(profitDelta).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -2217,27 +2240,27 @@ export default function SkuDetail() {
                 <div className="rounded-lg bg-background-100/70 px-3 py-2.5">
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-foreground-500">本周净利率</span>
-                    <span className={`mono-num font-semibold ${latest.profitMargin >= 0 ? 'text-accent-700' : 'text-red-600'}`}>{latest.profitMargin.toFixed(1)}%</span>
+                    <span className={`mono-num font-semibold ${lMargin >= 0 ? 'text-accent-700' : 'text-red-600'}`}>{lMargin.toFixed(1)}%</span>
                   </div>
                   <div className="mt-1 flex items-center justify-between text-[11px]">
                     <span className="text-foreground-500">广告费比</span>
-                    <span className="mono-num font-semibold text-foreground-900">{latest.adRatio.toFixed(1)}%</span>
+                    <span className="mono-num font-semibold text-foreground-900">{lAd.toFixed(1)}%</span>
                   </div>
                 </div>
                 <div className="rounded-lg bg-background-100/50 px-3 py-2.5">
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-foreground-500">上周净利率</span>
-                    <span className={`mono-num font-semibold ${prevSnap.profitMargin >= 0 ? 'text-foreground-900' : 'text-red-600'}`}>{prevSnap.profitMargin.toFixed(1)}%</span>
+                    <span className={`mono-num font-semibold ${pMargin >= 0 ? 'text-foreground-900' : 'text-red-600'}`}>{pMargin.toFixed(1)}%</span>
                   </div>
                   <div className="mt-1 flex items-center justify-between text-[11px]">
                     <span className="text-foreground-500">广告费比</span>
-                    <span className="mono-num font-semibold text-foreground-700">{prevSnap.adRatio.toFixed(1)}%</span>
+                    <span className="mono-num font-semibold text-foreground-700">{pAd.toFixed(1)}%</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-[12px]">
                   <span className="text-foreground-500">净利率变化</span>
-                  <span className={`mono-num font-semibold ${(latest.profitMargin - prevSnap.profitMargin) >= 0 ? 'text-accent-600' : 'text-red-500'}`}>
-                    {(latest.profitMargin - prevSnap.profitMargin) >= 0 ? '↑' : '↓'} {Math.abs(latest.profitMargin - prevSnap.profitMargin).toFixed(1)}%
+                  <span className={`mono-num font-semibold ${marginDelta >= 0 ? 'text-accent-600' : 'text-red-500'}`}>
+                    {marginDelta >= 0 ? '↑' : '↓'} {Math.abs(marginDelta).toFixed(1)}%
                   </span>
                 </div>
               </div>
@@ -2245,7 +2268,9 @@ export default function SkuDetail() {
           </div>
         </Section>
         </CanvasItem>
-      ) : (
+        );
+      })()
+      : (
         <CanvasItem key="historyCharts" itemKey="historyCharts">
         <div className="rounded-[14px] border border-background-200/70 bg-background-100/60 px-4 py-6 text-center text-[13px] text-foreground-500">
           <i className="ri-bar-chart-grouped-line mb-2 block text-[28px] text-foreground-300" aria-hidden />
@@ -2405,8 +2430,8 @@ export default function SkuDetail() {
               </thead>
               <tbody>
                 <HistoryRow label="日均销量" prev={historyCompare.prev.dailySales7d} cur={historyCompare.latest.dailySales7d} unit="" digits={1} goodDir="up" />
-                <HistoryRow label="库存(总)" prev={historyCompare.prevCalc.inStockTotal} cur={historyCompare.latestCalc.inStockTotal} unit="" digits={0} goodDir="up" />
-                <HistoryRow label="利润率" prev={historyCompare.prevCalc.grossMargin} cur={historyCompare.latestCalc.grossMargin} unit="%" digits={1} goodDir="up" />
+                <HistoryRow label="库存(总)" prev={historyCompare.prevCalc?.inStockTotal} cur={historyCompare.latestCalc?.inStockTotal} unit="" digits={0} goodDir="up" />
+                <HistoryRow label="利润率" prev={historyCompare.prevCalc?.grossMargin} cur={historyCompare.latestCalc?.grossMargin} unit="%" digits={1} goodDir="up" />
                 <HistoryRow label="评分" prev={historyCompare.prev.rating} cur={historyCompare.latest.rating} unit="" digits={1} goodDir="up" />
               </tbody>
             </table>
@@ -2682,24 +2707,29 @@ function DiagnosisFactorsInline({ result }: { result: DiagnosisResult }) {
 /* ────────── 历史变化行 ────────── */
 function HistoryRow({ label, prev, cur, unit, digits, goodDir }: {
   label: string;
-  prev: number;
-  cur: number;
+  prev?: number;
+  cur?: number;
   unit: string;
   digits: number;
   goodDir: "up" | "down";
 }) {
-  const fmt = (v: number) => (digits === 0 ? Math.round(v).toLocaleString() : v.toFixed(digits));
-  const same = prev === cur;
-  const up = cur > prev;
+  const safePrev = (typeof prev === "number" && Number.isFinite(prev)) ? prev : 0;
+  const safeCur = (typeof cur === "number" && Number.isFinite(cur)) ? cur : 0;
+  const fmt = (v: number) => {
+    if (!Number.isFinite(v)) return "—";
+    return digits === 0 ? Math.round(v).toLocaleString() : v.toFixed(digits);
+  };
+  const same = safePrev === safeCur;
+  const up = safeCur > safePrev;
   const good = goodDir === "up" ? up : !up;
   const color = same ? "text-foreground-400" : good ? "text-accent-600" : "text-red-500";
   const arrow = same ? "→" : up ? "↑" : "↓";
   return (
     <tr>
       <td className="border-b border-background-200/50 px-3 py-2.5 text-[12px] font-medium text-foreground-600">{label}</td>
-      <td className="mono-num border-b border-background-200/50 px-3 py-2.5 text-foreground-700">{fmt(prev)}{unit}</td>
-      <td className="mono-num border-b border-background-200/50 px-3 py-2.5 font-semibold text-foreground-900">{fmt(cur)}{unit}</td>
-      <td className={`mono-num border-b border-background-200/50 px-3 py-2.5 font-semibold ${color}`}>{arrow} {fmt(Math.abs(cur - prev))}{unit}</td>
+      <td className="mono-num border-b border-background-200/50 px-3 py-2.5 text-foreground-700">{fmt(safePrev)}{unit}</td>
+      <td className="mono-num border-b border-background-200/50 px-3 py-2.5 font-semibold text-foreground-900">{fmt(safeCur)}{unit}</td>
+      <td className={`mono-num border-b border-background-200/50 px-3 py-2.5 font-semibold ${color}`}>{arrow} {fmt(Math.abs(safeCur - safePrev))}{unit}</td>
     </tr>
   );
 }
