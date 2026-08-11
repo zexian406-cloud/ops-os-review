@@ -1525,15 +1525,15 @@ function ChildRow({
   const mskuMetric = mskuMetricByMsku || mskuMetricByAsin;
   const mskuSnap: DailySnapshot | undefined = mskuMetric && snap ? {
     ...snap,
-    rating: mskuMetric.rating ?? snap.rating,
+    rating: mskuMetric.rating || snap.rating,
     reviewCount: mskuMetric.reviewCount ?? snap.reviewCount,
-    adRatio: mskuMetric.adRatio ?? snap.adRatio,
-    returnRate: mskuMetric.returnRate ?? snap.returnRate,
+    adRatio: mskuMetric.adRatio || snap.adRatio,
+    returnRate: mskuMetric.returnRate || snap.returnRate,
     refundRate: mskuMetric.refundRate ?? snap.refundRate,
-    dailySales7d: mskuMetric.sales7d ?? snap.dailySales7d,
+    dailySales7d: mskuMetric.sales7d || snap.dailySales7d,
     // sales30d 存的是30天总量 → monthlySales 用总量，dailySales30d 用总量/30
-    dailySales30d: mskuMetric.sales30d != null ? Math.round((mskuMetric.sales30d / 30) * 100) / 100 : snap.dailySales30d,
-    monthlySales: mskuMetric.sales30d ?? snap.monthlySales,
+    dailySales30d: mskuMetric.sales30d ? Math.round((mskuMetric.sales30d / 30) * 100) / 100 : snap.dailySales30d,
+    monthlySales: mskuMetric.sales30d || snap.monthlySales,
   } : snap;
   // FIX: 利润计算用 MSKU 自身售价（若有），否则回退到家族级 price
   const childForCalc = mskuMetric?.price != null

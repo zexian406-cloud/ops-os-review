@@ -295,6 +295,10 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
       if (!sku && msku) {
         sku = mskuToSku.get(msku) ?? "";
       }
+      // FIX: 当 sku 实际是 MSKU 编码时（销量导入表中 SKU 列可能存的是 MSKU 而非家族码），反查父 SKU
+      if (sku && mskuToSku.has(sku)) {
+        sku = mskuToSku.get(sku)!;
+      }
       if (!sku) continue;
       // 合并原运营数据导入：收集品名/店铺/ASIN/链接（first-wins）
       if (!infoAgg.has(sku)) {
@@ -378,8 +382,8 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
         if (m.adRatio == null && adRatio > 0) m.adRatio = Math.round(adRatio * 100) / 100;
         if (m.returnRate == null && returnRate > 0) m.returnRate = Math.round(returnRate * 100) / 100;
         if (m.refundRate == null && refundRate > 0) m.refundRate = Math.round(refundRate * 100) / 100;
-        if (m.sales7d == null) m.sales7d = daily7d;
-        if (m.sales30d == null) m.sales30d = monthlyRaw;
+        if (m.sales7d == null && daily7d > 0) m.sales7d = daily7d;
+        if (m.sales30d == null && monthlyRaw > 0) m.sales30d = monthlyRaw;
       }
     }
     // FIX: 销量(绝对值)取总和，比率类指标取平均。

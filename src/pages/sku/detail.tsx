@@ -117,18 +117,22 @@ export default function SkuDetail() {
   // FIX: focus=MSKU 时（从列表点击 MSKU 跳转），用 mskuMetrics 中的独立指标覆盖家族级快照，
   //      这样详情页 KPI 卡片/评分/退货率/退款率/广告费比 都展示该 MSKU 自身的值，
   //      而非家族平均值。无 focus 参数或无 mskuMetrics 时回退到 curSnap（向后兼容）。
+  // FIX: 用 || 而非 ?? ，当 MSKU 独立指标为 0/falsy 时回退到家族级数据，
+  //      避免旧数据或 0 值导致详情页显示 0 而总览正常。
+  // FIX: baseSnap 同时尝试 curSnap 和 history 兜底，避免 curSnap 为 undefined 时整个 focusedSnap 为空。
   const focusMetric = (sku && focusMsku && sku.mskuMetrics) ? sku.mskuMetrics[focusMsku] : undefined;
-  const focusedSnap: DailySnapshot | undefined = (focusMetric && curSnap) ? {
-    ...curSnap,
-    rating: focusMetric.rating ?? curSnap.rating,
-    reviewCount: focusMetric.reviewCount ?? curSnap.reviewCount,
-    adRatio: focusMetric.adRatio ?? curSnap.adRatio,
-    returnRate: focusMetric.returnRate ?? curSnap.returnRate,
-    refundRate: focusMetric.refundRate ?? curSnap.refundRate,
-    dailySales7d: focusMetric.sales7d ?? curSnap.dailySales7d,
-    dailySales30d: focusMetric.sales30d ?? curSnap.dailySales30d,
-    monthlySales: focusMetric.sales30d ?? curSnap.monthlySales,
-  } : curSnap;
+  const baseSnap = curSnap ?? history.at(-1);
+  const focusedSnap: DailySnapshot | undefined = (focusMetric && baseSnap) ? {
+    ...baseSnap,
+    rating: focusMetric.rating || baseSnap.rating,
+    reviewCount: focusMetric.reviewCount ?? baseSnap.reviewCount,
+    adRatio: focusMetric.adRatio || baseSnap.adRatio,
+    returnRate: focusMetric.returnRate || baseSnap.returnRate,
+    refundRate: focusMetric.refundRate ?? baseSnap.refundRate,
+    dailySales7d: focusMetric.sales7d || baseSnap.dailySales7d,
+    dailySales30d: focusMetric.sales30d ? Math.round((focusMetric.sales30d / 30) * 100) / 100 : baseSnap.dailySales30d,
+    monthlySales: focusMetric.sales30d || baseSnap.monthlySales,
+  } : baseSnap;
   // 优先使用 merged 快照（同日多来源导入已合并），避免取到运营导入的 0 值原始记录
   const latest = focusedSnap ?? history.at(-1);
   const prevSnap = (previousSnapshot?.get(skuId ?? "") ?? (parentSkuId ? previousSnapshot?.get(parentSkuId) : undefined));
