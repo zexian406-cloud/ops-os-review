@@ -315,6 +315,111 @@ export default function SkuDetail() {
     setEditSku((prev) => (prev ? { ...prev, ...patch } : prev));
   }, []);
 
+  // ── MSKU 转移到其他 SKU ──
+  const [transferMsku, setTransferMsku] = useState<string | null>(null); // 待转移的 MSKU
+  const [transferTarget, setTransferTarget] = useState<string>("");      // 目标 SKU
+  const [transferSearching, setTransferSearching] = useState(false);
+  const [transferSaving, setTransferSaving] = useState(false);
+
+  const executeTransferMsku = useCallback(async () => {
+    if (!editSku || !transferMsku || !transferTarget) return;
+    if (transferTarget === editSku.sku) {
+      alert("目标 SKU 与当前 SKU 相同，无需转移");
+      return;
+    }
+    setTransferSaving(true);
+    try {
+      // 1. 查找目标 SKU
+      const target = await db.skuMaster.where("sku").equals(transferTarget).first();
+      if (!target) {
+        alert(`未找到 SKU: ${transferTarget}`);
+        setTransferSaving(false);
+        return;
+      }
+
+      // 2. 从当前 SKU 移除该 MSKU 及其关联数据
+      const m = transferMsku;
+      const updatedCurrent = { ...editSku };
+      // 从 msku 字符串中移除
+      const currentMsus = (updatedCurrent.msku ?? "").split(/[,\s，、·]+/).filter(x => x.trim() && x.trim() !== m);
+      updatedCurrent.msku = currentMsus.length > 0 ? currentMsus.join(", ") : "";
+      // 移除关联数据
+      if (updatedCurrent.mskuStores) {
+        const ns = { ...updatedCurrent.mskuStores };
+        delete ns[m];
+        updatedCurrent.mskuStores = Object.keys(ns).length > 0 ? ns : undefined;
+      }
+      if (updatedCurrent.mskuAsins) {
+        const na = { ...updatedCurrent.mskuAsins };
+        delete na[m];
+        updatedCurrent.mskuAsins = Object.keys(na).length > 0 ? na : undefined;
+      }
+      if (updatedCurrent.mskuLinkTypes) {
+        const nl = { ...updatedCurrent.mskuLinkTypes };
+        delete nl[m];
+        updatedCurrent.mskuLinkTypes = Object.keys(nl).length > 0 ? nl : undefined;
+      }
+      if (updatedCurrent.mskuMetrics) {
+        const nm = { ...updatedCurrent.mskuMetrics };
+        delete nm[m];
+        updatedCurrent.mskuMetrics = Object.keys(nm).length > 0 ? nm : undefined;
+      }
+
+      // 3. 将 MSKU 及其关联数据添加到目标 SKU
+      const updatedTarget = { ...target };
+      const targetMsus = (updatedTarget.msku ?? "").split(/[,\s，、·]+/).map(x => x.trim()).filter(Boolean);
+      if (!targetMsus.includes(m)) targetMsus.push(m);
+      updatedTarget.msku = targetMsus.join(", ");
+      // 转移关联数据
+      updatedTarget.mskuStores = {
+        ...(updatedTarget.mskuStores ?? {}),
+        [m]: editSku.mskuStores?.[m] ?? editSku.store,
+      };
+      if (editSku.mskuAsins?.[m]) {
+        updatedTarget.mskuAsins = {
+          ...(updatedTarget.mskuAsins ?? {}),
+          [m]: editSku.mskuAsins[m],
+        };
+      }
+      if (editSku.mskuLinkTypes?.[m]) {
+        updatedTarget.mskuLinkTypes = {
+          ...(updatedTarget.mskuLinkTypes ?? {}),
+          [m]: editSku.mskuLinkTypes[m],
+        };
+      }
+      if (editSku.mskuMetrics?.[m]) {
+        updatedTarget.mskuMetrics = {
+          ...(updatedTarget.mskuMetrics ?? {}),
+          [m]: editSku.mskuMetrics[m],
+        };
+      }
+
+      // 4. 保存两个 SKU
+      await db.skuMaster.bulkPut([updatedCurrent, updatedTarget]);
+
+      // 5. 记录操作日志
+      await addOpsLog({
+        sku: editSku.sku,
+        msku: m,
+        skuName: editSku.name,
+        date: new Date().toISOString().slice(0, 10),
+        action: `MSKU 转移`,
+        detail: `将 MSKU ${m} 从 ${editSku.sku} 转移到 ${transferTarget}`,
+        operator: "system",
+      });
+
+      setEditSku(updatedCurrent);
+      setTransferMsku(null);
+      setTransferTarget("");
+      setSkuMsg(`MSKU ${m} 已转移到 ${transferTarget}`);
+      setTimeout(() => { setSkuMsg(null); reload(); }, 1500);
+    } catch (err) {
+      alert(`转移失败: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setTransferSaving(false);
+    }
+  }, [editSku, transferMsku, transferTarget, reload]);
+
   const saveSkuEdit = useCallback(async () => {
     if (!editSku) return;
     setSkuSaving(true);
@@ -1632,6 +1737,14 @@ export default function SkuDetail() {
                                         </span>
                                       )}
                                     </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setTransferMsku(m); setTransferTarget(""); }}
+                                      className="ml-auto rounded-md border border-background-200 px-2 py-1 text-[10px] text-foreground-500 hover:bg-background-100 hover:text-foreground-700 cursor-pointer transition-colors shrink-0"
+                                      title="将此 MSKU 转移到其他 SKU"
+                                    >
+                                      <i className="ri-arrow-left-right-line" aria-hidden /> 转移
+                                    </button>
                                   </div>
                                 );
                               })}
@@ -2409,6 +2522,59 @@ export default function SkuDetail() {
             )}
           </div>
         </Section>
+      )}
+
+      {/* ═══════ MSKU 转移弹窗 ═══════ */}
+      {transferMsku && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !transferSaving && setTransferMsku(null)} />
+          <div className="relative w-full max-w-sm rounded-2xl bg-background-50 p-6 shadow-xl">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-50 mx-auto">
+              <i className="ri-arrow-left-right-line text-[24px] text-primary-600" aria-hidden />
+            </div>
+            <h3 className="mt-3 text-center text-[15px] font-bold text-foreground-950">转移 MSKU</h3>
+            <p className="mt-1 text-center text-[13px] text-foreground-500">
+              将 MSKU <strong className="text-foreground-800">{transferMsku}</strong> 从当前 SKU 转移到：
+            </p>
+            <p className="mt-0.5 text-center text-[11px] text-foreground-400">
+              关联的店铺、ASIN、指标数据将一并转移
+            </p>
+            <div className="mt-4">
+              <label className="text-[11px] font-medium text-foreground-500">目标 SKU</label>
+              <input
+                type="text"
+                value={transferTarget}
+                onChange={(e) => setTransferTarget(e.target.value)}
+                placeholder="输入目标 SKU 编号"
+                className="mt-1 w-full rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-sm text-foreground-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
+                list="sku-list-datalist"
+              />
+              <datalist id="sku-list-datalist">
+                {skuMaster.map((s) => (
+                  <option key={s.sku} value={s.sku}>{s.sku} — {s.name}</option>
+                ))}
+              </datalist>
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setTransferMsku(null)}
+                disabled={transferSaving}
+                className="flex-1 rounded-lg border border-background-200 py-2 text-[13px] font-medium text-foreground-600 hover:bg-background-100 cursor-pointer whitespace-nowrap disabled:opacity-60"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={executeTransferMsku}
+                disabled={transferSaving || !transferTarget.trim()}
+                className="flex-1 rounded-[9px] bg-primary-500 py-2 text-[13px] font-semibold text-white hover:bg-primary-600 cursor-pointer whitespace-nowrap disabled:opacity-60"
+              >
+                {transferSaving ? "转移中..." : "确认转移"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
