@@ -148,9 +148,14 @@ export default function SkuDetail() {
   // Weekly promo cost for current SKU
   const weekPromoCost = useMemo(() => {
     if (!sku || !curSnap) return { total: 0, count: 0 };
-    const skuMap = new Map([[sku.sku, sku]]);
-    const snapMap = curSnap ? new Map([[sku.sku, curSnap]]) : new Map();
-    return computeWeeklyPromoCost(sku.sku, curSnap.date, manualPromotions, skuMap, snapMap);
+    try {
+      const skuMap = new Map([[sku.sku, sku]]);
+      const snapMap = curSnap ? new Map([[sku.sku, curSnap]]) : new Map();
+      return computeWeeklyPromoCost(sku.sku, curSnap.date, manualPromotions, skuMap, snapMap);
+    } catch (err) {
+      console.error("[SkuDetail] weekPromoCost threw:", err);
+      return { total: 0, count: 0 };
+    }
   }, [sku, curSnap, manualPromotions]);
 
   const skuShipment = useMemo(() => shipmentSuggestions.find((s) => s.sku === skuId), [shipmentSuggestions, skuId]);
@@ -159,18 +164,23 @@ export default function SkuDetail() {
   // ── 该 SKU 的活跃告警诊断（复用诊断引擎）──
   const skuDiagnoses = useMemo(() => {
     if (!sku || !curSnap) return [];
-    return alerts
-      .filter((a) => a.sku === skuId && a.severity !== "info")
-      .map((a) => {
-        const result = computeDiagnosis({
-          type: a.type,
-          sku,
-          latestSnap: curSnap,
-          previousSnap: prevSnap,
-          latestInv: inv,
+    try {
+      return alerts
+        .filter((a) => a.sku === skuId && a.severity !== "info")
+        .map((a) => {
+          const result = computeDiagnosis({
+            type: a.type,
+            sku,
+            latestSnap: curSnap,
+            previousSnap: prevSnap,
+            latestInv: inv,
+          });
+          return { alert: a, result };
         });
-        return { alert: a, result };
-      });
+    } catch (err) {
+      console.error("[SkuDetail] computeDiagnosis threw:", err);
+      return [];
+    }
   }, [alerts, skuId, curSnap, prevSnap, inv, sku]);
 
   // ── 历史变化（previous vs latest 快照）──
@@ -497,55 +507,65 @@ export default function SkuDetail() {
 
   // ── 按周聚合历史数据 ──
   const weeklyData = useMemo(() => {
-    const map = new Map<string, DailySnapshot>();
-    for (const s of history) {
-      const d = new Date(s.date);
-      const mon = new Date(d);
-      mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-      const key = mon.toISOString().slice(0, 10);
-      const existing = map.get(key);
-      if (!existing || s.date > existing.date) map.set(key, s);
+    try {
+      const map = new Map<string, DailySnapshot>();
+      for (const s of history) {
+        const d = new Date(s.date);
+        const mon = new Date(d);
+        mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+        const key = mon.toISOString().slice(0, 10);
+        const existing = map.get(key);
+        if (!existing || s.date > existing.date) map.set(key, s);
+      }
+      return Array.from(map.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([weekStart, snap]) => {
+          const d = new Date(weekStart);
+          const label = `${d.getMonth() + 1}/${d.getDate()}`;
+          const _sales7d = snap.dailySales7d ?? 0;
+          const _profit = snap.profit ?? 0;
+          const _adSpend = snap.adSpend ?? 0;
+          const _profitMargin = snap.profitMargin ?? 0;
+          const _adRatio = snap.adRatio ?? 0;
+          const _rating = snap.rating ?? 0;
+          const _returnRate = snap.returnRate ?? 0;
+          return {
+            weekLabel: label,
+            weeklySales: Math.round(_sales7d * 7),
+            weeklyProfit: Number((_profit * _sales7d * 7).toFixed(2)),
+            weeklyAdSpend: Number(_adSpend.toFixed(2)),
+            profitMargin: Number(_profitMargin.toFixed(2)),
+            adRatio: Number(_adRatio.toFixed(2)),
+            rating: Number(_rating.toFixed(2)),
+            returnRate: Number(_returnRate.toFixed(2)),
+            stockOnHand: snap.stockOnHand ?? 0,
+            stockInTransit: snap.stockInTransit ?? 0,
+          };
+        });
+    } catch (err) {
+      console.error("[SkuDetail] weeklyData threw:", err);
+      return [];
     }
-    return Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([weekStart, snap]) => {
-        const d = new Date(weekStart);
-        const label = `${d.getMonth() + 1}/${d.getDate()}`;
-        const _sales7d = snap.dailySales7d ?? 0;
-        const _profit = snap.profit ?? 0;
-        const _adSpend = snap.adSpend ?? 0;
-        const _profitMargin = snap.profitMargin ?? 0;
-        const _adRatio = snap.adRatio ?? 0;
-        const _rating = snap.rating ?? 0;
-        const _returnRate = snap.returnRate ?? 0;
-        return {
-          weekLabel: label,
-          weeklySales: Math.round(_sales7d * 7),
-          weeklyProfit: Number((_profit * _sales7d * 7).toFixed(2)),
-          weeklyAdSpend: Number(_adSpend.toFixed(2)),
-          profitMargin: Number(_profitMargin.toFixed(2)),
-          adRatio: Number(_adRatio.toFixed(2)),
-          rating: Number(_rating.toFixed(2)),
-          returnRate: Number(_returnRate.toFixed(2)),
-          stockOnHand: snap.stockOnHand ?? 0,
-          stockInTransit: snap.stockInTransit ?? 0,
-        };
-      });
   }, [history]);
 
   // ── 使用统一计算引擎 computeAll，覆盖全部13条规则 ──
   // FIX: 用 focusedSnap（含 MSKU 独立指标覆盖）而非 curSnap，保证 focus=MSKU 时 KPI 显示该 MSKU 自身值
   const calc = useMemo(() => {
     if (!sku) return null;
-    return computeAll({
-      sku,
-      snap: focusedSnap,
-      inv,
-      activePromo: activeOrUpcomingPromo,
-      defaultLeadTime: config?.defaultLeadTime ?? 40,
-      defaultSafetyStockDays: config?.defaultSafetyStockDays ?? 30,
-      promoCost: weekPromoCost.total,
-    });
+    try {
+      return computeAll({
+        sku,
+        snap: focusedSnap,
+        inv,
+        activePromo: activeOrUpcomingPromo,
+        defaultLeadTime: config?.defaultLeadTime ?? 40,
+        defaultSafetyStockDays: config?.defaultSafetyStockDays ?? 30,
+        promoCost: weekPromoCost.total,
+      });
+    } catch (err) {
+      console.error("[SkuDetail] computeAll threw:", err);
+      return null;
+    }
   }, [sku, focusedSnap, inv, activeOrUpcomingPromo, config, weekPromoCost]);
 
   // ── 计算实际渲染的 section keys ──
@@ -777,20 +797,20 @@ export default function SkuDetail() {
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-4 text-[13px]">
                     <span className="text-foreground-500">
-                      正常价 <strong className="mono-num text-foreground-900">${sku.price.toFixed(2)}</strong>
+                      正常价 <strong className="mono-num text-foreground-900">${(sku.price ?? 0).toFixed(2)}</strong>
                       <span className="mx-1 text-foreground-400">→</span>
-                      折扣价 <strong className="mono-num text-accent-700">${activeOrUpcomingPromo.discountPrice.toFixed(2)}</strong>
+                      折扣价 <strong className="mono-num text-accent-700">${(activeOrUpcomingPromo.discountPrice ?? 0).toFixed(2)}</strong>
                     </span>
                     <span className="h-5 w-px bg-background-300/70" />
                     <span className="text-foreground-500">
-                      折扣后净利润 <strong className={`mono-num ${discountProfit >= 0 ? "text-accent-700" : "text-red-600"}`}>${discountProfit.toFixed(2)}</strong>
+                      折扣后净利润 <strong className={`mono-num ${(discountProfit ?? 0) >= 0 ? "text-accent-700" : "text-red-600"}`}>${(discountProfit ?? 0).toFixed(2)}</strong>
                     </span>
                     <span className="text-foreground-500">
-                      折扣后利润率 <strong className={`mono-num ${discountMargin >= 0 ? "text-accent-700" : "text-red-600"}`}>{discountMargin.toFixed(1)}%</strong>
+                      折扣后利润率 <strong className={`mono-num ${(discountMargin ?? 0) >= 0 ? "text-accent-700" : "text-red-600"}`}>{(discountMargin ?? 0).toFixed(1)}%</strong>
                     </span>
                     <span className="h-5 w-px bg-background-300/70" />
                     <span className="text-foreground-500">
-                      正常利润率 <strong className={`mono-num ${grossMargin >= 0 ? "text-foreground-900" : "text-red-600"}`}>{grossMargin.toFixed(1)}%</strong>
+                      正常利润率 <strong className={`mono-num ${(grossMargin ?? 0) >= 0 ? "text-foreground-900" : "text-red-600"}`}>{(grossMargin ?? 0).toFixed(1)}%</strong>
                     </span>
                   </div>
                 </div>
@@ -902,7 +922,7 @@ export default function SkuDetail() {
         {sku.fulfillment === "mixed" ? (
           <div className="grid grid-cols-2 gap-2 h-full">
             <KpiCard label="退款率" value={refundMissing ? "缺失" : `${(latest.refundRate ?? 0).toFixed(1)}%`} sub={refundMissing ? "未导入" : ((latest.refundRate ?? 0) > 5 ? "⚠ 需关注" : "正常")} icon="ri-refund-2-line" tone={refundMissing ? "secondary" : ((latest.refundRate ?? 0) > 8 ? "danger" : (latest.refundRate ?? 0) > 5 ? "warn" : "accent")} />
-            <KpiCard label="FBA退货率" value={costMissing ? "缺失" : `${calcReturnRate.toFixed(1)}%`} sub={costMissing ? "成本缺失" : (calcReturnRate > 5 ? "⚠ 需关注" : "正常")} icon="ri-arrow-go-back-line" tone={costMissing ? "secondary" : (calcReturnRate > 8 ? "danger" : calcReturnRate > 5 ? "warn" : "accent")} />
+            <KpiCard label="FBA退货率" value={costMissing ? "缺失" : `${(calcReturnRate ?? 0).toFixed(1)}%`} sub={costMissing ? "成本缺失" : ((calcReturnRate ?? 0) > 5 ? "⚠ 需关注" : "正常")} icon="ri-arrow-go-back-line" tone={costMissing ? "secondary" : ((calcReturnRate ?? 0) > 8 ? "danger" : (calcReturnRate ?? 0) > 5 ? "warn" : "accent")} />
           </div>
         ) : (
           <KpiCard label="退款率" value={refundMissing ? "缺失" : `${(latest.refundRate ?? 0).toFixed(1)}%`} sub={refundMissing ? "未导入" : ((latest.refundRate ?? 0) > 5 ? "⚠ 需关注" : "正常")} icon="ri-refund-2-line" tone={refundMissing ? "secondary" : ((latest.refundRate ?? 0) > 8 ? "danger" : (latest.refundRate ?? 0) > 5 ? "warn" : "accent")} />
@@ -920,7 +940,7 @@ export default function SkuDetail() {
       {/* 退款费 */}
       {latest && visibleKeys.includes("kpiRefundFee") && (
       <CanvasItem key="kpiRefundFee" itemKey="kpiRefundFee">
-        <KpiCard label="退款费" value={`${returnFee.toFixed(2)}`} sub="近30天估算" icon="ri-refund-2-line" />
+        <KpiCard label="退款费" value={`$${(returnFee ?? 0).toFixed(2)}`} sub="近30天估算" icon="ri-refund-2-line" />
       </CanvasItem>
       )}
 
@@ -928,7 +948,7 @@ export default function SkuDetail() {
       {latest && visibleKeys.includes("kpiOrderRatio") && (
       <CanvasItem key="kpiOrderRatio" itemKey="kpiOrderRatio">
         {(() => {
-            const ad = latest.adRatio;
+            const ad = latest.adRatio ?? 0;
             const organic = Math.max(0, Math.min(100, 100 - ad));
             return (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -1165,11 +1185,11 @@ export default function SkuDetail() {
                 {/* 利润/利润率由系统联动计算，不手填 */}
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-medium text-foreground-500">单件利润 $（自动算）</span>
-                  <div className="w-full rounded-md border border-background-200 bg-background-100 px-2 py-1.5 text-[12px] text-foreground-900">{grossProfit.toFixed(2)}</div>
+                  <div className="w-full rounded-md border border-background-200 bg-background-100 px-2 py-1.5 text-[12px] text-foreground-900">{(grossProfit ?? 0).toFixed(2)}</div>
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-medium text-foreground-500">利润率 %（自动算）</span>
-                  <div className="w-full rounded-md border border-background-200 bg-background-100 px-2 py-1.5 text-[12px] text-foreground-900">{grossMargin.toFixed(1)}%</div>
+                  <div className="w-full rounded-md border border-background-200 bg-background-100 px-2 py-1.5 text-[12px] text-foreground-900">{(grossMargin ?? 0).toFixed(1)}%</div>
                 </div>
                 <EditableField label="评分" name="rating" defaultValue={latestForEdit.rating} step="0.1" />
                 {(sku.fulfillment === "FBA" || sku.fulfillment === "mixed") && (
@@ -1273,14 +1293,14 @@ export default function SkuDetail() {
               <span className="text-[13px] font-semibold text-foreground-900">销售总价</span>
               <span className="ml-auto flex flex-col items-end leading-tight">
                 {(() => {
-                  const mPrice = editProfit ? (profitEdit?.price ?? 0) : (focusMetric?.price ?? sku.price);
+                  const mPrice = editProfit ? (profitEdit?.price ?? 0) : (focusMetric?.price ?? sku.price ?? 0);
                   const mShipping = editProfit ? (profitEdit?.shippingFee ?? 0) : (focusMetric?.shippingFee ?? ((focusMetric?.listPrice ?? sku.listPrice) != null && mPrice != null) ? ((focusMetric?.listPrice ?? sku.listPrice)! - mPrice) : (sku.shippingFee ?? 0));
                   const mListPrice = editProfit ? (profitEdit?.listPrice ?? (mPrice + mShipping)) : (focusMetric?.listPrice ?? sku.listPrice ?? mPrice);
-                  const displayTotal = mListPrice ?? mPrice;
+                  const displayTotal = mListPrice ?? mPrice ?? 0;
                   return (
                     <>
-                      <span className="mono-num text-[13px] font-bold text-foreground-950">${displayTotal.toFixed(2)}</span>
-                      <span className="mono-num text-[10px] text-foreground-400">${mPrice.toFixed(2)} + ${mShipping.toFixed(2)}</span>
+                      <span className="mono-num text-[13px] font-bold text-foreground-950">${(displayTotal ?? 0).toFixed(2)}</span>
+                      <span className="mono-num text-[10px] text-foreground-400">${(mPrice ?? 0).toFixed(2)} + ${(mShipping ?? 0).toFixed(2)}</span>
                     </>
                   );
                 })()}
@@ -1349,30 +1369,30 @@ export default function SkuDetail() {
             ) : (
               /* ── 只读模式 ── */
               <div className="space-y-1 text-[13px]">
-                <ProfitRow label="售价" value={`$${sku.price.toFixed(2)}`} highlight />
+                <ProfitRow label="售价" value={`$${(sku.price ?? 0).toFixed(2)}`} highlight />
                 <ProfitRow label="买家运费" value={`$${(focusMetric?.shippingFee ?? sku.shippingFee ?? 0).toFixed(2)}`} />
-                <ProfitRow label="销售总价" value={`$${(focusMetric?.listPrice ?? sku.listPrice ?? sku.price).toFixed(2)}`} highlight />
+                <ProfitRow label="销售总价" value={`$${(focusMetric?.listPrice ?? sku.listPrice ?? sku.price ?? 0).toFixed(2)}`} highlight />
                 <div className="my-1.5 h-px bg-background-200/50" />
                 <ProfitRow label="FOB" value={`-$${(sku.costFob ?? 0).toFixed(2)}`} />
                 <ProfitRow label="头程" value={`-$${(sku.costShipping ?? 0).toFixed(2)}`} />
                 <ProfitRow label="尾程(配送费)" value={`-$${(sku.costDelivery ?? 0).toFixed(2)}`} />
-                <ProfitRow label="佣金" value={`-$${costCommission.toFixed(2)}`} inferred={isCommissionInferred} />
+                <ProfitRow label="佣金" value={`-$${(costCommission ?? 0).toFixed(2)}`} inferred={isCommissionInferred} />
                 <ProfitRow label="仓租" value={`-$${(sku.costStorage ?? 0).toFixed(2)}`} />
-                <ProfitRow label="广告费" value={`-$${costAd.toFixed(2)}`} inferred={isAdInferred} />
-                <ProfitRow label="退款损失" value={`-$${costRefundLoss.toFixed(2)}`} />
-                {costCoupon > 0 && <ProfitRow label="优惠券(历史)" value={`($${costCoupon.toFixed(2)})`} />}
-                {costPromo > 0 && <ProfitRow label="促销成本(手动)" value={`-$${costPromo.toFixed(2)}`} />}
+                <ProfitRow label="广告费" value={`-$${(costAd ?? 0).toFixed(2)}`} inferred={isAdInferred} />
+                <ProfitRow label="退款损失" value={`-$${(costRefundLoss ?? 0).toFixed(2)}`} />
+                {costCoupon > 0 && <ProfitRow label="优惠券(历史)" value={`($${(costCoupon ?? 0).toFixed(2)})`} />}
+                {costPromo > 0 && <ProfitRow label="促销成本(手动)" value={`-$${(costPromo ?? 0).toFixed(2)}`} />}
                 {weekPromoCost.count > 0 && (
-                  <div className="text-[11px] text-accent-600 italic text-right">{weekPromoCost.count} 条促销 · 含促销 ${costPromo.toFixed(2)}</div>
+                  <div className="text-[11px] text-accent-600 italic text-right">{weekPromoCost.count} 条促销 · 含促销 ${(costPromo ?? 0).toFixed(2)}</div>
                 )}
                 <div className="my-1.5 h-px bg-background-200/50" />
-                <ProfitRow label="总成本" value={`$${totalCost.toFixed(2)}`} bold />
-                <ProfitRow label="单件净利" value={`$${grossProfit.toFixed(2)}`} bold tone={grossProfit < 0 ? "text-red-600" : "text-accent-700"} />
-                <ProfitRow label="净利率" value={costMissing ? "成本缺失" : `${grossMargin.toFixed(1)}%`} bold tone={costMissing ? "text-foreground-400" : (grossMargin < 0 ? "text-red-600" : grossMargin < 5 ? "text-secondary-700" : "text-accent-700")} />
+                <ProfitRow label="总成本" value={`$${(totalCost ?? 0).toFixed(2)}`} bold />
+                <ProfitRow label="单件净利" value={`$${(grossProfit ?? 0).toFixed(2)}`} bold tone={(grossProfit ?? 0) < 0 ? "text-red-600" : "text-accent-700"} />
+                <ProfitRow label="净利率" value={costMissing ? "成本缺失" : `${(grossMargin ?? 0).toFixed(1)}%`} bold tone={costMissing ? "text-foreground-400" : ((grossMargin ?? 0) < 0 ? "text-red-600" : (grossMargin ?? 0) < 5 ? "text-secondary-700" : "text-accent-700")} />
                 <div className="my-1.5 h-px bg-background-200/50" />
-                <ProfitRow label="广告费比" value={`${latest ? (latest.adRatio ?? 0).toFixed(1) : "0"}%`} />
-                <ProfitRow label="退货率" value={costMissing ? "缺失" : `${calcReturnRate.toFixed(1)}%`} />
-                <ProfitRow label="退款率" value={refundMissing ? "缺失" : `${calcRefundRate.toFixed(1)}%`} />
+                <ProfitRow label="广告费比" value={`${latest ? ((latest.adRatio ?? 0)).toFixed(1) : "0"}%`} />
+                <ProfitRow label="退货率" value={costMissing ? "缺失" : `${(calcReturnRate ?? 0).toFixed(1)}%`} />
+                <ProfitRow label="退款率" value={refundMissing ? "缺失" : `${(calcRefundRate ?? 0).toFixed(1)}%`} />
               </div>
             )}
           </div>
@@ -1395,25 +1415,25 @@ export default function SkuDetail() {
             </div>
             {activeOrUpcomingPromo?.discountPrice ? (
               <div className="space-y-1 text-[13px]">
-                <ProfitRow label="折扣价格" value={`$${activeOrUpcomingPromo.discountPrice.toFixed(2)}`} highlight />
+                <ProfitRow label="折扣价格" value={`$${(activeOrUpcomingPromo.discountPrice ?? 0).toFixed(2)}`} highlight />
                 <div className="my-1.5 h-px bg-background-200/50" />
                 <ProfitRow label="FOB" value={`-$${(sku.costFob ?? 0).toFixed(2)}`} />
                 <ProfitRow label="头程" value={`-$${(sku.costShipping ?? 0).toFixed(2)}`} />
                 <ProfitRow label="尾程(配送费)" value={`-$${(sku.costDelivery ?? 0).toFixed(2)}`} />
-                <ProfitRow label="折扣佣金" value={`-$${discountCostCommission.toFixed(2)}`} inferred={isCommissionInferred} />
+                <ProfitRow label="折扣佣金" value={`-$${(discountCostCommission ?? 0).toFixed(2)}`} inferred={isCommissionInferred} />
                 <ProfitRow label="仓租" value={`-$${(sku.costStorage ?? 0).toFixed(2)}`} />
-                <ProfitRow label="折扣广告费" value={`-$${discountCostAd.toFixed(2)}`} inferred={isDiscountAdInferred} />
-                <ProfitRow label="折扣退款损失" value={`-$${discountCostRefundLoss.toFixed(2)}`} />
-                <ProfitRow label="优惠券" value={`(${discountCostCoupon.toFixed(2)})`} />
+                <ProfitRow label="折扣广告费" value={`-$${(discountCostAd ?? 0).toFixed(2)}`} inferred={isDiscountAdInferred} />
+                <ProfitRow label="折扣退款损失" value={`-$${(discountCostRefundLoss ?? 0).toFixed(2)}`} />
+                <ProfitRow label="优惠券" value={`(${(discountCostCoupon ?? 0).toFixed(2)})`} />
                 <div className="my-1.5 h-px bg-background-200/50" />
-                <ProfitRow label="折扣总成本" value={`$${discountTotalCost.toFixed(2)}`} bold />
-                <ProfitRow label="折扣净利" value={`$${discountProfit.toFixed(2)}`} bold tone={discountProfit < 0 ? "text-red-600" : "text-accent-700"} />
-                <ProfitRow label="折扣利润率" value={costMissing ? "成本缺失" : `${discountMargin.toFixed(1)}%`} bold tone={costMissing ? "text-foreground-400" : (discountMargin < 0 ? "text-red-600" : discountMargin < 5 ? "text-secondary-700" : "text-accent-700")} />
+                <ProfitRow label="折扣总成本" value={`$${(discountTotalCost ?? 0).toFixed(2)}`} bold />
+                <ProfitRow label="折扣净利" value={`$${(discountProfit ?? 0).toFixed(2)}`} bold tone={(discountProfit ?? 0) < 0 ? "text-red-600" : "text-accent-700"} />
+                <ProfitRow label="折扣利润率" value={costMissing ? "成本缺失" : `${(discountMargin ?? 0).toFixed(1)}%`} bold tone={costMissing ? "text-foreground-400" : ((discountMargin ?? 0) < 0 ? "text-red-600" : (discountMargin ?? 0) < 5 ? "text-secondary-700" : "text-accent-700")} />
                 <div className="my-1.5 h-px bg-background-200/50" />
-                <ProfitRow label="折扣费比" value={`${latest ? (latest.adRatio ?? 0).toFixed(1) : "0"}%`} />
-                <ProfitRow label="折扣广告费(估)" value={`$${discountAdEstimated.toFixed(2)}`} />
+                <ProfitRow label="折扣费比" value={`${latest ? ((latest.adRatio ?? 0)).toFixed(1) : "0"}%`} />
+                <ProfitRow label="折扣广告费(估)" value={`$${(discountAdEstimated ?? 0).toFixed(2)}`} />
                 <ProfitRow label="折扣退款率" value={`${(calcRefundRate ?? 0).toFixed(1)}%`} />
-                <ProfitRow label="折扣退款费(估)" value={`$${discountReturnFeeEstimated.toFixed(2)}`} />
+                <ProfitRow label="折扣退款费(估)" value={`$${(discountReturnFeeEstimated ?? 0).toFixed(2)}`} />
               </div>
             ) : (
               <div className="py-8 text-center text-[13px] text-foreground-500">
@@ -1447,7 +1467,7 @@ export default function SkuDetail() {
             <CostWaterfall label="单件净利" value={grossProfit} color={grossProfit >= 0 ? "bg-accent-500" : "bg-red-500"} isEnd />
             <div className="flex items-center justify-between text-[13px]">
               <span className="text-foreground-500">毛利率</span>
-              <span className={`mono-num font-semibold ${grossMargin >= 0 ? "text-accent-700" : "text-red-600"}`}>{grossMargin.toFixed(1)}%</span>
+              <span className={`mono-num font-semibold ${(grossMargin ?? 0) >= 0 ? "text-accent-700" : "text-red-600"}`}>{(grossMargin ?? 0).toFixed(1)}%</span>
             </div>
           </div>
         </div>
@@ -1934,7 +1954,7 @@ export default function SkuDetail() {
                 <InfoRow label="品类" value={sku.category ?? "-"} />
                 <InfoRow label="上架日期" value={sku.launchDate ?? "-"} />
                 <InfoRow label="买家运费" value={sku.shippingFee != null ? `$${sku.shippingFee.toFixed(2)}` : "-"} />
-                <InfoRow label="销售总价" value={sku.listPrice != null ? `$${sku.listPrice.toFixed(2)}` : `$${sku.price.toFixed(2)}`} />
+                <InfoRow label="销售总价" value={sku.listPrice != null ? `$${sku.listPrice.toFixed(2)}` : `$${(sku.price ?? 0).toFixed(2)}`} />
                 <InfoRow label="优惠券" value={sku.coupon != null ? `$${sku.coupon.toFixed(2)}` : "-"} />
               </div>
             )}
