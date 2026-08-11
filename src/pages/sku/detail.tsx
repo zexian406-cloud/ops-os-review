@@ -302,6 +302,12 @@ export default function SkuDetail() {
   const [shops, setShops] = useState<Shop[]>([]);
   useEffect(() => { getAllShops().then(setShops); }, []);
 
+  // 店铺 ID → 店铺名称查找
+  const shopNameOf = useCallback((id: string): string => {
+    const found = shops.find((s) => s.id === id);
+    return found?.name ?? id;
+  }, [shops]);
+
   // 当 sku 加载完成后同步到编辑状态
   useEffect(() => { if (sku) setEditSku({ ...sku }); }, [sku]);
 
@@ -583,7 +589,7 @@ export default function SkuDetail() {
                 <span key={m} id={`msku-${m}`}
                   className={`mono-num rounded-[10px] px-2.5 py-0.5 text-foreground-500 ${focusMsku && m === focusMsku ? "bg-primary-50 ring-2 ring-primary-400" : "bg-background-100"}`}>
                   MSKU: {m}
-                  <span className="ml-1 text-[10px] text-foreground-400">{mskuStoreOf(sku, m)}</span>
+                  <span className="ml-1 text-[10px] text-foreground-400">{shopNameOf(mskuStoreOf(sku, m))}</span>
                 </span>
               ));
             })()}
@@ -1580,34 +1586,39 @@ export default function SkuDetail() {
                     <label className={labelCls}>品名</label>
                     <input className={inputCls} value={editSku.name} onChange={(e) => updateEditSku({ name: e.target.value })} />
                   </div>
-                  <div>
-                    <label className={labelCls}>MSKU</label>
-                    <div className="flex flex-wrap gap-1 rounded-md border border-background-200 bg-background-50 px-2.5 py-1.5 min-h-[36px] items-center">
-                      {editSku.msku
-                        ? (() => {
-                            const allMs = editSku.msku.split(/[,\s，、·]+/).map((m) => m.trim()).filter(Boolean);
-                            const display = allMs.length > 3 ? allMs.slice(0, 3) : allMs;
-                            const remaining = allMs.length - display.length;
-                            return (
-                              <>
-                                {display.map((m) => (
-                                  <span key={m} className="mono-num inline-block rounded-[8px] bg-background-100 px-2 py-0.5 text-[12px] text-foreground-600">
+                  <div className="col-span-2">
+                    <label className={labelCls}>MSKU 店铺管理</label>
+                    {editSku.msku
+                      ? (() => {
+                          const allMs = editSku.msku.split(/[,\s，、·]+/).map((m) => m.trim()).filter(Boolean);
+                          return (
+                            <div className="space-y-1.5">
+                              {allMs.map((m) => (
+                                <div key={m} className="flex items-center gap-2">
+                                  <span className="mono-num inline-block rounded-[8px] bg-background-100 px-2.5 py-1 text-[12px] text-foreground-600 shrink-0 min-w-[120px]">
                                     {m}
-                                    <span className="ml-1 text-[10px] text-foreground-400">{mskuStoreOf(editSku, m)}</span>
                                   </span>
-                                ))}
-                                {remaining > 0 && (
-                                  <span className="mono-num inline-block rounded-[8px] bg-background-100 px-2 py-0.5 text-[12px] text-foreground-400">
-                                    等 {remaining} 个
-                                  </span>
-                                )}
-                              </>
-                            );
-                          })()
-                        : <span className="text-[13px] text-foreground-400">—</span>
-                      }
-                    </div>
-                    <p className="mt-0.5 text-[10px] text-foreground-400">MSKU 通过运营表导入，如需修改请重新导入</p>
+                                  <select
+                                    className="flex-1 rounded-md border border-background-200 bg-background-50 px-2 py-1 text-[12px] text-foreground-700 focus:border-primary-400 focus:outline-none cursor-pointer"
+                                    value={(editSku.mskuStores?.[m]) || editSku.store}
+                                    onChange={(e) => {
+                                      const newStores = { ...(editSku.mskuStores ?? {}) };
+                                      newStores[m] = e.target.value;
+                                      updateEditSku({ mskuStores: newStores });
+                                    }}
+                                  >
+                                    {shops.map((shop) => (
+                                      <option key={shop.id} value={shop.id}>{shop.name}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()
+                      : <span className="text-[13px] text-foreground-400">—</span>
+                    }
+                    <p className="mt-0.5 text-[10px] text-foreground-400">每个 MSKU 可独立设置所属店铺，父 SKU 店铺为默认值</p>
                   </div>
                   <div>
                     <label className={labelCls}>ASIN</label>
@@ -1715,7 +1726,7 @@ export default function SkuDetail() {
                               <span key={m}
                                 className={`mono-num mr-1 inline-block rounded-[8px] px-2 py-0.5 text-[12px] text-foreground-600 ${focusMsku && m === focusMsku ? "bg-primary-50 ring-2 ring-primary-400" : "bg-background-100"}`}>
                                 {m}
-                                <span className="ml-1 text-[10px] text-foreground-400">{mskuStoreOf(sku, m)}</span>
+                                <span className="ml-1 text-[10px] text-foreground-400">{shopNameOf(mskuStoreOf(sku, m))}</span>
                               </span>
                             ))}
                             {remaining > 0 && (

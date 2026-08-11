@@ -204,7 +204,7 @@ export default function SkuList() {
     }
   };
 
-  /* ── 批量转移店铺：把选中的 SKU 全部转移到目标店铺 ── */
+  /* ── 批量转移 MSKU 店铺：把选中 SKU 下所有 MSKU 的店铺转移到目标 ── */
   const executeBatchShopTransfer = async () => {
     if (!batchShopTarget) return;
     const skus = Array.from(selectedSkus);
@@ -212,12 +212,27 @@ export default function SkuList() {
     setBatchShopSaving(true);
     try {
       const records = await db.skuMaster.bulkGet(skus);
+      let mskuCount = 0;
       const updates = records
         .filter((r): r is SkuMaster => !!r)
-        .map((r) => ({ ...r, store: batchShopTarget }));
-      if (updates.length > 0) {
-        await db.skuMaster.bulkPut(updates);
+        .map((r) => {
+          if (!r.msku) return null; // 没有 MSKU 的跳过
+          const allMs = r.msku.split(/[,\s，、·]+/).map((m: string) => m.trim()).filter(Boolean);
+          if (allMs.length === 0) return null;
+          const newStores = { ...(r.mskuStores ?? {}) };
+          for (const m of allMs) {
+            newStores[m] = batchShopTarget;
+          }
+          mskuCount += allMs.length;
+          return { ...r, mskuStores: newStores };
+        })
+        .filter((r): r is SkuMaster => r !== null);
+      if (updates.length === 0) {
+        alert("选中的 SKU 都没有 MSKU，无法转移店铺。\n\nMSKU 店铺转移仅针对有 MSKU 的 SKU，父 SKU 店铺保持不变。");
+        setBatchShopSaving(false);
+        return;
       }
+      await db.skuMaster.bulkPut(updates);
       setSelectedSkus(new Set());
       setSelectionMode(false);
       setBatchShopModal(false);
@@ -741,7 +756,7 @@ export default function SkuList() {
                   }}
                   className="rounded-[9px] bg-primary-500 px-3 py-1 text-[12px] font-semibold text-white hover:bg-primary-600 cursor-pointer transition-colors"
                 >
-                  转移店铺
+                  MSKU转移店铺
                 </button>
                 <button
                   type="button"
@@ -1123,9 +1138,12 @@ export default function SkuList() {
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-50 mx-auto">
               <i className="ri-store-2-line text-[24px] text-primary-600" aria-hidden />
             </div>
-            <h3 className="mt-3 text-center text-[15px] font-bold text-foreground-950">转移店铺</h3>
+            <h3 className="mt-3 text-center text-[15px] font-bold text-foreground-950">MSKU 转移店铺</h3>
             <p className="mt-1 text-center text-[13px] text-foreground-500">
-              将选中的 <strong className="text-foreground-800">{selectedSkus.size}</strong> 个 SKU 转移到：
+              将选中的 <strong className="text-foreground-800">{selectedSkus.size}</strong> 个 SKU 下所有 MSKU 转移到：
+            </p>
+            <p className="mt-0.5 text-center text-[11px] text-foreground-400">
+              父 SKU 店铺不受影响，仅修改 MSKU 店铺
             </p>
             <select
               value={batchShopTarget}
