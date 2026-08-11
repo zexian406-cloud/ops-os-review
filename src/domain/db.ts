@@ -450,6 +450,79 @@ export async function upsertInventoryLayers(rows: InventoryLayer[]): Promise<voi
   await db.inventoryLayer.bulkAdd(rows);
 }
 
+/**
+ * 部分更新模式：仅覆盖新数据中有值的库存字段，空值/0 不覆盖已有数据。
+ * 适用于「只改部分参数」场景——Excel 中空单元格不会清空已有海外仓/FBA/FBM 库存。
+ *
+ * 合并策略：
+ * - 数值字段：新值 > 0 才覆盖，否则保留旧值
+ * - 数组字段（warehouseBreakdown/transitBatches/factoryBatches）：新值有元素才覆盖
+ * - 新 SKU（数据库中不存在）：直接写入，不合并
+ */
+export async function upsertInventoryLayersPartial(rows: InventoryLayer[]): Promise<void> {
+  if (rows.length === 0) return;
+
+  // 批量查询已有记录（按 date + sku 查找）
+  const date = rows[0].date;
+  const existing = await db.inventoryLayer
+    .where("date")
+    .equals(date)
+    .toArray();
+  const existingMap = new Map<string, InventoryLayer>();
+  for (const e of existing) {
+    existingMap.set(`${e.sku}__${e.date}`, e);
+  }
+
+  // 数值字段：新值 > 0 才覆盖
+  const numFields: (keyof InventoryLayer)[] = [
+    "fbaStock", "fbmStock", "factoryStock",
+    "eastTransit", "westTransit", "southeast", "southcentral",
+    "eastStock", "westStock", "southeastStock", "southcentralStock",
+    "southeastTransit", "southcentralTransit",
+  ];
+
+  const merged: InventoryLayer[] = rows.map((row) => {
+    const key = `${row.sku}__${row.date}`;
+    const old = existingMap.get(key);
+    if (!old) return row; // 新 SKU，直接写入
+
+    const result: InventoryLayer = { ...old };
+
+    // 数值字段：新值 > 0 才覆盖
+    for (const f of numFields) {
+      const newVal = row[f] as number | undefined;
+      if (newVal != null && newVal > 0) {
+        (result as Record<string, unknown>)[f] = newVal;
+      }
+    }
+
+    // 数组字段：新值有元素才覆盖
+    if (row.warehouseBreakdown && row.warehouseBreakdown.length > 0) {
+      result.warehouseBreakdown = row.warehouseBreakdown;
+    }
+    if (row.transitBatches && row.transitBatches.length > 0) {
+      result.transitBatches = row.transitBatches;
+    }
+    if (row.factoryBatches && row.factoryBatches.length > 0) {
+      result.factoryBatches = row.factoryBatches;
+    }
+
+    return result;
+  });
+
+  // 删除已有记录（用合并后的数据替换）
+  const toDelete = existing.filter((e) => {
+    const key = `${e.sku}__${e.date}`;
+    return rows.some((r) => `${r.sku}__${r.date}` === key);
+  });
+  if (toDelete.length > 0) {
+    await db.inventoryLayer.bulkDelete(
+      toDelete.map((e) => e.id as number).filter((id) => id != null)
+    );
+  }
+  await db.inventoryLayer.bulkAdd(merged);
+}
+
 export async function clearAllData(): Promise<void> {
   await db.transaction(
     "rw",

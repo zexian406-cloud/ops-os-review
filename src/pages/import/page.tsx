@@ -19,6 +19,7 @@ import {
   upsertSkuMaster,
   upsertSkuMasterPartial,
   upsertInventoryLayers,
+  upsertInventoryLayersPartial,
   upsertSnapshots,
   getWarehouseRegionMap,
   guessRegion,
@@ -488,7 +489,13 @@ export default function ImportPage() {
         await upsertSnapshots(validSnapshots);
       }
       // 保存分仓库存
-      await upsertInventoryLayers(mergedLayers);
+      // 部分更新模式：仅覆盖有值字段，空单元格不清空已有海外仓/FBA/FBM 库存
+      // 覆盖导入模式：完全替换，空单元格会清空已有数据
+      if (mode === "partial") {
+        await upsertInventoryLayersPartial(mergedLayers);
+      } else {
+        await upsertInventoryLayers(mergedLayers);
+      }
 
       // 保存数据健康报告（供「数据健康」页查看最近一次导入结果）
       await setLatestHealthReport(validation);
