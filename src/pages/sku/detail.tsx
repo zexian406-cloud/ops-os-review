@@ -268,6 +268,9 @@ export default function SkuDetail() {
   const [editSaving, setEditSaving] = useState(false);
   const [editMsg, setEditMsg] = useState<string | null>(null);
 
+  // ── 内容变更版本号：编辑区域展开/折叠时递增，触发 CanvasLayout 重新测高 ──
+  const [contentVersion, setContentVersion] = useState(0);
+
   // 新建 SKU 没有快照时给默认值，防止编辑区卡住
   const emptySnapshot: DailySnapshot = {
     date: today,
@@ -294,6 +297,9 @@ export default function SkuDetail() {
   const [editListing, setEditListing] = useState(false);   // Listing 优化
   const [skuSaving, setSkuSaving] = useState(false);
   const [skuMsg, setSkuMsg] = useState<string | null>(null);
+
+  // 编辑区域展开/折叠 → 递增 contentVersion → 触发 CanvasLayout 重新测高
+  useEffect(() => { setContentVersion((v) => v + 1); }, [editProduct, editPackage, editListing, editOpen, editProfit, customizing]);
 
   // ── 编辑用的本地 SKU 数据 ──
   const [editSku, setEditSku] = useState<SkuMaster | null>(null);
@@ -676,6 +682,7 @@ export default function SkuDetail() {
         onHideItem={toggleSection}
         onResetItemSize={resetItemSize}
         onResetItemPosition={resetItemPosition}
+        contentVersion={contentVersion}
       >
       {/* ═══════ 1. 头部信息 ═══════ */}
       {visibleKeys.includes("header") && (

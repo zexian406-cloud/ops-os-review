@@ -91,6 +91,8 @@ interface CanvasLayoutProps {
   onResetItemSize?: (key: string) => void;
   /** 恢复指定模块的位置 (x/y) */
   onResetItemPosition?: (key: string) => void;
+  /** 内容变更版本号：父组件递增此值可触发重新测高（如编辑表单展开/折叠） */
+  contentVersion?: number;
 }
 
 /**
@@ -131,6 +133,7 @@ export default function CanvasLayout({
   onHideItem,
   onResetItemSize,
   onResetItemPosition,
+  contentVersion = 0,
 }: CanvasLayoutProps) {
   const { width, containerRef, mounted } = useContainerWidth();
 
@@ -150,12 +153,17 @@ export default function CanvasLayout({
   // 仅在外部布局变化（重置/显隐模块）时清空，切换浏览/编辑模式不清空。
   const manuallyResizedRef = useRef<Set<string>>(new Set());
 
+  // ── 外部布局变更版本号 ──
+  // 用于触发测高 effect，但不形成 internalLayout → measureAndAdjust → internalLayout 的反馈环
+  const [layoutVersion, setLayoutVersion] = useState(0);
+
   // 外部 layout 变化时（重置、显隐模块）同步到内部状态
   const layoutKey = JSON.stringify(layout);
   useEffect(() => {
     setInternalLayout(layout);
     // 外部布局变化视为一次重置：清空手动调整记录，重新启用自动测高
     manuallyResizedRef.current = new Set();
+    setLayoutVersion((v) => v + 1);
   }, [layoutKey]);
 
   // Safety: never render GridLayout with width=0 — causes all cards to collapse
@@ -284,7 +292,7 @@ export default function CanvasLayout({
     return () => {
       timeouts.forEach((id) => window.clearTimeout(id));
     };
-  }, [customizing, canRender, measureAndAdjust, internalLayout]);
+  }, [customizing, canRender, measureAndAdjust, layoutVersion, contentVersion]);
 
   // Context value for CanvasItem children
   const ctxValue = useRef<CanvasItemContextValue>({ customizing, onHideItem, onResetItemSize, onResetItemPosition });
