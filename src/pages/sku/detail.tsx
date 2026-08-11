@@ -12,7 +12,7 @@ import {
 import { computeAll, computeWeeklyPromoCost, isCostFullyMissing, isReturnRateMissing, formatCoverDays, COVER_NO_SALES_SUB } from "@/domain/calculator";
 import { useOpsData } from "@/domain/store";
 import { computeDiagnosis, type DiagnosisResult } from "@/domain/diagnosis";
-import { upsertSnapshots, db, addOpsLog, deleteOpsLog } from "@/domain/db";
+import { upsertSnapshots, db, addOpsLog, deleteOpsLog, getAllShops } from "@/domain/db";
 import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
@@ -22,7 +22,7 @@ import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
 import { useSkuDetailLayout, type SkuDetailSectionKey, type GridItemLayout } from "@/hooks/useLayoutPrefs";
 import { type Layout } from "react-grid-layout";
 import type { WowDelta } from "@/domain/engine";
-import type { DailySnapshot, SkuMaster, InventoryLayer, TodoItem, OpsLog } from "@/domain/types";
+import type { DailySnapshot, SkuMaster, InventoryLayer, TodoItem, OpsLog, Shop } from "@/domain/types";
 
 const lifecycleLabel: Record<string, string> = { new: "新品", growth: "成长", mature: "成熟", clearance: "清货", eol: "停售" };
 const saleStatusLabel: Record<string, string> = { active: "在售", clearance: "清货", paused: "暂停", discontinued: "停售" };
@@ -297,6 +297,10 @@ export default function SkuDetail() {
 
   // ── 编辑用的本地 SKU 数据 ──
   const [editSku, setEditSku] = useState<SkuMaster | null>(null);
+
+  // ── 店铺列表（用于店铺下拉选择）──
+  const [shops, setShops] = useState<Shop[]>([]);
+  useEffect(() => { getAllShops().then(setShops); }, []);
 
   // 当 sku 加载完成后同步到编辑状态
   useEffect(() => { if (sku) setEditSku({ ...sku }); }, [sku]);
@@ -1629,7 +1633,11 @@ export default function SkuDetail() {
                   </div>
                   <div>
                     <label className={labelCls}>店铺</label>
-                    <input className={inputCls} value={editSku.store} onChange={(e) => updateEditSku({ store: e.target.value })} />
+                    <select className={selectCls} value={editSku.store} onChange={(e) => updateEditSku({ store: e.target.value })}>
+                      {shops.map((shop) => (
+                        <option key={shop.id} value={shop.id}>{shop.name}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className={labelCls}>配送方式</label>

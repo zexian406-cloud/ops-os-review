@@ -152,6 +152,11 @@ export default function SkuList() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set());
 
+  /* ── 批量转移店铺 ── */
+  const [batchShopModal, setBatchShopModal] = useState(false);
+  const [batchShopTarget, setBatchShopTarget] = useState<string>("");
+  const [batchShopSaving, setBatchShopSaving] = useState(false);
+
   const toggleSelect = (sku: string) => {
     setSelectedSkus((prev) => {
       const next = new Set(prev);
@@ -196,6 +201,32 @@ export default function SkuList() {
       reload();
     } catch (err) {
       alert(`批量删除失败: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  /* ── 批量转移店铺：把选中的 SKU 全部转移到目标店铺 ── */
+  const executeBatchShopTransfer = async () => {
+    if (!batchShopTarget) return;
+    const skus = Array.from(selectedSkus);
+    if (skus.length === 0) return;
+    setBatchShopSaving(true);
+    try {
+      const records = await db.skuMaster.bulkGet(skus);
+      const updates = records
+        .filter((r): r is SkuMaster => !!r)
+        .map((r) => ({ ...r, store: batchShopTarget }));
+      if (updates.length > 0) {
+        await db.skuMaster.bulkPut(updates);
+      }
+      setSelectedSkus(new Set());
+      setSelectionMode(false);
+      setBatchShopModal(false);
+      setBatchShopTarget("");
+      reload();
+    } catch (err) {
+      alert(`转移失败: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBatchShopSaving(false);
     }
   };
 
@@ -698,10 +729,20 @@ export default function SkuList() {
               <option value="discontinued">停售</option>
             </select>
             {selectedSkus.size > 0 && (
-              <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-1.5 border border-red-200">
-                <span className="text-[12px] font-medium text-red-700">
+              <div className="flex items-center gap-2 rounded-lg bg-primary-50 px-3 py-1.5 border border-primary-200">
+                <span className="text-[12px] font-medium text-primary-700">
                   已选 {selectedSkus.size} 个
                 </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatchShopTarget(shops.length > 0 ? shops[0].id : "");
+                    setBatchShopModal(true);
+                  }}
+                  className="rounded-[9px] bg-primary-500 px-3 py-1 text-[12px] font-semibold text-white hover:bg-primary-600 cursor-pointer transition-colors"
+                >
+                  转移店铺
+                </button>
                 <button
                   type="button"
                   onClick={handleBatchDelete}
@@ -712,7 +753,7 @@ export default function SkuList() {
                 <button
                   type="button"
                   onClick={() => { setSelectedSkus(new Set()); setSelectionMode(false); }}
-                  className="text-[12px] text-red-500 hover:text-red-700 cursor-pointer"
+                  className="text-[12px] text-primary-500 hover:text-primary-700 cursor-pointer"
                 >
                   取消选择
                 </button>
@@ -1068,6 +1109,49 @@ export default function SkuList() {
                 className="flex-1 rounded-[9px] bg-red-500 py-2 text-[13px] font-semibold text-white hover:bg-red-600 cursor-pointer whitespace-nowrap"
               >
                 确认删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════ 批量转移店铺对话框 ═══════ */}
+      {batchShopModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !batchShopSaving && setBatchShopModal(false)} />
+          <div className="relative w-full max-w-sm rounded-2xl bg-background-50 p-6 shadow-xl">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-50 mx-auto">
+              <i className="ri-store-2-line text-[24px] text-primary-600" aria-hidden />
+            </div>
+            <h3 className="mt-3 text-center text-[15px] font-bold text-foreground-950">转移店铺</h3>
+            <p className="mt-1 text-center text-[13px] text-foreground-500">
+              将选中的 <strong className="text-foreground-800">{selectedSkus.size}</strong> 个 SKU 转移到：
+            </p>
+            <select
+              value={batchShopTarget}
+              onChange={(e) => setBatchShopTarget(e.target.value)}
+              className="mt-4 w-full rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-sm text-foreground-800 focus:border-primary-500 focus:outline-none cursor-pointer"
+            >
+              {shops.map((shop) => (
+                <option key={shop.id} value={shop.id}>{shop.name}</option>
+              ))}
+            </select>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setBatchShopModal(false)}
+                disabled={batchShopSaving}
+                className="flex-1 rounded-lg border border-background-200 py-2 text-[13px] font-medium text-foreground-600 hover:bg-background-100 cursor-pointer whitespace-nowrap disabled:opacity-60"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={executeBatchShopTransfer}
+                disabled={batchShopSaving || !batchShopTarget}
+                className="flex-1 rounded-[9px] bg-primary-500 py-2 text-[13px] font-semibold text-white hover:bg-primary-600 cursor-pointer whitespace-nowrap disabled:opacity-60"
+              >
+                {batchShopSaving ? "转移中..." : "确认转移"}
               </button>
             </div>
           </div>
