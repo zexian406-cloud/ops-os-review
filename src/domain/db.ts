@@ -274,6 +274,119 @@ export async function upsertSkuMaster(rows: SkuMaster[]): Promise<void> {
   await db.skuMaster.bulkPut(rows);
 }
 
+/**
+ * 部分更新模式：仅覆盖新数据中有值的字段，空值/0 不覆盖已有数据。
+ * 适用于「只改部分参数」场景——Excel 中空单元格不会清空已有 FOB/售价等固定信息。
+ *
+ * 合并策略：
+ * - 数值字段：新值 > 0 才覆盖，否则保留旧值
+ * - 字符串字段：新值非空才覆盖，否则保留旧值
+ * - 数组字段（competitorUrls/mskuStores 等）：新值有元素才覆盖
+ * - 新 SKU（数据库中不存在）：直接写入，不合并
+ */
+export async function upsertSkuMasterPartial(rows: SkuMaster[]): Promise<void> {
+  if (rows.length === 0) return;
+
+  // 批量查询已有记录
+  const skuKeys = rows.map((r) => r.sku);
+  const existing = await db.skuMaster.bulkGet(skuKeys);
+  const existingMap = new Map<string, SkuMaster>();
+  for (const e of existing) {
+    if (e) existingMap.set(e.sku, e);
+  }
+
+  // 数值字段：新值 > 0 才覆盖
+  const numFields: (keyof SkuMaster)[] = [
+    "price", "listPrice", "costFob", "costShipping", "costDelivery",
+    "costCommission", "commissionRate", "costStorage", "costReturn", "costAd",
+    "discountPrice", "discountFob", "discountShipping", "discountDelivery",
+    "discountCommission", "discountStorage", "discountReturn", "discountAd", "discountCoupon",
+    "fbaPrice", "fbmPrice", "fbaLeadTimeDays", "fbmLeadTimeDays",
+    "fbaSafetyStockDays", "fbmSafetyStockDays", "leadTimeDays", "safetyStockDays", "moq",
+    "packageLength", "packageWidth", "packageHeight", "packageWeight", "unitsPerBox",
+  ];
+
+  // 字符串字段：新值非空才覆盖
+  const strFields: (keyof SkuMaster)[] = [
+    "name", "asin", "upc", "category", "launchDate", "parentGroup",
+    "parentAsin", "parentSku", "productUrl", "marketplace", "image",
+  ];
+
+  const merged: SkuMaster[] = rows.map((row) => {
+    const old = existingMap.get(row.sku);
+    if (!old) return row; // 新 SKU，直接写入
+
+    const result: SkuMaster = { ...old };
+
+    // 数值字段：新值 > 0 才覆盖
+    for (const f of numFields) {
+      const newVal = row[f] as number | undefined;
+      if (newVal != null && newVal > 0) {
+        (result as Record<string, unknown>)[f] = newVal;
+      }
+    }
+
+    // 字符串字段：新值非空才覆盖
+    for (const f of strFields) {
+      const newVal = row[f] as string | undefined;
+      if (newVal && newVal.trim() !== "" && newVal !== "-") {
+        (result as Record<string, unknown>)[f] = newVal;
+      }
+    }
+
+    // 枚举/特殊字段
+    if (row.fulfillment && row.fulfillment !== old.fulfillment) {
+      result.fulfillment = row.fulfillment;
+    }
+    if (row.saleStatus && row.saleStatus !== old.saleStatus) {
+      result.saleStatus = row.saleStatus;
+    }
+    if (row.linkType) {
+      result.linkType = row.linkType;
+    }
+    if (row.lifecycle) {
+      result.lifecycle = row.lifecycle;
+    }
+    if (row.fulfillmentMode) {
+      result.fulfillmentMode = row.fulfillmentMode;
+    }
+    if (row.aPlus) {
+      result.aPlus = row.aPlus;
+    }
+
+    // store：新值非空且非占位符才覆盖
+    if (row.store && row.store !== "-" && row.store.startsWith("shop_")) {
+      result.store = row.store;
+    }
+
+    // msku：新值非空才覆盖
+    if (row.msku && row.msku.trim() !== "") {
+      result.msku = row.msku;
+    }
+
+    // 数组/Record 字段：新值有键才覆盖
+    if (row.competitorUrls && row.competitorUrls.length > 0) {
+      result.competitorUrls = row.competitorUrls;
+    }
+    if (row.mskuStores && Object.keys(row.mskuStores).length > 0) {
+      result.mskuStores = row.mskuStores;
+    }
+    if (row.mskuAsins && Object.keys(row.mskuAsins).length > 0) {
+      result.mskuAsins = row.mskuAsins;
+    }
+    if (row.mskuMetrics && Object.keys(row.mskuMetrics).length > 0) {
+      result.mskuMetrics = row.mskuMetrics;
+    }
+    if (row.mskuLinkTypes && Object.keys(row.mskuLinkTypes).length > 0) {
+      result.mskuLinkTypes = row.mskuLinkTypes;
+    }
+
+    return result;
+  });
+
+  await db.skuMaster.bulkPut(merged);
+}
+
 export async function upsertSnapshots(rows: DailySnapshot[]): Promise<void> {
   if (rows.length === 0) return;
   // Normalize: adRatio must always be positive

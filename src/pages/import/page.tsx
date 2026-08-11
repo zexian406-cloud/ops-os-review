@@ -17,6 +17,7 @@ import {
   setCloudConfig,
   setLatestHealthReport,
   upsertSkuMaster,
+  upsertSkuMasterPartial,
   upsertInventoryLayers,
   upsertSnapshots,
   getWarehouseRegionMap,
@@ -230,6 +231,7 @@ export default function ImportPage() {
   const [pendingImport, setPendingImport] = useState<{
     parsed: ImportResult;
     validation: ValidationResult;
+    mode: "overwrite" | "partial";
   } | null>(null);
   const [confirming, setConfirming] = useState(false);
 
@@ -352,7 +354,7 @@ export default function ImportPage() {
       // 校验通过后弹出「数据健康报告」面板，用户必须点「确认并继续」才写入
       const validation = validateImportData(parsed);
       setHealthReport(validation);
-      setPendingImport({ parsed, validation });
+      setPendingImport({ parsed, validation, mode });
       setParsing(false);
       // 不直接写入，等待用户确认
     } catch (err) {
@@ -364,7 +366,7 @@ export default function ImportPage() {
   /* ────────── 用户点击「确认并继续」→ 实际写入 IndexedDB ────────── */
   const confirmImport = async () => {
     if (!pendingImport) return;
-    const { parsed, validation } = pendingImport;
+    const { parsed, validation, mode } = pendingImport;
     setConfirming(true);
     setError(null);
     try {
@@ -467,8 +469,14 @@ export default function ImportPage() {
       }
 
       // 保存 SKU 主档
+      // 部分更新模式：仅覆盖有值字段，空单元格不清空已有 FOB/售价等固定信息
+      // 覆盖导入模式：完全替换，空单元格会清空已有数据
       if (validSkuMaster.length > 0) {
-        await upsertSkuMaster(validSkuMaster);
+        if (mode === "partial") {
+          await upsertSkuMasterPartial(validSkuMaster);
+        } else {
+          await upsertSkuMaster(validSkuMaster);
+        }
       }
       // 增量成本更新：单表「头程更新」场景，skuMaster 为空，
       // 需按 SKU 回写现有 skuMaster 的 costShipping/costDelivery（见 cost-merge.ts）
@@ -1826,7 +1834,7 @@ export default function ImportPage() {
                   <i className="ri-refresh-line mr-1.5" aria-hidden /> 覆盖导入
                 </div>
                 <div className="mt-0.5 text-xs text-foreground-500">
-                  完全覆盖：Excel 所有字段直接写入，空单元格会清空已有数据。适合「全量更新」场景。
+                  完全覆盖：Excel 所有字段直接写入，空单元格会清空已有数据。适合「全量更新」或首次导入。
                 </div>
               </button>
               <button
@@ -1838,7 +1846,7 @@ export default function ImportPage() {
                   <i className="ri-edit-circle-line mr-1.5" aria-hidden /> 部分更新
                 </div>
                 <div className="mt-0.5 text-xs text-foreground-500">
-                  仅更新有值字段：Excel 中空单元格不覆盖已有数据。适合「只改部分参数」场景。
+                  仅更新有值字段：Excel 中空单元格不覆盖已有数据，已有的 FOB/售价/头程等固定信息会保留。适合「只改部分参数」或补导数据。
                 </div>
               </button>
               <button
