@@ -324,187 +324,42 @@ h1, h2, h3, h4, h5, h6 {
   color: oklch(var(--foreground-900));
 }
 
-/* ── 画布布局：ReactGridLayout 通用样式 ── */
-.react-grid-item {
-  transition: all 200ms ease;
-  transition-property: left, top, width, height;
-}
-.react-grid-item.cssTransforms {
-  transition-property: transform, width, height;
-}
-.react-grid-item.resizing {
-  z-index: 3;
-  opacity: 0.9;
-}
-.react-grid-item.react-draggable-dragging {
-  z-index: 4;
-  opacity: 0.85;
-  box-shadow: 0 8px 32px oklch(0 0 0 / 0.15);
-}
-.react-grid-item.dropping {
-  visibility: hidden;
-}
-.react-grid-item.react-grid-placeholder {
-  background: oklch(var(--primary-300) / 0.2);
-  border: 2px dashed oklch(var(--primary-400) / 0.5);
-  border-radius: 12px;
-  transition-duration: 100ms;
-  z-index: 2;
+/* ── 画布布局：CSS Grid 响应式布局（替代 react-grid-layout） ── */
+.canvas-layout-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 12px;
+  align-items: start; /* 卡片顶部对齐，高度自适应内容 */
 }
 
-/* ── 卡片内容填满高度 ── */
+/* 卡片包装器：高度由内容决定，同行卡片自动等高 */
 .canvas-item-wrapper {
-  height: 100%;
   position: relative;
+  min-width: 0; /* 防止内容溢出网格列 */
 }
 
-/* ── 浏览模式：自动测高使内容贴合卡片，隐藏溢出（滚动条会挤占宽度影响测高） ── */
-.canvas-layout-viewing .react-grid-item {
-  overflow: hidden;
-  border-radius: 14px;
+/* 响应式：平板 6 列 */
+@media (max-width: 1024px) {
+  .canvas-layout-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+  /* w>6 的卡片在平板上占满整行 */
+  .canvas-item-wrapper[style*="span 7"],
+  .canvas-item-wrapper[style*="span 8"],
+  .canvas-item-wrapper[style*="span 9"],
+  .canvas-item-wrapper[style*="span 10"],
+  .canvas-item-wrapper[style*="span 11"],
+  .canvas-item-wrapper[style*="span 12"] {
+    grid-column: 1 / -1 !important;
+  }
 }
 
-/* ── 编辑模式：裁剪溢出内容 + 虚线边框 ── */
-.canvas-layout-editing .react-grid-item {
-  overflow: hidden;
-  border: 2px dashed oklch(var(--primary-400) / 0.5);
-  border-radius: 12px;
-  background: oklch(var(--background-50) / 0.6);
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.canvas-layout-editing .react-grid-item:hover {
-  border-color: oklch(var(--primary-500));
-  box-shadow: 0 4px 16px oklch(var(--primary-500) / 0.15);
-}
-
-/* ── 卡片右上角更多菜单 ── */
-.canvas-card-menu {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 10;
-}
-.canvas-card-menu-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 6px;
-  background: oklch(var(--background-100) / 0.8);
-  color: oklch(var(--foreground-500));
-  cursor: pointer;
-  font-size: 14px;
-  transition: all 0.15s;
-}
-.canvas-card-menu-btn:hover {
-  background: oklch(var(--primary-100));
-  color: oklch(var(--primary-700));
-}
-.canvas-card-menu-dropdown {
-  position: absolute;
-  top: 28px;
-  right: 0;
-  min-width: 160px;
-  border-radius: 10px;
-  border: 1px solid oklch(var(--background-300));
-  background: #fff;
-  box-shadow: 0 8px 24px oklch(0 0 0 / 0.12);
-  padding: 4px;
-  z-index: 20;
-}
-.canvas-card-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 10px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: oklch(var(--foreground-700));
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.15s;
-}
-.canvas-card-menu-item:hover {
-  background: oklch(var(--background-100));
-}
-.canvas-card-menu-item.canvas-card-menu-danger:hover {
-  background: oklch(0.96 0.02 20);
-  color: oklch(0.55 0.2 25);
-}
-.canvas-card-menu-item i {
-  font-size: 14px;
-  color: oklch(var(--foreground-400));
-}
-.canvas-card-menu-danger i {
-  color: oklch(0.65 0.15 25);
-}
-
-/* ── 拖拽缩放手柄 ── */
-.react-resizable-handle {
-  position: absolute;
-  width: 20px;
-  height: 20px;
-  bottom: 0;
-  right: 0;
-  cursor: se-resize;
-  z-index: 5;
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="6" height="6"><path d="M 0 0 L 6 6 M 0 3 L 3 6 M 3 0 L 6 3" stroke="%23999" stroke-width="1" fill="none"/></svg>');
-  background-position: bottom right;
-  background-repeat: no-repeat;
-  opacity: 0.4;
-}
-.react-resizable-handle:hover {
-  opacity: 0.8;
-}
-.canvas-layout-viewing .react-resizable-handle {
-  display: none;
-}
-
-/* ── 拖拽手柄条（自定义模式下显示） ── */
-.canvas-drag-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  height: 26px;
-  background: oklch(var(--primary-100) / 0.6);
-  border-bottom: 1px solid oklch(var(--primary-300) / 0.3);
-  border-radius: 12px 12px 0 0;
-  cursor: grab;
-  font-size: 11px;
-  font-weight: 500;
-  color: oklch(var(--primary-700));
-  user-select: none;
-  -webkit-user-select: none;
-  transition: background 0.15s;
-}
-.canvas-drag-bar:hover {
-  background: oklch(var(--primary-100));
-}
-.canvas-drag-bar:active {
-  cursor: grabbing;
-}
-.canvas-drag-bar i {
-  font-size: 14px;
-}
-
-/* ── 画布布局容器 ── */
-.canvas-layout-wrapper {
-  min-height: 100%;
-  overflow: visible;
-  position: relative;
-}
-/* 自定义模式下：拖拽光标只在手柄上 */
-.canvas-layout-editing .react-grid-item {
-  cursor: default;
-}
-/* 浏览模式：默认光标 */
-.canvas-layout-viewing .react-grid-item {
-  cursor: default;
+/* 响应式：手机单列 */
+@media (max-width: 640px) {
+  .canvas-layout-grid {
+    grid-template-columns: 1fr;
+  }
+  .canvas-item-wrapper {
+    grid-column: 1 / -1 !important;
+  }
 }

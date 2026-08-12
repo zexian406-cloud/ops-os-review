@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { db, getAllShops } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
-import PageLayoutCustomizer from "@/components/layout/PageLayoutCustomizer";
 import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
-import { type Layout } from "react-grid-layout";
 import { usePageLayout, type GridItemLayout } from "@/hooks/usePageLayout";
 import type { Promotion, PromotionType, SkuMaster, DailySnapshot, Shop } from "@/domain/types";
 
@@ -29,31 +27,19 @@ export default function PromotionsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const {
-    customizing, setCustomizing, toggleSection, reset: resetLayout,
-    visibleKeys, allKeys, gridLayout, setGridLayout,
-    resetItemSize, resetItemPosition,
+    visibleKeys, gridLayout,
   } = usePageLayout("promotions");
 
   // ── 构建 ReactGridLayout 布局数组 ──
-  const rglLayout: Layout[] = useMemo(() => {
+  const rglLayout = useMemo(() => {
     return visibleKeys.map((key) => {
-      const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 6 };
+      const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { w: 12 };
       return {
         i: key,
-        x: Math.max(Math.min(item.x, 12), 0),
-        y: Math.max(item.y, 0),
         w: Math.min(Math.max(item.w, 2), 12),
-        h: Math.max(item.h, 2),
-        minW: 2,
-        maxW: 12,
-        minH: 2,
       };
     });
   }, [visibleKeys, gridLayout]);
-
-  const handleLayoutChange = useCallback((layout: Layout[]) => {
-    setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
-  }, [setGridLayout]);
 
   const [bulkSkus, setBulkSkus] = useState<Set<string>>(new Set());
   const [bulkMode, setBulkMode] = useState(false);
@@ -331,36 +317,10 @@ export default function PromotionsPage() {
             手动添加 BD / LD / 7DD / Coupon · 自动算利润率 &amp; 广告费比 · 支持批量操作
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCustomizing(!customizing)}
-          className="flex items-center gap-1.5 rounded-[12px] border border-background-200 bg-background-50 px-3 py-1.5 text-[12px] font-medium text-foreground-500 hover:bg-background-100 hover:text-foreground-800 cursor-pointer"
-        >
-          <i className={customizing ? "ri-close-line" : "ri-layout-masonry-line"} aria-hidden />
-          {customizing ? "关闭设置" : "自定义布局"}
-        </button>
       </div>
 
-      {customizing && (
-        <PageLayoutCustomizer
-          pageId="promotions"
-          visibleKeys={visibleKeys}
-          allKeys={allKeys}
-          toggle={toggleSection}
-          onClose={() => setCustomizing(false)}
-          onReset={resetLayout}
-        />
-      )}
-
       {/* 画布布局 — 全部区块可拖拽定位 */}
-      <CanvasLayout
-        layout={rglLayout}
-        customizing={customizing}
-        onLayoutChange={handleLayoutChange}
-        onHideItem={toggleSection}
-        onResetItemSize={resetItemSize}
-        onResetItemPosition={resetItemPosition}
-      >
+      <CanvasLayout layout={rglLayout}>
 
       {/* ── 促销汇总卡片 ── */}
       {visibleKeys.includes("summaryCards") && (
