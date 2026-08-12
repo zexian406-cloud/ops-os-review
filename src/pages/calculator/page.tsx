@@ -980,41 +980,96 @@ export default function CalculatorPage() {
                 }
 
                 // 始终保存测算记录
-                const toSave: CalculationRecord[] = results
-                  .filter((r) => r.hasAnyData)
-                  .map((r) => ({
-                    id: uid(),
-                    name: saveMode === "new_sku" ? newSkuName.trim() : r.name,
-                    sku: saveMode === "new_sku" ? newSkuCode.trim() : undefined,
+                // FBA 模式：每个产品保存一条记录
+                // FBM 模式：每个产品的每个方案各保存一条记录（含方案名称和最优标记）
+                const toSave: CalculationRecord[] = [];
+                for (const r of results.filter((r) => r.hasAnyData)) {
+                  const productName = saveMode === "new_sku" ? newSkuName.trim() : r.name;
+                  const productSku = saveMode === "new_sku" ? newSkuCode.trim() : undefined;
+                  const productAsin = products.find((p) => p.id === r.id)?.asin || undefined;
+                  const baseFields = {
                     marketplace,
                     price: r.price,
                     deliveryMode: r.deliveryMode,
                     costFob: r.costUsd,
                     costShipping: r.headFreight,
-                    costDelivery: r.deliveryMode === "FBA" ? r.fbaDelivery : (r.allFbmSchemes[0]?.shipFee ?? 0),
                     costCommission: r.commission,
-                    costStorage: r.deliveryMode === "FBA" ? r.fbaStorage : (r.allFbmSchemes[0]?.storageFee ?? 0),
                     costAd: r.adCost,
                     costReturn: r.returnCost,
                     coupon: 0,
-                    totalCost: r.deliveryMode === "FBA" ? r.fbaTotalCost : (r.allFbmSchemes[0]?.totalCost ?? r.baseCost),
-                    grossProfit: r.deliveryMode === "FBA" ? r.fbaProfit : (r.allFbmSchemes[0]?.profit ?? 0),
-                    grossMargin: r.deliveryMode === "FBA" ? r.fbaMargin : (r.allFbmSchemes[0]?.margin ?? 0),
-                    roi: r.deliveryMode === "FBA" ? r.fbaRoi : (r.allFbmSchemes[0]?.roi ?? 0),
                     notes: saveNotes || undefined,
                     createdAt: new Date().toISOString(),
-                  }));
+                  };
+
+                  if (r.deliveryMode === "FBA") {
+                    toSave.push({
+                      id: uid(),
+                      name: productName,
+                      sku: productSku,
+                      asin: productAsin,
+                      ...baseFields,
+                      costDelivery: r.fbaDelivery,
+                      costStorage: r.fbaStorage,
+                      fbaDelivery: r.fbaDelivery,
+                      fbaStorage: r.fbaStorage,
+                      totalCost: r.fbaTotalCost,
+                      grossProfit: r.fbaProfit,
+                      grossMargin: r.fbaMargin,
+                      roi: r.fbaRoi,
+                      schemeName: "FBA",
+                    });
+                  } else {
+                    // FBM: 每个方案保存一条记录
+                    for (const scheme of r.allFbmSchemes) {
+                      const isBest = r.allFbmSchemes.length >= 2
+                        && r.bestLabel === scheme.provName
+                        && r.bestLabel !== "各方案费用一致";
+                      toSave.push({
+                        id: uid(),
+                        name: productName,
+                        sku: productSku,
+                        asin: productAsin,
+                        ...baseFields,
+                        costDelivery: scheme.shipFee,
+                        costStorage: scheme.storageFee,
+                        totalCost: scheme.totalCost,
+                        grossProfit: scheme.profit,
+                        grossMargin: scheme.margin,
+                        roi: scheme.roi,
+                        schemeName: scheme.provName,
+                        isBestScheme: isBest,
+                      });
+                    }
+                    // FBM 模式下如果没有方案，至少保存一条基础记录
+                    if (r.allFbmSchemes.length === 0) {
+                      toSave.push({
+                        id: uid(),
+                        name: productName,
+                        sku: productSku,
+                        asin: productAsin,
+                        ...baseFields,
+                        costDelivery: 0,
+                        costStorage: 0,
+                        totalCost: r.baseCost,
+                        grossProfit: r.price - r.baseCost,
+                        grossMargin: r.price > 0 ? ((r.price - r.baseCost) / r.price) * 100 : 0,
+                        roi: (r.costUsd + r.headFreight) > 0 ? ((r.price - r.baseCost) / (r.costUsd + r.headFreight)) * 100 : 0,
+                        schemeName: "（无方案）",
+                      });
+                    }
+                  }
+                }
 
                 await db.calculationRecords.bulkPut(toSave);
                 loadRecords();
 
                 if (saveMode === "new_sku") {
-                  setSaveMsg(`已创建新品 SKU「${newSkuCode.trim()}」并保存测算记录`);
+                  setSaveMsg(`已创建新品 SKU「${newSkuCode.trim()}」并保存 ${toSave.length} 条测算记录`);
                   setNewSkuCode("");
                   setNewSkuName("");
                   setNewSkuStore("");
                 } else {
-                  setSaveMsg("测算记录已保存");
+                  setSaveMsg(`已保存 ${toSave.length} 条测算记录${toSave.length > 1 ? "（含全部方案）" : ""}`);
                 }
                 setTimeout(() => setSaveMsg(null), 3000);
               }}

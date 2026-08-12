@@ -441,6 +441,8 @@ export interface CalculationRecord {
   deliveryMode: "FBA" | "FBM";
   fbaDelivery?: number;
   fbaStorage?: number;
+  schemeName?: string;        // FBM 模式下的方案名称（承运商/海外仓名称）
+  isBestScheme?: boolean;     // 是否为最优方案
   createdAt: string;
   notes?: string;
 }
