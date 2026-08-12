@@ -989,6 +989,11 @@ export default function CalculatorPage() {
                   const productAsin = products.find((p) => p.id === r.id)?.asin || undefined;
                   const baseFields = {
                     marketplace,
+                    exchangeRate: Number(n(rate).toFixed(4)),
+                    commissionRate: Number(n(commRate).toFixed(1)),
+                    adRate: Number(n(adRate).toFixed(1)),
+                    returnRate: Number(n(returnRate).toFixed(1)),
+                    storageDays: Math.round(n(storageDays)),
                     price: r.price,
                     deliveryMode: r.deliveryMode,
                     costFob: r.costUsd,

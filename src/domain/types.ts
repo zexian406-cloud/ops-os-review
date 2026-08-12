@@ -425,6 +425,11 @@ export interface CalculationRecord {
   name: string;               // 品名
   asin?: string;
   marketplace: string;        // 站点
+  exchangeRate?: number;      // 汇率 (CNY→本地货币)
+  commissionRate?: number;    // 佣金率 (%)
+  adRate?: number;            // 广告率 (%)
+  returnRate?: number;        // 退货率 (%)
+  storageDays?: number;       // 仓储天数
   price: number;              // 售价
   costFob: number;            // FOB USD
   costShipping: number;       // 头程 USD

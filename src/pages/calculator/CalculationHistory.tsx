@@ -27,14 +27,17 @@ export default function CalculationHistory({ records, onRefresh }: Props) {
   const exportToExcel = () => {
     if (records.length === 0) return;
 
-    const cur = (rec: CalculationRecord) => CURRENCY[rec.marketplace] ?? "$";
-
     const rows = records.map((rec, i) => ({
       "序号": i + 1,
       "品名": rec.name || "未命名",
       "SKU": rec.sku || "",
       "ASIN": rec.asin || "",
       "站点": rec.marketplace,
+      "汇率": rec.exchangeRate ?? "",
+      "佣金率(%)": rec.commissionRate ?? "",
+      "广告率(%)": rec.adRate ?? "",
+      "退货率(%)": rec.returnRate ?? "",
+      "仓储天数": rec.storageDays ?? "",
       "配送方式": rec.deliveryMode,
       "方案名称": rec.schemeName || "",
       "最优方案": rec.isBestScheme ? "是" : "",
@@ -148,13 +151,24 @@ export default function CalculationHistory({ records, onRefresh }: Props) {
 
             {isOpen && (
               <div className="border-t border-background-200/70 bg-background-100/40 px-4 py-3">
+                {/* 全局参数 */}
+                {(rec.exchangeRate || rec.commissionRate || rec.adRate || rec.returnRate || rec.storageDays) && (
+                  <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg bg-background-50 px-3 py-2 text-[11px] text-foreground-600">
+                    <span className="font-semibold text-foreground-700">全局参数：</span>
+                    {rec.exchangeRate && <span>汇率 <strong className="mono-num">{rec.exchangeRate}</strong></span>}
+                    {rec.commissionRate != null && <span>佣金率 <strong className="mono-num">{rec.commissionRate}%</strong></span>}
+                    {rec.adRate != null && <span>广告率 <strong className="mono-num">{rec.adRate}%</strong></span>}
+                    {rec.returnRate != null && <span>退货率 <strong className="mono-num">{rec.returnRate}%</strong></span>}
+                    {rec.storageDays != null && <span>仓储天数 <strong className="mono-num">{rec.storageDays}</strong></span>}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5 text-[12px]">
                   {[
                     { label: "售价", value: `${cur}${rec.price.toFixed(2)}` },
                     { label: "FOB折合", value: `${cur}${rec.costFob.toFixed(2)}` },
                     { label: "头程费", value: `${cur}${rec.costShipping.toFixed(2)}` },
                     { label: "配送费", value: `${cur}${rec.costDelivery.toFixed(2)}` },
-                    { label: "佣金", value: `${cur}${rec.costCommission.toFixed(2)}` },
+                    { label: "佣金", value: `${rec.commissionRate ?? 0}% · ${cur}${rec.costCommission.toFixed(2)}` },
                     { label: "仓储费", value: `${cur}${rec.costStorage.toFixed(2)}` },
                     { label: "广告费", value: `${cur}${rec.costAd.toFixed(2)}` },
                     { label: "退货费", value: `${cur}${rec.costReturn.toFixed(2)}` },
