@@ -5,6 +5,7 @@ import {
 } from "recharts";
 import { useOpsData } from "@/domain/store";
 import { db } from "@/domain/db";
+import { computeAll } from "@/domain/calculator";
 import type { DailySnapshot, SkuMaster } from "@/domain/types";
 
 /* ────────── 工具函数 ────────── */
@@ -119,7 +120,7 @@ function aggregateSnapshots(
   return result;
 }
 
-function aggregate(snapMap: Map<string, DailySnapshot>): AggMetrics {
+function aggregate(snapMap: Map<string, DailySnapshot>, skuMap?: Map<string, SkuMaster>): AggMetrics {
   const vals = Array.from(snapMap.values());
   if (vals.length === 0) {
     return { salesSum: 0, salesCount: 0, avgAdRatio: 0, avgRating: 0, avgReturnRate: 0, avgProfitMargin: 0, totalStock: 0, totalAdSpend: 0, skuCount: 0 };
@@ -132,8 +133,21 @@ function aggregate(snapMap: Map<string, DailySnapshot>): AggMetrics {
   const avgRating = ratingVals.length > 0 ? ratingVals.reduce((s, r) => s + safeNum(r.rating), 0) / ratingVals.length : 0;
   const returnVals = vals.filter((r) => safeNum(r.returnRate) > 0);
   const avgReturnRate = returnVals.length > 0 ? returnVals.reduce((s, r) => s + safeNum(r.returnRate), 0) / returnVals.length : 0;
-  const marginVals = vals.filter((r) => Number.isFinite(r.profitMargin));
-  const avgProfitMargin = marginVals.length > 0 ? marginVals.reduce((s, r) => s + safeNum(r.profitMargin), 0) / marginVals.length : 0;
+  // FIX: 利润率不从快照读取（导入时存为0），改为用 computeAll 实时计算
+  const marginVals: number[] = [];
+  if (skuMap) {
+    for (const [sku, snap] of snapMap) {
+      const master = skuMap.get(sku);
+      if (!master || !master.price || master.price <= 0) continue;
+      try {
+        const calc = computeAll({ sku: master, snap });
+        if (Number.isFinite(calc.grossMargin)) {
+          marginVals.push(calc.grossMargin);
+        }
+      } catch { /* 计算出错跳过 */ }
+    }
+  }
+  const avgProfitMargin = marginVals.length > 0 ? marginVals.reduce((s, v) => s + v, 0) / marginVals.length : 0;
   const totalStock = vals.reduce((s, r) => s + safeNum(r.stockOnHand) + safeNum(r.stockInTransit), 0);
   const totalAdSpend = vals.reduce((s, r) => s + safeNum(r.adSpend), 0);
   return { salesSum, salesCount, avgAdRatio, avgRating, avgReturnRate, avgProfitMargin, totalStock, totalAdSpend, skuCount: vals.length };
@@ -246,8 +260,8 @@ export default function HistoryPage() {
   const prevSnapshots = useMemo(() => aggregateSnapshots(snapshots, prevDates), [snapshots, prevDates]);
 
   // 聚合指标
-  const curAgg = useMemo(() => aggregate(curSnapshots), [curSnapshots]);
-  const prevAgg = useMemo(() => aggregate(prevSnapshots), [prevSnapshots]);
+  const curAgg = useMemo(() => aggregate(curSnapshots, skuMap), [curSnapshots, skuMap]);
+  const prevAgg = useMemo(() => aggregate(prevSnapshots, skuMap), [prevSnapshots, skuMap]);
 
   // 图表数据
   const chartData = useMemo(() => {
@@ -284,6 +298,14 @@ export default function HistoryPage() {
       const master = skuMap.get(sku);
       const curSales = safeNum(cur?.dailySales7d);
       const prevSales = safeNum(prev?.dailySales7d);
+      // FIX: 利润率不从快照读取（导入时存为0），改为用 computeAll 实时计算
+      const calcMargin = (snap?: DailySnapshot): number => {
+        if (!master || !master.price || master.price <= 0 || !snap) return 0;
+        try {
+          const calc = computeAll({ sku: master, snap });
+          return Number.isFinite(calc.grossMargin) ? calc.grossMargin : 0;
+        } catch { return 0; }
+      };
       rows.push({
         sku,
         name: master?.name ?? sku,
@@ -293,8 +315,8 @@ export default function HistoryPage() {
         prevAdRatio: safeNum(prev?.adRatio),
         curRating: safeNum(cur?.rating),
         prevRating: safeNum(prev?.rating),
-        curMargin: safeNum(cur?.profitMargin),
-        prevMargin: safeNum(prev?.profitMargin),
+        curMargin: calcMargin(cur),
+        prevMargin: calcMargin(prev),
         curStock: safeNum(cur?.stockOnHand) + safeNum(cur?.stockInTransit),
         prevStock: safeNum(prev?.stockOnHand) + safeNum(prev?.stockInTransit),
         salesDelta: curSales - prevSales,

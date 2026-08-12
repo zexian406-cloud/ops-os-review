@@ -353,7 +353,45 @@ export default function ImportPage() {
       // ── 数据健康校验（写入 IndexedDB 之前） ──
       // 按 9 条规则逐行校验：错误→跳过 / 警告→自动修正 / 提示→标记
       // 校验通过后弹出「数据健康报告」面板，用户必须点「确认并继续」才写入
-      const validation = validateImportData(parsed);
+      // FIX: 部分更新模式下，先用数据库已有数据填充 Excel 中的空值，再跑健康检查
+      // 这样健康检查看到的是合并后的数据，不会对「数据库已有但 Excel 未填」的字段报空值警告
+      let dataToValidate = parsed;
+      if (mode === "partial" && parsed.skuMaster.length > 0) {
+        const existingRows = await db.skuMaster.bulkGet(parsed.skuMaster.map((s) => s.sku));
+        const existingMap = new Map<string, SkuMaster>();
+        for (const e of existingRows) {
+          if (e) existingMap.set(e.sku, e);
+        }
+        const numFields: (keyof SkuMaster)[] = [
+          "price", "listPrice", "costFob", "costShipping", "costDelivery",
+          "costCommission", "commissionRate", "costStorage", "costReturn", "costAd",
+          "discountPrice", "discountFob", "discountShipping", "discountDelivery",
+          "discountCommission", "discountStorage", "discountReturn", "discountAd", "discountCoupon",
+          "fbaPrice", "fbmPrice", "fbaLeadTimeDays", "fbmLeadTimeDays",
+          "fbaSafetyStockDays", "fbmSafetyStockDays", "leadTimeDays", "safetyStockDays", "moq",
+          "packageLength", "packageWidth", "packageHeight", "packageWeight", "unitsPerBox",
+        ];
+        const mergedSkuMaster = parsed.skuMaster.map((row) => {
+          const old = existingMap.get(row.sku);
+          if (!old) return row;
+          const result: SkuMaster = { ...row };
+          for (const f of numFields) {
+            const newVal = result[f] as number | undefined;
+            if (newVal == null || newVal <= 0) {
+              const oldVal = old[f] as number | undefined;
+              if (oldVal != null && oldVal > 0) {
+                (result as Record<string, unknown>)[f] = oldVal;
+              }
+            }
+          }
+          if (!result.fulfillment && old.fulfillment) result.fulfillment = old.fulfillment;
+          if (!result.saleStatus && old.saleStatus) result.saleStatus = old.saleStatus;
+          if (!result.linkType && old.linkType) result.linkType = old.linkType;
+          return result;
+        });
+        dataToValidate = { ...parsed, skuMaster: mergedSkuMaster };
+      }
+      const validation = validateImportData(dataToValidate);
       setHealthReport(validation);
       setPendingImport({ parsed, validation, mode });
       setParsing(false);
