@@ -473,6 +473,22 @@ export async function upsertInventoryLayersPartial(rows: InventoryLayer[]): Prom
     existingMap.set(`${e.sku}__${e.date}`, e);
   }
 
+  // FIX: 查询每个 SKU 的最近一次库存记录（不含当前日期），用于继承 FBM/海外仓等数据
+  // 解决：新日期导入时如果 Excel 没有 FBM 库存 sheet，海外仓可售会显示 0
+  const skuList = [...new Set(rows.map((r) => r.sku))];
+  const allPrevInventory = await db.inventoryLayer
+    .where("sku")
+    .anyOf(skuList)
+    .and((r) => r.date !== date)
+    .toArray();
+  const latestPrevBySku = new Map<string, InventoryLayer>();
+  for (const inv of allPrevInventory) {
+    const cur = latestPrevBySku.get(inv.sku);
+    if (!cur || cur.date < inv.date) {
+      latestPrevBySku.set(inv.sku, inv);
+    }
+  }
+
   // 数值字段：新值 > 0 才覆盖
   const numFields: (keyof InventoryLayer)[] = [
     "fbaStock", "fbmStock", "factoryStock",
@@ -484,27 +500,72 @@ export async function upsertInventoryLayersPartial(rows: InventoryLayer[]): Prom
   const merged: InventoryLayer[] = rows.map((row) => {
     const key = `${row.sku}__${row.date}`;
     const old = existingMap.get(key);
-    if (!old) return row; // 新 SKU，直接写入
+    if (!old) {
+      // 新日期的记录：从上一次库存记录继承 FBM/海外仓数据
+      const prev = latestPrevBySku.get(row.sku);
+      if (prev) {
+        const result: InventoryLayer = { ...row };
+        // 数值字段：新值为 0/空时从上一次记录继承
+        for (const f of numFields) {
+          const newVal = result[f] as number | undefined;
+          if (newVal == null || newVal <= 0) {
+            const prevVal = prev[f] as number | undefined;
+            if (prevVal != null && prevVal > 0) {
+              (result as Record<string, unknown>)[f] = prevVal;
+            }
+          }
+        }
+        // warehouseBreakdown：新值为空时从上一次记录继承
+        if ((!result.warehouseBreakdown || result.warehouseBreakdown.length === 0) && prev.warehouseBreakdown && prev.warehouseBreakdown.length > 0) {
+          result.warehouseBreakdown = prev.warehouseBreakdown;
+        }
+        // transitBatches：新值为空时从上一次记录继承
+        if ((!result.transitBatches || result.transitBatches.length === 0) && prev.transitBatches && prev.transitBatches.length > 0) {
+          result.transitBatches = prev.transitBatches;
+        }
+        // factoryBatches：新值为空时从上一次记录继承
+        if ((!result.factoryBatches || result.factoryBatches.length === 0) && prev.factoryBatches && prev.factoryBatches.length > 0) {
+          result.factoryBatches = prev.factoryBatches;
+        }
+        return result;
+      }
+      return row; // 无历史记录，直接写入
+    }
 
     const result: InventoryLayer = { ...old };
+    const prev = latestPrevBySku.get(row.sku);
 
-    // 数值字段：新值 > 0 才覆盖
+    // 数值字段：新值 > 0 才覆盖；新值为 0 且旧值也为 0 时，从上一次记录继承（修复历史脏数据）
     for (const f of numFields) {
       const newVal = row[f] as number | undefined;
       if (newVal != null && newVal > 0) {
         (result as Record<string, unknown>)[f] = newVal;
+      } else {
+        const oldVal = result[f] as number | undefined;
+        if ((oldVal == null || oldVal <= 0) && prev) {
+          const prevVal = prev[f] as number | undefined;
+          if (prevVal != null && prevVal > 0) {
+            (result as Record<string, unknown>)[f] = prevVal;
+          }
+        }
       }
     }
 
-    // 数组字段：新值有元素才覆盖
+    // 数组字段：新值有元素才覆盖；新值为空且旧值也为空时，从上一次记录继承
     if (row.warehouseBreakdown && row.warehouseBreakdown.length > 0) {
       result.warehouseBreakdown = row.warehouseBreakdown;
+    } else if ((!result.warehouseBreakdown || result.warehouseBreakdown.length === 0) && prev?.warehouseBreakdown && prev.warehouseBreakdown.length > 0) {
+      result.warehouseBreakdown = prev.warehouseBreakdown;
     }
     if (row.transitBatches && row.transitBatches.length > 0) {
       result.transitBatches = row.transitBatches;
+    } else if ((!result.transitBatches || result.transitBatches.length === 0) && prev?.transitBatches && prev.transitBatches.length > 0) {
+      result.transitBatches = prev.transitBatches;
     }
     if (row.factoryBatches && row.factoryBatches.length > 0) {
       result.factoryBatches = row.factoryBatches;
+    } else if ((!result.factoryBatches || result.factoryBatches.length === 0) && prev?.factoryBatches && prev.factoryBatches.length > 0) {
+      result.factoryBatches = prev.factoryBatches;
     }
 
     return result;

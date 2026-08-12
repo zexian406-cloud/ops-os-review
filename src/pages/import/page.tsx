@@ -747,7 +747,7 @@ export default function ImportPage() {
           southcentral: existing?.southcentral ?? 0,
         });
       }
-      await upsertInventoryLayers(layers);
+      await upsertInventoryLayersPartial(layers);
       setImportMsg({ tone: "ok", msg: `导入成功 · ${layers.length} 条 FBA 库存明细（${importDateLabel}）` });
       setImportCounts((prev) => ({ ...prev, inventory: (prev.inventory ?? 0) + layers.length }));
     } catch (err) {
@@ -832,7 +832,7 @@ export default function ImportPage() {
           })),
         });
       }
-      await upsertInventoryLayers(layers);
+      await upsertInventoryLayersPartial(layers);
       const unmappedMsg = unmapped.size > 0
         ? `（${unmapped.size} 个仓库未识别区域，请在「仓库映射」标签页配置）`
         : "";
@@ -893,7 +893,7 @@ export default function ImportPage() {
           });
         }
       }
-      await upsertInventoryLayers(layers);
+      await upsertInventoryLayersPartial(layers);
       const totalBatches = [...skuBatches.values()].reduce((s, b) => s + b.length, 0);
       setImportMsg({ tone: "ok", msg: `导入成功 · ${skuBatches.size} 个 SKU · ${totalBatches} 条在途批次（${importDateLabel}）` });
     } catch (err) {
@@ -947,7 +947,7 @@ export default function ImportPage() {
           });
         }
       }
-      await upsertInventoryLayers(layers);
+      await upsertInventoryLayersPartial(layers);
       const totalBatches = [...skuBatches.values()].reduce((s, b) => s + b.length, 0);
       setImportMsg({ tone: "ok", msg: `导入成功 · ${skuBatches.size} 个 SKU · ${totalBatches} 条工厂批次（${importDateLabel}）` });
     } catch (err) {
