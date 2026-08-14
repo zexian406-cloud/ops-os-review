@@ -17,8 +17,10 @@ import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
+import SkuLayoutCustomizer from "@/components/layout/SkuLayoutCustomizer";
 import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
 import { useSkuDetailLayout, type SkuDetailSectionKey, type GridItemLayout } from "@/hooks/useLayoutPrefs";
+import { type Layout } from "react-grid-layout";
 import type { WowDelta } from "@/domain/engine";
 import type { DailySnapshot, SkuMaster, InventoryLayer, TodoItem, OpsLog, Shop } from "@/domain/types";
 
@@ -203,12 +205,14 @@ export default function SkuDetail() {
 
   const activeOrUpcomingPromo = skuPromos.find((p) => p.status === "active" || p.status === "upcoming");
 
-  // ── Layout ──
+  // ── Layout customizer ──
   const {
-    visibleKeys, gridLayout,
+    customizing, setCustomizing, toggleSection, reset: resetLayout,
+    visibleKeys, allKeys, gridLayout, setGridLayout,
+    resetItemSize, resetItemPosition,
   } = useSkuDetailLayout();
 
-  // ── renderedKeys / rglLayout 移至 calc 解构之后定义 ──
+  // ── renderedKeys / rglLayout / handleLayoutChange 移至 calc 解构之后定义 ──
   // （依赖 fbaReplenish / fbmReplenish，在 calc 解构前引用会触发 TDZ 错误导致白屏）
 
   // ── 关联待办 ──
@@ -282,7 +286,8 @@ export default function SkuDetail() {
   const [editSaving, setEditSaving] = useState(false);
   const [editMsg, setEditMsg] = useState<string | null>(null);
 
-  // ── 内容变更版本号已移除（CSS Grid 自动适应高度，无需手动触发测高） ──
+  // ── 内容变更版本号：编辑区域展开/折叠时递增，触发 CanvasLayout 重新测高 ──
+  const [contentVersion, setContentVersion] = useState(0);
 
   // 新建 SKU 没有快照时给默认值，防止编辑区卡住
   const emptySnapshot: DailySnapshot = {
@@ -310,7 +315,10 @@ export default function SkuDetail() {
   const [editListing, setEditListing] = useState(false);   // Listing 优化
   const [skuSaving, setSkuSaving] = useState(false);
   const [skuMsg, setSkuMsg] = useState<string | null>(null);
-  const [editProfit, setEditProfit] = useState(false); // 盈利分析编辑
+  const [editProfit, setEditProfit] = useState(false); // 盈利分析编辑（需在 contentVersion useEffect 之前声明，避免 TDZ）
+
+  // 编辑区域展开/折叠 → 递增 contentVersion → 触发 CanvasLayout 重新测高
+  useEffect(() => { setContentVersion((v) => v + 1); }, [editProduct, editPackage, editListing, editOpen, editProfit, customizing]);
 
   // ── 编辑用的本地 SKU 数据 ──
   const [editSku, setEditSku] = useState<SkuMaster | null>(null);
@@ -583,15 +591,25 @@ export default function SkuDetail() {
     }) as SkuDetailSectionKey[];
   }, [visibleKeys, latest, activeOrUpcomingPromo, sku, calc, skuWow]);
 
-  const rglLayout = useMemo(() => {
+  const rglLayout: Layout[] = useMemo(() => {
     return renderedKeys.map((key) => {
       const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 4 };
       return {
         i: key,
+        x: Math.max(Math.min(item.x, 12), 0),
+        y: Math.max(item.y, 0),
         w: Math.min(Math.max(item.w, 2), 12),
+        h: Math.max(item.h, 2),
+        minW: 2,
+        maxW: 12,
+        minH: 2,
       };
     });
   }, [renderedKeys, gridLayout]);
+
+  const handleLayoutChange = useCallback((layout: Layout[]) => {
+    setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
+  }, [setGridLayout]);
 
   if (loading) return <div className="text-sm text-foreground-500">加载中...</div>;
 
@@ -680,9 +698,26 @@ export default function SkuDetail() {
 
   return (
     <div className="space-y-4">
-      {/* 画布布局 — CSS Grid 响应式布局 */}
+      {/* 工具栏 */}
+      {customizing && (
+        <SkuLayoutCustomizer
+          visibleKeys={visibleKeys}
+          allKeys={allKeys}
+          toggle={toggleSection}
+          onClose={() => setCustomizing(false)}
+          onReset={resetLayout}
+        />
+      )}
+
+      {/* 画布布局 — 全部区块可拖拽定位 */}
       <CanvasLayout
         layout={rglLayout}
+        customizing={customizing}
+        onLayoutChange={handleLayoutChange}
+        onHideItem={toggleSection}
+        onResetItemSize={resetItemSize}
+        onResetItemPosition={resetItemPosition}
+        contentVersion={contentVersion}
       >
       {/* ═══════ 1. 头部信息 ═══════ */}
       {visibleKeys.includes("header") && (
@@ -723,6 +758,14 @@ export default function SkuDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setCustomizing(!customizing)}
+            className="flex items-center gap-1.5 rounded-[9px] border border-background-200 bg-background-50 px-3 py-1.5 text-[12px] font-medium text-foreground-500 hover:bg-background-100 hover:text-foreground-800 cursor-pointer"
+          >
+            <i className={customizing ? "ri-close-line" : "ri-layout-masonry-line"} aria-hidden />
+            {customizing ? "关闭设置" : "自定义布局"}
+          </button>
           <Link to={`/promo-cost?sku=${encodeURIComponent(sku.sku)}`}
             className="inline-flex items-center gap-1.5 rounded-[9px] border border-accent-200 bg-accent-50 px-3 py-1.5 text-[12px] font-medium text-accent-700 hover:bg-accent-100 cursor-pointer whitespace-nowrap"
           >

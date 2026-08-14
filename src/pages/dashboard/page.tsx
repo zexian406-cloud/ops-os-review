@@ -1,8 +1,9 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
+import { type Layout } from "react-grid-layout";
 import { useOpsData } from "@/domain/store";
 import { computeWarehouseTotals } from "@/domain/calculator";
 import { db, getAllShops } from "@/domain/db";
@@ -13,6 +14,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
 import type { AlertType, TodoItem, Shop, OpsLog } from "@/domain/types";
 import AlertList from "./AlertList";
+import LayoutCustomizer from "@/components/layout/LayoutCustomizer";
 import { useDashboardLayout, type DashboardSectionKey, type KpiMetricKey, KPI_METRIC_LABELS, KPI_METRIC_ICONS, KPI_METRIC_TONES, type GridItemLayout } from "@/hooks/useLayoutPrefs";
 
 const deltaArrow = (v: number, inverse = false) => {
@@ -69,19 +71,32 @@ export default function Dashboard() {
   }, []);
 
   const {
-    visibleKeys, kpiSlots, gridLayout,
+    customizing, setCustomizing, toggleSection, reset, setKpiSlot,
+    visibleKeys, kpiSlots, gridLayout, setGridLayout, allKeys,
+    resetItemSize, resetItemPosition,
   } = useDashboardLayout();
 
   // ── 构建 ReactGridLayout 布局数组 ──
-  const rglLayout = useMemo(() => {
+  const rglLayout: Layout[] = useMemo(() => {
     return visibleKeys.map((key) => {
       const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 6 };
+      // Clamp all values to prevent 0-width/height cards from corrupting the layout
       return {
         i: key,
+        x: Math.max(Math.min(item.x, 12), 0),
+        y: Math.max(item.y, 0),
         w: Math.min(Math.max(item.w, 2), 12),
+        h: Math.max(item.h, 2),
+        minW: 2,
+        maxW: 12,
+        minH: 2,
       };
     });
   }, [visibleKeys, gridLayout]);
+
+  const handleLayoutChange = useCallback((layout: Layout[]) => {
+    setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
+  }, [setGridLayout]);
 
   // ── 店铺筛选 ──
   const shopFilterId = useMemo(() => {
@@ -240,12 +255,29 @@ export default function Dashboard() {
   const sections: Record<DashboardSectionKey, React.ReactNode> = {
     kpi: (
       <div>
+        {customizing && (
+          <div className="mb-3 rounded-xl border border-dashed border-accent-200 bg-accent-50/50 px-4 py-2.5 text-[12px] text-accent-800">
+            <i className="ri-information-line mr-1" aria-hidden />
+            自定义模式下，每张 KPI 卡片可通过下拉框切换展示的指标。设置自动保存。
+          </div>
+        )}
         <div className="grid grid-cols-4 gap-4">
           {kpiSlots.map((metricKey, idx) => {
             const meta = kpiValues[metricKey];
             if (!meta) return null;
             return (
               <div key={idx} className="relative">
+                {customizing && (
+                  <select
+                    value={metricKey}
+                    onChange={(e) => setKpiSlot(idx, e.target.value as KpiMetricKey)}
+                    className="absolute -top-1 left-2 z-10 rounded-md border border-accent-300/70 bg-background-50 px-2 py-0.5 text-[10px] font-medium text-foreground-700 focus:border-accent-500 focus:outline-none cursor-pointer max-w-[calc(100%-16px)]"
+                  >
+                    {Object.entries(KPI_METRIC_LABELS).map(([k, label]) => (
+                      <option key={k} value={k}>{label}</option>
+                    ))}
+                  </select>
+                )}
                 <KpiCard
                   label={KPI_METRIC_LABELS[metricKey]}
                   value={meta.value}
@@ -595,6 +627,14 @@ export default function Dashboard() {
               ))}
             </select>
           </div>
+          <button
+            type="button"
+            onClick={() => setCustomizing(!customizing)}
+            className="flex items-center gap-1.5 rounded-[12px] border border-background-200 bg-background-50 px-3 py-1.5 text-[12px] font-medium text-foreground-500 hover:bg-background-100 hover:text-foreground-800 cursor-pointer"
+          >
+            <i className={customizing ? "ri-close-line" : "ri-layout-masonry-line"} aria-hidden />
+            {customizing ? "关闭设置" : "自定义布局"}
+          </button>
         </div>
         <p className="text-[13px] text-foreground-400">
           {criticalCount} 个需要立即处理 · {warnCount} 个需要关注{infoCount > 0 ? ` · ${infoCount} 个提醒` : ""} ·{" "}
@@ -603,9 +643,25 @@ export default function Dashboard() {
         </p>
       </div>
 
+      {/* Layout Customizer */}
+      {customizing && (
+        <LayoutCustomizer
+          visibleKeys={visibleKeys}
+          allKeys={allKeys}
+          toggle={toggleSection}
+          onClose={() => setCustomizing(false)}
+          onReset={reset}
+        />
+      )}
+
       {/* Canvas Layout — Notion Dashboard 风格画布 */}
       <CanvasLayout
         layout={rglLayout}
+        customizing={customizing}
+        onLayoutChange={handleLayoutChange}
+        onHideItem={toggleSection}
+        onResetItemSize={resetItemSize}
+        onResetItemPosition={resetItemPosition}
       >
         {visibleKeys.map((key) => {
           const node = sections[key as DashboardSectionKey];
