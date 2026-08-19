@@ -153,6 +153,12 @@ export default function CanvasLayout({
   // 仅在外部布局变化（重置/显隐模块）时清空，切换浏览/编辑模式不清空。
   const manuallyResizedRef = useRef<Set<string>>(new Set());
 
+  // ── 测高标志 ──
+  // measureAndAdjust 修改 h 后，压缩器会修改 y → onLayoutChange 触发。
+  // 此时 isMeasuringRef=true，handleLayoutChange 忽略 y 防止循环。
+  // 用户拖拽/缩放时 isMeasuringRef=false，handleLayoutChange 包含 y 让压缩生效。
+  const isMeasuringRef = useRef(false);
+
   // ── 外部布局变更版本号 ──
   // 用于触发测高 effect，但不形成 internalLayout → measureAndAdjust → internalLayout 的反馈环
   const [layoutVersion, setLayoutVersion] = useState(0);
@@ -174,33 +180,58 @@ export default function CanvasLayout({
   // 深度比较避免无限循环：onLayoutChange 在每次渲染都会触发，
   // 如果 layout 未实际变化则返回 prev（相同引用不触发重渲染）
   //
-  // 【抖动修复】比较时忽略 y 字段：
-  // measureAndAdjust 修改 h → 垂直压缩器修改 y → onLayoutChange 触发 →
-  // handleLayoutChange 更新 internalLayout → 重渲染 → 压缩器再次修改 y → 无限循环。
-  // 忽略 y 后，只有 x/w/h 变化才更新状态，打破反馈环。
-  // y 值由 GridLayout 内部压缩器自动处理，无需同步到 internalLayout。
+  // 【垂直压缩修复】
+  // 之前为修复抖动而忽略所有 y 变化，导致拖拽后压缩器的 y 值未同步到 internalLayout，
+  // 卡片原位置留空、下方卡片不上移。
+  // 现在区分两种场景：
+  // 1. 测高引发（isMeasuringRef=true）：忽略 y，仅更新 x/w/h，打破 measureAndAdjust 循环
+  // 2. 用户拖拽/缩放引发（isMeasuringRef=false）：包含 y，让垂直压缩生效
   const handleLayoutChange = useCallback((newLayout: Layout) => {
     setInternalLayout((prev) => {
+      const measuring = isMeasuringRef.current;
+      if (measuring) isMeasuringRef.current = false;
+
       if (prev.length === newLayout.length) {
         const same = prev.every((item, i) => {
           const n = newLayout[i];
-          return n.i === item.i && n.x === item.x && n.w === item.w && n.h === item.h;
+          if (measuring) {
+            return n.i === item.i && n.x === item.x && n.w === item.w && n.h === item.h;
+          }
+          return n.i === item.i && n.x === item.x && n.y === item.y && n.w === item.w && n.h === item.h;
         });
         if (same) return prev;
       }
-      // 保留 prev 的 y 值，仅更新 x/w/h（y 由压缩器管理）
+
+      if (measuring) {
+        // 测高引发：保留 prev 的 y，仅更新 x/w/h
+        return prev.map((item, i) => {
+          const n = newLayout[i];
+          return n && (n.x !== item.x || n.w !== item.w || n.h !== item.h)
+            ? { ...item, x: n.x, w: n.w, h: n.h }
+            : item;
+        });
+      }
+      // 用户拖拽/缩放引发：包含 y，让压缩器的结果生效
       return prev.map((item, i) => {
         const n = newLayout[i];
-        return n && (n.x !== item.x || n.w !== item.w || n.h !== item.h)
-          ? { ...item, x: n.x, w: n.w, h: n.h }
-          : item;
+        if (!n) return item;
+        return {
+          ...item,
+          x: n.x,
+          y: n.y,
+          w: n.w,
+          h: n.h,
+        };
       });
     });
   }, []);
 
   // onDragStop: 用户拖拽完成，持久化到父组件
+  // 同时立即更新 internalLayout（含 y），让压缩结果即时生效
   const handleDragStop = useCallback((newLayout: Layout) => {
-    onLayoutChange([...newLayout] as Layout[]);
+    const arr = [...newLayout] as Layout[];
+    setInternalLayout(arr);
+    onLayoutChange(arr);
   }, [onLayoutChange]);
 
   // onResizeStop: 用户缩放完成，持久化到父组件
@@ -215,6 +246,7 @@ export default function CanvasLayout({
         manuallyResizedRef.current.add(item.i);
       }
     }
+    setInternalLayout(newLayoutArr);
     onLayoutChange(newLayoutArr);
   }, [onLayoutChange]);
 
@@ -281,6 +313,7 @@ export default function CanvasLayout({
     });
 
     if (changed) {
+      isMeasuringRef.current = true;
       setInternalLayout(nextLayout);
     }
   }, [canRender, containerRef]);
