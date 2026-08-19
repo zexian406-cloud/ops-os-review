@@ -5,6 +5,8 @@ import { exportAllData } from "@/domain/export";
 import { exportAllCsv } from "@/domain/export-csv";
 import type { CloudConfig } from "@/domain/types";
 import { useNavigate } from "react-router-dom";
+import SiteSwitcher from "./SiteSwitcher";
+import ShopFilter from "./ShopFilter";
 
 export default function Topbar() {
   const navigate = useNavigate();
@@ -105,7 +107,9 @@ export default function Topbar() {
         </div>
       </div>
 
-      <div className="ml-auto flex flex-wrap items-center gap-2">
+      <SiteSwitcher />
+        <ShopFilter />
+        <div className="ml-auto flex flex-wrap items-center gap-2">
         <span className="hidden items-center gap-1.5 rounded-full bg-white/50 backdrop-blur-md px-3 py-1 text-[11px] font-medium text-foreground-500 border border-black/5 lg:inline-flex">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent-500" />
           本地已自动保存
