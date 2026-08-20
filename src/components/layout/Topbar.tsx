@@ -7,6 +7,8 @@ import type { CloudConfig } from "@/domain/types";
 import { useNavigate } from "react-router-dom";
 import SiteSwitcher from "./SiteSwitcher";
 import ShopFilter from "./ShopFilter";
+import SiteSwitcher from "./SiteSwitcher";
+import ShopFilter from "./ShopFilter";
 
 export default function Topbar() {
   const navigate = useNavigate();
@@ -108,6 +110,8 @@ export default function Topbar() {
       </div>
 
       <SiteSwitcher />
+        <ShopFilter />
+        <SiteSwitcher />
         <ShopFilter />
         <div className="ml-auto flex flex-wrap items-center gap-2">
         <span className="hidden items-center gap-1.5 rounded-full bg-white/50 backdrop-blur-md px-3 py-1 text-[11px] font-medium text-foreground-500 border border-black/5 lg:inline-flex">

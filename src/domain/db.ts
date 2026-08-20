@@ -18,6 +18,7 @@ import type {
   OpsLog,
 } from "./types";
 import type { Site, SiteConfig, CrossSiteSummary, CrossSiteReport } from "./types";
+import type { Site, SiteConfig, CrossSiteSummary, CrossSiteReport } from "./types";
 
 /**
  * Amazon Operation OS — Local storage layer (IndexedDB via Dexie).
@@ -38,6 +39,7 @@ export class AmzOpsDB extends Dexie {
   todos!: Table<TodoItem, string>;
   shops!: Table<Shop, string>;
   opsLogs!: Table<OpsLog, string>;
+  sites!: Table<Site, string>;
   sites!: Table<Site, string>;
 
   constructor() {
@@ -110,6 +112,23 @@ export class AmzOpsDB extends Dexie {
     });
     this.version(8).stores({
       warehouseMappings: "++id, warehouseName, region",
+    });
+    this.version(9).stores({
+      skuMaster: "sku, store, siteId, fulfillment, saleStatus, owner, category, lifecycle",
+      dailySnapshot: "++id, [sku+date], date, sku, siteId",
+      inventoryLayer: "++id, [sku+date], date, sku, siteId",
+      campaigns: "id, siteId, startDate, endDate, active",
+      promotions: "id, sku, store, siteId, type, status, startDate, endDate",
+      manualPromotions: "id, sku, siteId, type, startDate, endDate",
+      alerts: "id, sku, siteId, type, severity, status, date",
+      config: "key",
+      warehouseProviders: "id",
+      warehouseMappings: "++id, warehouseName, region",
+      calculationRecords: "id, sku, siteId, createdAt",
+      todos: "id, siteId, completed, dueDate",
+      shops: "id, name, siteId, createdAt",
+      opsLogs: "id, sku, siteId, date, action",
+      sites: "id, name, marketplace, currency, isActive, sortOrder",
     });
     this.version(9).stores({
       skuMaster: "sku, store, siteId, fulfillment, saleStatus, owner, category, lifecycle",
@@ -896,6 +915,203 @@ export async function getOrCreateShopByName(name: string): Promise<string> {
   return shop.id;
 }
 
+// ==================== Site management (multi-site) ====================
+export const DEFAULT_SITES: Site[] = [
+  {
+    id: "site_us",
+    name: "美国站",
+    marketplace: "US",
+    currency: "USD",
+    currencySymbol: "$",
+    exchangeRateToUsd: 1.0,
+    commissionRate: 15,
+    fbaDeliveryFee: 3.5,
+    vatRate: 0,
+    isActive: true,
+    sortOrder: 1,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "site_uk",
+    name: "英国站",
+    marketplace: "UK",
+    currency: "GBP",
+    currencySymbol: "£",
+    exchangeRateToUsd: 1.27,
+    commissionRate: 15,
+    fbaDeliveryFee: 2.5,
+    vatRate: 20,
+    isActive: false,
+    sortOrder: 2,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "site_de",
+    name: "德国站",
+    marketplace: "DE",
+    currency: "EUR",
+    currencySymbol: "€",
+    exchangeRateToUsd: 1.08,
+    commissionRate: 15,
+    fbaDeliveryFee: 3.0,
+    vatRate: 19,
+    isActive: false,
+    sortOrder: 3,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "site_jp",
+    name: "日本站",
+    marketplace: "JP",
+    currency: "JPY",
+    currencySymbol: "¥",
+    exchangeRateToUsd: 0.0067,
+    commissionRate: 15,
+    fbaDeliveryFee: 500,
+    vatRate: 10,
+    isActive: false,
+    sortOrder: 4,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "site_ca",
+    name: "加拿大站",
+    marketplace: "CA",
+    currency: "CAD",
+    currencySymbol: "C$",
+    exchangeRateToUsd: 0.73,
+    commissionRate: 15,
+    fbaDeliveryFee: 4.5,
+    vatRate: 5,
+    isActive: false,
+    sortOrder: 5,
+    createdAt: new Date().toISOString(),
+  },
+];
+
+export const DEFAULT_SITE_CONFIG: SiteConfig = {
+  siteId: "",
+  defaultLeadTime: 40,
+  defaultSafetyStockDays: 30,
+  defaultTargetCoverDays: 60,
+  profitMarginThreshold: 5,
+  adRatioThreshold: 30,
+  ratingDropThreshold: 0.2,
+  returnRateThreshold: 5,
+  lifecycleNewDays: 90,
+  lifecycleGrowthDays: 180,
+};
+
+export async function ensureDefaultSites(): Promise<void> {
+  const count = await db.sites.count();
+  if (count > 0) return;
+  await db.sites.bulkPut(DEFAULT_SITES);
+}
+
+export async function getAllSites(): Promise<Site[]> {
+  return db.sites.orderBy("sortOrder").toArray();
+}
+
+export async function getActiveSites(): Promise<Site[]> {
+  return db.sites.where("isActive").equals(1 as never).toArray()
+    .catch(() => db.sites.toArray());
+}
+
+export async function getSite(id: string): Promise<Site | undefined> {
+  return db.sites.get(id);
+}
+
+export async function addSite(site: Omit<Site, "id" | "createdAt">): Promise<Site> {
+  const newSite: Site = {
+    ...site,
+    id: `site_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    createdAt: new Date().toISOString(),
+  };
+  await db.sites.put(newSite);
+  return newSite;
+}
+
+export async function updateSite(id: string, updates: Partial<Site>): Promise<void> {
+  const site = await db.sites.get(id);
+  if (!site) throw new Error("站点不存在");
+  await db.sites.put({ ...site, ...updates, updatedAt: new Date().toISOString() });
+}
+
+export async function deleteSite(id: string): Promise<void> {
+  if (id === "site_us") throw new Error("默认站点不可删除");
+  await db.sites.delete(id);
+  await db.skuMaster.where("siteId").equals(id).modify({ siteId: "site_us" });
+  await db.shops.where("siteId").equals(id).modify({ siteId: "site_us" });
+  await db.promotions.where("siteId").equals(id).modify({ siteId: "site_us" });
+  await db.dailySnapshot.where("siteId").equals(id).modify({ siteId: "site_us" });
+  await db.inventoryLayer.where("siteId").equals(id).modify({ siteId: "site_us" });
+}
+
+export async function getCurrentSiteId(): Promise<string> {
+  const row = await db.config.get("currentSiteId");
+  return (row?.value as string) ?? "site_us";
+}
+
+export async function setCurrentSiteId(siteId: string): Promise<void> {
+  await db.config.put({ key: "currentSiteId", value: siteId });
+}
+
+export async function getSiteConfig(siteId: string): Promise<SiteConfig> {
+  const row = await db.config.get(`siteConfig_${siteId}`);
+  return (row?.value as SiteConfig) ?? { ...DEFAULT_SITE_CONFIG, siteId };
+}
+
+export async function setSiteConfig(cfg: SiteConfig): Promise<void> {
+  await db.config.put({ key: `siteConfig_${cfg.siteId}`, value: cfg });
+}
+
+export async function getCrossSiteSummary(): Promise<CrossSiteReport> {
+  const sites = await getAllSites();
+  const summaries: CrossSiteSummary[] = [];
+
+  for (const site of sites.filter(s => s.isActive)) {
+    const [skus, snapshots, alerts] = await Promise.all([
+      db.skuMaster.where("siteId").equals(site.id).count(),
+      db.dailySnapshot.where("siteId").equals(site.id).toArray(),
+      db.alerts.where("siteId").equals(site.id).count(),
+    ]);
+
+    const latestSnapshots = new Map<string, typeof snapshots[0]>();
+    for (const s of snapshots) {
+      if (!latestSnapshots.has(s.sku)) latestSnapshots.set(s.sku, s);
+    }
+
+    let totalSalesUsd = 0;
+    let totalProfitUsd = 0;
+    let totalStock = 0;
+
+    for (const snap of latestSnapshots.values()) {
+      totalSalesUsd += (snap.monthlySales || 0) * site.exchangeRateToUsd;
+      totalProfitUsd += (snap.profit || 0) * site.exchangeRateToUsd;
+      totalStock += snap.stockOnHand || 0;
+    }
+
+    summaries.push({
+      siteId: site.id,
+      siteName: site.name,
+      currency: site.currency,
+      exchangeRateToUsd: site.exchangeRateToUsd,
+      totalSalesUsd,
+      totalProfitUsd,
+      totalSkuCount: skus,
+      totalStockOnHand: totalStock,
+      alertCount: alerts,
+    });
+  }
+
+  return {
+    sites: summaries,
+    grandTotalSalesUsd: summaries.reduce((s, x) => s + x.totalSalesUsd, 0),
+    grandTotalProfitUsd: summaries.reduce((s, x) => s + x.totalProfitUsd, 0),
+    grandTotalSkuCount: summaries.reduce((s, x) => s + x.totalSkuCount, 0),
+    grandTotalAlertCount: summaries.reduce((s, x) => s + x.alertCount, 0),
+  };
+}
 // ==================== Site management (multi-site) ====================
 export const DEFAULT_SITES: Site[] = [
   {
