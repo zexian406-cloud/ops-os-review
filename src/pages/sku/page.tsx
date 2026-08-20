@@ -6,7 +6,7 @@ import { computeAll, computeWarehouseTotals, isCostFullyMissing, isReturnRateMis
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
-import type { SkuMaster, DailySnapshot, Promotion, InventoryLayer, Shop } from "@/domain/types";
+import type { SkuMaster, DailySnapshot, Promotion, InventoryLayer, Shop, Site } from "@/domain/types";
 import { SITE_CHANGE_EVENT } from "@/components/layout/SiteSwitcher";
 
 const lifecycleLabel: Record<string, string> = {
@@ -140,13 +140,21 @@ export default function SkuList() {
   const [createForm, setCreateForm] = useState<Partial<SkuMaster>>(emptySkuForm());
   const [createSaving, setCreateSaving] = useState(false);
   const [createMsg, setCreateMsg] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [currentSiteId, setCurrentSiteId] = useState("site_us");
+  const [copySourceSiteId, setCopySourceSiteId] = useState("");
+  const [copySourceSkus, setCopySourceSkus] = useState<SkuMaster[]>([]);
+  const [copySourceSkuId, setCopySourceSkuId] = useState("");
+  const [copyLoading, setCopyLoading] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         const sid = await getCurrentSiteId();
+        if (mounted) setCurrentSiteId(sid);
         const sites = await getAllSites();
+        if (mounted) setSites(sites);
         const site = sites.find(s => s.id === sid);
         if (site && mounted) setCurrentCurrency(site.currency || "USD");
       } catch { /* site not available */ }
@@ -155,6 +163,7 @@ export default function SkuList() {
       const detail = (e as CustomEvent).detail;
       if (detail?.siteId) {
         getAllSites().then(sites => {
+          if (mounted) { setSites(sites); setCurrentSiteId(detail.siteId); }
           const site = sites.find(s => s.id === detail.siteId);
           if (site && mounted) setCurrentCurrency(site.currency || "USD");
         }).catch(() => {});
@@ -277,6 +286,9 @@ export default function SkuList() {
     setCreateForm(emptySkuForm());
     setCreateTab("basic");
     setCreateMsg(null);
+    setCopySourceSiteId("");
+    setCopySourceSkus([]);
+    setCopySourceSkuId("");
     // Auto-set marketplace based on current site currency
     try {
       const sid = await getCurrentSiteId();
@@ -291,6 +303,49 @@ export default function SkuList() {
 
   const updateCreateField = (patch: Partial<SkuMaster>) => {
     setCreateForm((prev) => ({ ...prev, ...patch }));
+  };
+
+  const loadSourceSiteSkus = async (siteId: string) => {
+    setCopySourceSiteId(siteId);
+    setCopySourceSkus([]);
+    setCopySourceSkuId("");
+    if (!siteId) return;
+    setCopyLoading(true);
+    try {
+      const skus = await db.skuMaster.where("siteId").equals(siteId).toArray();
+      setCopySourceSkus(skus);
+    } catch { /* ignore */ }
+    setCopyLoading(false);
+  };
+
+  const copyFromSourceSku = () => {
+    const source = copySourceSkus.find(s => s.sku === copySourceSkuId);
+    if (!source) return;
+    const sourceSiteName = sites.find(s => s.id === copySourceSiteId)?.name || copySourceSiteId;
+    setCreateForm(prev => ({
+      ...prev,
+      sku: source.sku,
+      name: source.name,
+      msku: source.msku ?? "",
+      asin: source.asin ?? "",
+      upc: source.upc ?? "",
+      parentAsin: source.parentAsin ?? "",
+      parentSku: source.parentSku ?? "",
+      productUrl: source.productUrl ?? "",
+      category: source.category ?? "",
+      fulfillment: source.fulfillment ?? "FBA",
+      linkType: source.linkType ?? "main",
+      aPlus: source.aPlus,
+      aPlusAdvanced: source.aPlusAdvanced,
+      installVideo: source.installVideo,
+      transparentPlan: source.transparentPlan ?? "",
+      packageLength: source.packageLength ?? 0,
+      packageWidth: source.packageWidth ?? 0,
+      packageHeight: source.packageHeight ?? 0,
+      packageWeight: source.packageWeight ?? 0,
+      unitsPerBox: source.unitsPerBox ?? 1,
+    }));
+    setCreateMsg({ ok: true, msg: "已从" + sourceSiteName + "复制基础信息，请填写本站售价和成本" });
   };
 
   const handleCreate = async () => {
@@ -895,6 +950,38 @@ export default function SkuList() {
             {/* Tab: 基本信息 */}
             {createTab === "basic" && (
               <div className="space-y-4">
+                {/* 从其他站点复制 */}
+                <div className="rounded-lg border border-primary-200 bg-primary-50/40 p-3">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <i className="ri-file-copy-line text-primary-600 text-sm" />
+                    <span className="text-[11px] font-semibold text-primary-700">从其他站点复制基础信息</span>
+                    <span className="text-[10px] text-foreground-400">（仅复制产品信息，售价/成本需单独填写）</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 items-end">
+                    <div>
+                      <label className={labelCls}>源站点</label>
+                      <select className={inputCls + " cursor-pointer"} value={copySourceSiteId} onChange={(e) => loadSourceSiteSkus(e.target.value)}>
+                        <option value="">选择站点</option>
+                        {sites.filter(s => s.id !== currentSiteId).map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>源 SKU</label>
+                      <select className={inputCls + " cursor-pointer"} value={copySourceSkuId} onChange={(e) => setCopySourceSkuId(e.target.value)} disabled={!copySourceSiteId || copyLoading}>
+                        <option value="">{copyLoading ? "加载中..." : "选择 SKU"}</option>
+                        {copySourceSkus.map(s => (
+                          <option key={s.sku} value={s.sku}>{s.sku} - {s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button type="button" onClick={copyFromSourceSku} disabled={!copySourceSkuId}
+                      className="rounded-md bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
+                      <i className="ri-file-copy-line mr-1" />复制基础信息
+                    </button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={labelCls}>SKU *</label>
