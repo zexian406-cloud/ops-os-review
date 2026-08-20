@@ -312,7 +312,9 @@ export default function SkuList() {
     if (!siteId) return;
     setCopyLoading(true);
     try {
-      const skus = await db.skuMaster.where("siteId").equals(siteId).toArray();
+      // Query all SKUs and filter: include those with matching siteId OR no siteId (legacy data)
+      const allSkus = await db.skuMaster.toArray();
+      const skus = allSkus.filter(s => !s.siteId || s.siteId === "" || s.siteId === siteId);
       setCopySourceSkus(skus);
     } catch { /* ignore */ }
     setCopyLoading(false);
@@ -394,6 +396,7 @@ export default function SkuList() {
       }
 
       const row: SkuMaster = {
+        siteId: currentSiteId,
         sku: finalSku,
         name: createForm.name.trim(),
         msku: mskuVal,
