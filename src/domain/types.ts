@@ -597,3 +597,52 @@ export interface CrossSiteReport {
   grandTotalSkuCount: number;
   grandTotalAlertCount: number;
 }
+// ==================== 多站点架构 ====================
+export interface Site {
+  id: string;
+  name: string;
+  marketplace: string;
+  currency: string;
+  currencySymbol: string;
+  exchangeRateToUsd: number;
+  commissionRate: number;
+  fbaDeliveryFee?: number;
+  vatRate?: number;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SiteConfig {
+  siteId: string;
+  defaultLeadTime: number;
+  defaultSafetyStockDays: number;
+  defaultTargetCoverDays: number;
+  profitMarginThreshold: number;
+  adRatioThreshold: number;
+  ratingDropThreshold: number;
+  returnRateThreshold: number;
+  lifecycleNewDays: number;
+  lifecycleGrowthDays: number;
+}
+
+export interface CrossSiteSummary {
+  siteId: string;
+  siteName: string;
+  currency: string;
+  exchangeRateToUsd: number;
+  totalSalesUsd: number;
+  totalProfitUsd: number;
+  totalSkuCount: number;
+  totalStockOnHand: number;
+  alertCount: number;
+}
+
+export interface CrossSiteReport {
+  sites: CrossSiteSummary[];
+  grandTotalSalesUsd: number;
+  grandTotalProfitUsd: number;
+  grandTotalSkuCount: number;
+  grandTotalAlertCount: number;
+}
