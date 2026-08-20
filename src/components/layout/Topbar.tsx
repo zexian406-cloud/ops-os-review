@@ -11,6 +11,8 @@ import SiteSwitcher from "./SiteSwitcher";
 import ShopFilter from "./ShopFilter";
 import SiteSwitcher from "./SiteSwitcher";
 import ShopFilter from "./ShopFilter";
+import SiteSwitcher from "./SiteSwitcher";
+import ShopFilter from "./ShopFilter";
 
 export default function Topbar() {
   const navigate = useNavigate();
@@ -112,6 +114,8 @@ export default function Topbar() {
       </div>
 
       <SiteSwitcher />
+        <ShopFilter />
+        <SiteSwitcher />
         <ShopFilter />
         <SiteSwitcher />
         <ShopFilter />
