@@ -1,12 +1,13 @@
 import { useMemo, useState, useEffect, useCallback, useRef, type DragEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
-import { db, getAllShops, ensureDefaultShops } from "@/domain/db";
+import { db, getAllShops, ensureDefaultShops, getCurrentSiteId, getAllSites } from "@/domain/db";
 import { computeAll, computeWarehouseTotals, isCostFullyMissing, isReturnRateMissing } from "@/domain/calculator";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import type { SkuMaster, DailySnapshot, Promotion, InventoryLayer, Shop } from "@/domain/types";
+import { SITE_CHANGE_EVENT } from "@/components/layout/SiteSwitcher";
 
 const lifecycleLabel: Record<string, string> = {
   new: "新品",
@@ -131,6 +132,7 @@ export default function SkuList() {
   const [status, setStatus] = useState("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [shops, setShops] = useState<Shop[]>([]);
+  const [currentCurrency, setCurrentCurrency] = useState("USD");
 
   /* ── 新建 SKU 弹窗 ── */
   const [createOpen, setCreateOpen] = useState(false);
@@ -138,6 +140,32 @@ export default function SkuList() {
   const [createForm, setCreateForm] = useState<Partial<SkuMaster>>(emptySkuForm());
   const [createSaving, setCreateSaving] = useState(false);
   const [createMsg, setCreateMsg] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const sid = await getCurrentSiteId();
+        const sites = await getAllSites();
+        const site = sites.find(s => s.id === sid);
+        if (site && mounted) setCurrentCurrency(site.currency || "USD");
+      } catch { /* site not available */ }
+    })();
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.siteId) {
+        getAllSites().then(sites => {
+          const site = sites.find(s => s.id === detail.siteId);
+          if (site && mounted) setCurrentCurrency(site.currency || "USD");
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener(SITE_CHANGE_EVENT, handler);
+    return () => {
+      mounted = false;
+      window.removeEventListener(SITE_CHANGE_EVENT, handler);
+    };
+  }, []);
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     open: boolean;
@@ -245,10 +273,19 @@ export default function SkuList() {
     }
   };
 
-  const openCreate = () => {
+  const openCreate = async () => {
     setCreateForm(emptySkuForm());
     setCreateTab("basic");
     setCreateMsg(null);
+    // Auto-set marketplace based on current site currency
+    try {
+      const sid = await getCurrentSiteId();
+      const sites = await getAllSites();
+      const site = sites.find(s => s.id === sid);
+      if (site) {
+        setCreateForm(prev => ({ ...prev, marketplace: site.marketplace }));
+      }
+    } catch { /* ignore */ }
     setCreateOpen(true);
   };
 
@@ -881,7 +918,13 @@ export default function SkuList() {
                   </div>
                   <div>
                     <label className={labelCls}>所属店铺 *</label>
-                    <input className={inputCls} value={createForm.store ?? ""} onChange={(e) => updateCreateField({ store: e.target.value })} placeholder="例如：BESTFIRE-US" />
+                    <select className={inputCls + " cursor-pointer"} value={createForm.store ?? ""} onChange={(e) => updateCreateField({ store: e.target.value })}>
+                      <option value="">请选择店铺</option>
+                      {shops.length === 0 && <option value="__manual__">（暂无店铺数据，手动输入）</option>}
+                      {shops.map(shop => (
+                        <option key={shop.id} value={shop.name}>{shop.name}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className={labelCls}>站点</label>
@@ -927,7 +970,7 @@ export default function SkuList() {
                     <input type="date" className={inputCls} value={createForm.launchDate ?? ""} onChange={(e) => updateCreateField({ launchDate: e.target.value })} />
                   </div>
                   <div>
-                    <label className={labelCls}>售价 (USD)</label>
+                    <label className={labelCls}>售价 ({currentCurrency})</label>
                     <input type="number" step="0.01" className={inputCls} value={createForm.price ?? ""} onChange={(e) => updateCreateField({ price: Number(e.target.value) })} placeholder="0.00" />
                   </div>
                   <div>
