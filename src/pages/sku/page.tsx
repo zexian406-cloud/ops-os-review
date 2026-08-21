@@ -786,6 +786,27 @@ export default function SkuList() {
 
   const [showFobDiag, setShowFobDiag] = useState(false);
   const [fobDiag, setFobDiag] = useState<string>("");
+  const [fobInRmb, setFobInRmb] = useState(false);
+  const [fobRmb, setFobRmb] = useState<string>("");
+  const [fobDiag, setFobDiag] = useState<string>("");
+  const cnyRate = currentSite?.cnyToUsdRate ?? 7.25;
+  const siteRate = currentSite?.exchangeRateToUsd ?? 1.0;
+
+  const convertFobRmb = (rmb: number) => {
+    const usd = rmb / cnyRate;
+    const siteCurrency = usd / siteRate;
+    return Math.round(siteCurrency * 100) / 100;
+  };
+
+  const handleFobRmbChange = (val: string) => {
+    setFobRmb(val);
+    const rmb = parseFloat(val);
+    if (!isNaN(rmb) && rmb > 0) {
+      const converted = convertFobRmb(rmb);
+      updateCreateField({ costFob: converted });
+    }
+  };
+
   const checkFobStatus = async () => {
     setShowFobDiag(true);
     setFobDiag("Loading...");
@@ -1244,6 +1265,41 @@ export default function SkuList() {
               <div className="space-y-4">
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-foreground-500">成本构成</div>
                 <div className="grid grid-cols-2 gap-3">
+                  <div className="mb-3 flex items-center gap-3 rounded-lg border border-background-200 bg-background-50 px-3 py-2">
+                    <label className="flex items-center gap-2 text-sm text-foreground-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={fobInRmb}
+                        onChange={(e) => {
+                          setFobInRmb(e.target.checked);
+                          if (!e.target.checked) { setFobRmb(""); }
+                        }}
+                        className="w-3.5 h-3.5 accent-primary-500"
+                      />
+                      <span className="font-medium">FOB以人民币输入</span>
+                    </label>
+                    {fobInRmb && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={fobRmb}
+                          onChange={(e) => handleFobRmbChange(e.target.value)}
+                          placeholder="人民币金额"
+                          className="w-32 rounded-md border border-background-300 bg-white px-2 py-1 text-sm text-foreground-700 focus:border-primary-400 focus:outline-none"
+                        />
+                        <span className="text-xs text-foreground-500">RMB</span>
+                        {fobRmb && !isNaN(parseFloat(fobRmb)) && (
+                          <span className="text-xs text-primary-600 font-medium">
+                            = {convertFobRmb(parseFloat(fobRmb))} {currentCurrency}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-foreground-400">
+                          (汇率: 1USD = {cnyRate}RMB)
+                        </span>
+                      </div>
+                    )}
+                  </div>
                   {[
                     { k: "costFob", l: "FOB 成本 (" + currentCurrency + ")" },
                     { k: "costShipping", l: "头程运费 (" + currentCurrency + ")" },
