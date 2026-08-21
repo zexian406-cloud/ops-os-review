@@ -777,6 +777,12 @@ export default function SkuList() {
     });
   }, [filteredGroups]);
 
+  const [showFobDiag, setShowFobDiag] = useState(false);
+  const [fobDiag, setFobDiag] = useState<string>("");
+  const [fobInRmb, setFobInRmb] = useState(false);
+  const [fobRmb, setFobRmb] = useState<string>("");
+  const currentSite = sites.find(s => s.id === currentSiteId);
+
   if (loading)
     return <div className="text-sm text-foreground-500">加载中...</div>;
 
@@ -784,10 +790,6 @@ export default function SkuList() {
     "w-full rounded-md border border-background-200 bg-background-50 px-3 py-2 text-sm text-foreground-800 placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200/50";
   const labelCls = "mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-500";
 
-  const [showFobDiag, setShowFobDiag] = useState(false);
-  const [fobDiag, setFobDiag] = useState<string>("");
-  const [fobInRmb, setFobInRmb] = useState(false);
-  const [fobRmb, setFobRmb] = useState<string>("");
   const cnyRate = currentSite?.cnyToUsdRate ?? 7.25;
   const siteRate = currentSite?.exchangeRateToUsd ?? 1.0;
 
