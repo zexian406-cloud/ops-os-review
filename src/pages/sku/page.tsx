@@ -362,39 +362,53 @@ export default function SkuList() {
       packageWeight: source.packageWeight ?? 0,
       unitsPerBox: source.unitsPerBox ?? 1,
     };
-    // Selectable fields
+    // Helper: only copy if source has actual value
+    const copyIf = (val: number | undefined | null) => val != null && !isNaN(val) ? val : undefined;
+    // Selectable fields - only set if source has actual data
     if (copyOpts.price) {
-      patch.price = source.price ?? 0;
-      patch.listPrice = source.listPrice ?? undefined;
-      patch.coupon = source.coupon ?? undefined;
+      if (source.price != null) patch.price = source.price;
+      if (source.listPrice != null) patch.listPrice = source.listPrice;
+      if (source.coupon != null) patch.coupon = source.coupon;
     }
     if (copyOpts.costFob) {
-      patch.costFob = source.costFob ?? undefined;
+      const v = copyIf(source.costFob);
+      if (v !== undefined) patch.costFob = v;
     }
     if (copyOpts.logistics) {
-      patch.leadTimeDays = source.leadTimeDays ?? 40;
-      patch.safetyStockDays = source.safetyStockDays ?? 30;
+      if (source.leadTimeDays != null) patch.leadTimeDays = source.leadTimeDays;
+      if (source.safetyStockDays != null) patch.safetyStockDays = source.safetyStockDays;
     }
     if (copyOpts.costOther) {
-      patch.costShipping = source.costShipping ?? undefined;
-      patch.costDelivery = source.costDelivery ?? undefined;
-      patch.costStorage = source.costStorage ?? undefined;
+      const vs = copyIf(source.costShipping); if (vs !== undefined) patch.costShipping = vs;
+      const vd = copyIf(source.costDelivery); if (vd !== undefined) patch.costDelivery = vd;
+      const vt = copyIf(source.costStorage); if (vt !== undefined) patch.costStorage = vt;
     }
     if (copyOpts.costAd) {
-      patch.costAd = source.costAd ?? undefined;
+      const v = copyIf(source.costAd); if (v !== undefined) patch.costAd = v;
     }
     if (copyOpts.costReturn) {
-      patch.costReturn = source.costReturn ?? undefined;
+      const v = copyIf(source.costReturn); if (v !== undefined) patch.costReturn = v;
     }
     if (copyOpts.costCommission) {
-      patch.costCommission = source.costCommission ?? undefined;
+      const v = copyIf(source.costCommission); if (v !== undefined) patch.costCommission = v;
     }
     if (copyOpts.moq) {
-      patch.moq = source.moq ?? undefined;
+      if (source.moq != null) patch.moq = source.moq;
     }
     setCreateForm(prev => ({ ...prev, ...patch }));
-    const copied = ["基础信息", copyOpts.price && "售价", copyOpts.costFob && "FOB成本", copyOpts.logistics && "交货/库存", copyOpts.costOther && "运费/配送/仓储", copyOpts.costAd && "广告费", copyOpts.costReturn && "退货费", copyOpts.costCommission && "佣金", copyOpts.moq && "起订量"].filter(Boolean).join("、");
-    setCreateMsg({ ok: true, msg: "已从" + sourceSiteName + "复制: " + copied });
+    // Build message with actual values for debugging
+    const parts: string[] = ["基础信息"];
+    if (copyOpts.price && source.price != null) parts.push("售价(" + source.price + ")");
+    else if (copyOpts.price) parts.push("售价(无数据)");
+    if (copyOpts.costFob && source.costFob != null) parts.push("FOB成本(" + source.costFob + ")");
+    else if (copyOpts.costFob) parts.push("FOB成本(无数据)");
+    if (copyOpts.logistics && source.leadTimeDays != null) parts.push("交货" + source.leadTimeDays + "天");
+    if (copyOpts.costOther) parts.push(source.costShipping != null ? "运费(" + source.costShipping + ")" : "运费(无)");
+    if (copyOpts.costAd) parts.push(source.costAd != null ? "广告(" + source.costAd + ")" : "广告(无)");
+    if (copyOpts.costReturn) parts.push(source.costReturn != null ? "退货(" + source.costReturn + ")" : "退货(无)");
+    if (copyOpts.costCommission) parts.push(source.costCommission != null ? "佣金(" + source.costCommission + ")" : "佣金(无)");
+    if (copyOpts.moq) parts.push(source.moq != null ? "起订(" + source.moq + ")" : "起订(无)");
+    setCreateMsg({ ok: true, msg: "已从" + sourceSiteName + "复制: " + parts.join("、") });
   };
 
   const handleCreate = async () => {
@@ -1160,13 +1174,13 @@ export default function SkuList() {
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-foreground-500">成本构成</div>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { k: "costFob", l: "FOB 成本 (USD)" },
-                    { k: "costShipping", l: "头程运费 (USD)" },
-                    { k: "costDelivery", l: "尾程/配送费 (USD)" },
-                    { k: "costCommission", l: "佣金 (USD)" },
-                    { k: "costStorage", l: "仓储费 (USD)" },
-                    { k: "costReturn", l: "退货费 (USD)" },
-                    { k: "costAd", l: "广告费 (USD)" },
+                    { k: "costFob", l: "FOB 成本 (" + currentCurrency + ")" },
+                    { k: "costShipping", l: "头程运费 (" + currentCurrency + ")" },
+                    { k: "costDelivery", l: "尾程/配送费 (" + currentCurrency + ")" },
+                    { k: "costCommission", l: "佣金 (" + currentCurrency + ")" },
+                    { k: "costStorage", l: "仓储费 (" + currentCurrency + ")" },
+                    { k: "costReturn", l: "退货费 (" + currentCurrency + ")" },
+                    { k: "costAd", l: "广告费 (" + currentCurrency + ")" },
                   ].map(({ k, l }) => (
                     <div key={k}>
                       <label className={labelCls}>{l}</label>
