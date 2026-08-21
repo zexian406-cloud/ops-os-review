@@ -10,6 +10,7 @@ export default function SiteSwitcher() {
   const [sites, setSites] = useState<Site[]>([]);
   const [currentSiteId, setCurrentSiteIdState] = useState<string>("site_us");
   const [editingRates, setEditingRates] = useState<Record<string, string>>({});
+  const [editingCnyRates, setEditingCnyRates] = useState<Record<string, string>>({});
   const ref = useRef<HTMLDivElement>(null);
 
   const loadSites = useCallback(async () => {
@@ -61,6 +62,24 @@ export default function SiteSwitcher() {
       return next;
     });
   }, [editingRates, loadSites]);
+
+  const handleCnyRateChange = useCallback((siteId: string, value: string) => {
+    setEditingCnyRates(prev => ({ ...prev, [siteId]: value }));
+  }, []);
+
+  const handleCnyRateSave = useCallback(async (siteId: string) => {
+    const rateStr = editingCnyRates[siteId];
+    if (!rateStr) return;
+    const rate = parseFloat(rateStr);
+    if (isNaN(rate) || rate <= 0) return;
+    await updateSite(siteId, { cnyToUsdRate: rate });
+    await loadSites();
+    setEditingCnyRates(prev => {
+      const next = { ...prev };
+      delete next[siteId];
+      return next;
+    });
+  }, [editingCnyRates, loadSites]);
 
   const current = sites.find((s) => s.id === currentSiteId);
 
@@ -123,6 +142,22 @@ export default function SiteSwitcher() {
                     />
                     <span className="text-[10px] text-foreground-400">USD</span>
                   </div>
+                  {editMode && (
+                    <div className="flex items-center gap-1 ml-2">
+                      <span className="text-[10px] text-foreground-400">CNY:</span>
+                      <span className="text-[10px] text-foreground-400">1USD=</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editingCnyRates[site.id] ?? site.cnyToUsdRate ?? 7.25}
+                        onChange={(e) => handleCnyRateChange(site.id, e.target.value)}
+                        onBlur={() => handleCnyRateSave(site.id)}
+                        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                        className="w-12 rounded border border-background-300 bg-background-50 px-1 py-0.5 text-[11px] text-foreground-700 focus:border-primary-400 focus:outline-none"
+                      />
+                      <span className="text-[10px] text-foreground-400">RMB</span>
+                    </div>
+                  )}
                 ) : (
                   <>
                     <span className="text-[10px] text-foreground-400">1={site.exchangeRateToUsd}$</span>
