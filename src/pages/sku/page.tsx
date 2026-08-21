@@ -346,22 +346,18 @@ export default function SkuList() {
       packageHeight: source.packageHeight ?? 0,
       packageWeight: source.packageWeight ?? 0,
       unitsPerBox: source.unitsPerBox ?? 1,
-      // Also copy cost data (site-specific but useful as starting point)
+      // Copy FOB cost + price + lead time (other costs are site-specific or auto-calculated)
       price: source.price ?? 0,
       listPrice: source.listPrice ?? undefined,
       coupon: source.coupon ?? undefined,
       costFob: source.costFob ?? undefined,
-      costShipping: source.costShipping ?? undefined,
-      costDelivery: source.costDelivery ?? undefined,
-      costCommission: source.costCommission ?? undefined,
-      costStorage: source.costStorage ?? undefined,
-      costReturn: source.costReturn ?? undefined,
-      costAd: source.costAd ?? undefined,
       leadTimeDays: source.leadTimeDays ?? 40,
       safetyStockDays: source.safetyStockDays ?? 30,
-      moq: source.moq ?? undefined,
+      // Not copied: costAd, costShipping, costDelivery, costStorage, costReturn (site-specific)
+      // Not copied: costCommission (auto-calculated by site)
+      // Not copied: moq (site-specific)
     }));
-    setCreateMsg({ ok: true, msg: "已从" + sourceSiteName + "复制产品信息和成本数据，请按本站情况调整售价和成本" });
+    setCreateMsg({ ok: true, msg: "已从" + sourceSiteName + "复制产品信息和FOB成本，请按本站调整售价和费用" });
   };
 
   const handleCreate = async () => {
@@ -975,7 +971,7 @@ export default function SkuList() {
                   <div className="flex items-center gap-1.5 mb-2">
                     <i className="ri-file-copy-line text-primary-600 text-sm" />
                     <span className="text-[11px] font-semibold text-primary-700">从其他站点复制基础信息</span>
-                    <span className="text-[10px] text-foreground-400">（复制产品信息和成本数据，可按本站调整）</span>
+                    <span className="text-[10px] text-foreground-400">（复制产品信息和FOB成本，其他费用按本站填写）</span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-end">
                     <div>
