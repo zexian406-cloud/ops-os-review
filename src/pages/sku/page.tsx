@@ -788,7 +788,6 @@ export default function SkuList() {
   const [fobDiag, setFobDiag] = useState<string>("");
   const [fobInRmb, setFobInRmb] = useState(false);
   const [fobRmb, setFobRmb] = useState<string>("");
-  const [fobDiag, setFobDiag] = useState<string>("");
   const cnyRate = currentSite?.cnyToUsdRate ?? 7.25;
   const siteRate = currentSite?.exchangeRateToUsd ?? 1.0;
 
