@@ -507,6 +507,7 @@ export interface Site {
   currency: string;
   currencySymbol: string;
   exchangeRateToUsd: number;
+  cnyToUsdRate?: number;
   commissionRate: number;
   fbaDeliveryFee?: number;
   vatRate?: number;
@@ -556,6 +557,7 @@ export interface Site {
   currency: string;
   currencySymbol: string;
   exchangeRateToUsd: number;
+  cnyToUsdRate?: number;
   commissionRate: number;
   fbaDeliveryFee?: number;
   vatRate?: number;
@@ -605,6 +607,7 @@ export interface Site {
   currency: string;
   currencySymbol: string;
   exchangeRateToUsd: number;
+  cnyToUsdRate?: number;
   commissionRate: number;
   fbaDeliveryFee?: number;
   vatRate?: number;
@@ -654,6 +657,7 @@ export interface Site {
   currency: string;
   currencySymbol: string;
   exchangeRateToUsd: number;
+  cnyToUsdRate?: number;
   commissionRate: number;
   fbaDeliveryFee?: number;
   vatRate?: number;
