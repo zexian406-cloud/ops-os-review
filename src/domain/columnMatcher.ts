@@ -31,7 +31,21 @@ export const SYNONYMS: Record<string, string[]> = {
 
   // ── 成本 / 价格 ──
   // 注意：fob 的兜底词 "成本" 设为整词精确，避免误命中 "头程成本"/"仓储成本"。
-  fob: ["FOB", "fob", "FOB成本", "fob成本", "采购价", "采购成本", "产品成本", "含税成本", "成本(USD)", "成本"],
+  fob: [
+    // 原有同义词
+    "FOB", "fob", "FOB成本", "fob成本", "采购价", "采购成本", "产品成本", "含税成本", "成本(USD)", "成本",
+    // 新增中文变体
+    "出厂价", "出厂价格", "进货价", "进货成本", "进货单价", "成本价", "单位成本",
+    "采购单价", "进价", "产品进价", "商品成本", "货物成本", "单品成本",
+    "FOB单价", "FOB价", "FOB价格", "FOB(USD)", "fob(USD)", "FOB成本(USD)", "fob成本(USD)",
+    "采购价(USD)", "采购成本(USD)", "产品成本(USD)", "含税成本(USD)",
+    "成本(美元)", "成本(US)", "FOB(美元)", "出厂价(USD)",
+    // 新增英文变体
+    "cost", "unit cost", "unitcost", "unitcost(usd)",
+    "fob cost", "fobcost", "fob price", "fobprice",
+    "purchase price", "purchaseprice", "purchase cost", "purchasecost",
+    "product cost", "productcost", "productprice",
+  ],
   price: ["售价", "售价（总价）", "售价总价", "单价", "价格"],
   costStorage: ["仓租", "仓储费", "仓储成本", "仓库租金", "costStorage", "仓租费"],
   // 头程费：覆盖 "头程成本"（不会误归到 fob，因为 fob 的 "成本" 是整词精确）
@@ -102,8 +116,10 @@ const EXACT_ONLY = new Set<string>([
   "msku",
   "子SKU",
   "变体SKU",
-  // fob：兜底 "成本" 仅整词命中，避免 "头程成本"/"仓储成本" 被归到 fob
+  // fob：兜底 "成本"/"cost"/"进价" 仅整词命中，避免 "头程成本"/"仓储成本"/"costshipping" 被归到 fob
   "成本",
+  "cost",
+  "进价",
   // price：兜底 "价格" 仅整词命中，避免 "出厂价格" 被归到售价
   "价格",
   // shippingFee：兜底 "运费" 仅整词命中，避免 "头程运费" 被归到收入侧运费
