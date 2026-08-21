@@ -129,35 +129,37 @@ export default function SiteSwitcher() {
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-mono text-foreground-500">{site.currency}</span>
                 {editMode ? (
-                  <div className="flex items-center gap-1">
-                    <span className="text-[10px] text-foreground-400">1=</span>
-                    <input
-                      type="number"
-                      step="0.0001"
-                      value={editingRates[site.id] ?? site.exchangeRateToUsd}
-                      onChange={(e) => handleRateChange(site.id, e.target.value)}
-                      onBlur={() => handleRateSave(site.id)}
-                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                      className="w-16 rounded border border-background-300 bg-background-50 px-1.5 py-0.5 text-[11px] text-foreground-700 focus:border-primary-400 focus:outline-none"
-                    />
-                    <span className="text-[10px] text-foreground-400">USD</span>
-                  </div>
-                  {editMode && (
-                    <div className="flex items-center gap-1 ml-2">
-                      <span className="text-[10px] text-foreground-400">CNY:</span>
-                      <span className="text-[10px] text-foreground-400">1USD=</span>
+                  <>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-foreground-400">1=</span>
                       <input
                         type="number"
-                        step="0.01"
-                        value={editingCnyRates[site.id] ?? site.cnyToUsdRate ?? 7.25}
-                        onChange={(e) => handleCnyRateChange(site.id, e.target.value)}
-                        onBlur={() => handleCnyRateSave(site.id)}
+                        step="0.0001"
+                        value={editingRates[site.id] ?? site.exchangeRateToUsd}
+                        onChange={(e) => handleRateChange(site.id, e.target.value)}
+                        onBlur={() => handleRateSave(site.id)}
                         onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                        className="w-12 rounded border border-background-300 bg-background-50 px-1 py-0.5 text-[11px] text-foreground-700 focus:border-primary-400 focus:outline-none"
+                        className="w-16 rounded border border-background-300 bg-background-50 px-1.5 py-0.5 text-[11px] text-foreground-700 focus:border-primary-400 focus:outline-none"
                       />
-                      <span className="text-[10px] text-foreground-400">RMB</span>
+                      <span className="text-[10px] text-foreground-400">USD</span>
                     </div>
-                  )}
+                    {editMode && (
+                      <div className="flex items-center gap-1 ml-2">
+                        <span className="text-[10px] text-foreground-400">CNY:</span>
+                        <span className="text-[10px] text-foreground-400">1USD=</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editingCnyRates[site.id] ?? site.cnyToUsdRate ?? 7.25}
+                          onChange={(e) => handleCnyRateChange(site.id, e.target.value)}
+                          onBlur={() => handleCnyRateSave(site.id)}
+                          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                          className="w-12 rounded border border-background-300 bg-background-50 px-1 py-0.5 text-[11px] text-foreground-700 focus:border-primary-400 focus:outline-none"
+                        />
+                        <span className="text-[10px] text-foreground-400">RMB</span>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <>
                     <span className="text-[10px] text-foreground-400">1={site.exchangeRateToUsd}$</span>
