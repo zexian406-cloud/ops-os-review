@@ -146,6 +146,16 @@ export default function SkuList() {
   const [copySourceSkus, setCopySourceSkus] = useState<SkuMaster[]>([]);
   const [copySourceSkuId, setCopySourceSkuId] = useState("");
   const [copyLoading, setCopyLoading] = useState(false);
+  const [copyOpts, setCopyOpts] = useState({
+    price: true,
+    costFob: true,
+    logistics: true,
+    costOther: false,
+    costAd: false,
+    costReturn: false,
+    costCommission: false,
+    moq: false,
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -289,6 +299,7 @@ export default function SkuList() {
     setCopySourceSiteId("");
     setCopySourceSkus([]);
     setCopySourceSkuId("");
+    setCopyOpts({ price: true, costFob: true, logistics: true, costOther: false, costAd: false, costReturn: false, costCommission: false, moq: false });
     // Auto-set marketplace based on current site currency
     try {
       const sid = await getCurrentSiteId();
@@ -320,12 +331,16 @@ export default function SkuList() {
     setCopyLoading(false);
   };
 
+  const toggleCopyOpt = (key: keyof typeof copyOpts) => {
+    setCopyOpts(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const copyFromSourceSku = () => {
     const source = copySourceSkus.find(s => s.sku === copySourceSkuId);
     if (!source) return;
     const sourceSiteName = sites.find(s => s.id === copySourceSiteId)?.name || copySourceSiteId;
-    setCreateForm(prev => ({
-      ...prev,
+    const patch: Partial<SkuMaster> = {
+      // Basic info always copied
       sku: source.sku,
       name: source.name,
       msku: source.msku ?? "",
@@ -346,18 +361,40 @@ export default function SkuList() {
       packageHeight: source.packageHeight ?? 0,
       packageWeight: source.packageWeight ?? 0,
       unitsPerBox: source.unitsPerBox ?? 1,
-      // Copy FOB cost + price + lead time (other costs are site-specific or auto-calculated)
-      price: source.price ?? 0,
-      listPrice: source.listPrice ?? undefined,
-      coupon: source.coupon ?? undefined,
-      costFob: source.costFob ?? undefined,
-      leadTimeDays: source.leadTimeDays ?? 40,
-      safetyStockDays: source.safetyStockDays ?? 30,
-      // Not copied: costAd, costShipping, costDelivery, costStorage, costReturn (site-specific)
-      // Not copied: costCommission (auto-calculated by site)
-      // Not copied: moq (site-specific)
-    }));
-    setCreateMsg({ ok: true, msg: "已从" + sourceSiteName + "复制产品信息和FOB成本，请按本站调整售价和费用" });
+    };
+    // Selectable fields
+    if (copyOpts.price) {
+      patch.price = source.price ?? 0;
+      patch.listPrice = source.listPrice ?? undefined;
+      patch.coupon = source.coupon ?? undefined;
+    }
+    if (copyOpts.costFob) {
+      patch.costFob = source.costFob ?? undefined;
+    }
+    if (copyOpts.logistics) {
+      patch.leadTimeDays = source.leadTimeDays ?? 40;
+      patch.safetyStockDays = source.safetyStockDays ?? 30;
+    }
+    if (copyOpts.costOther) {
+      patch.costShipping = source.costShipping ?? undefined;
+      patch.costDelivery = source.costDelivery ?? undefined;
+      patch.costStorage = source.costStorage ?? undefined;
+    }
+    if (copyOpts.costAd) {
+      patch.costAd = source.costAd ?? undefined;
+    }
+    if (copyOpts.costReturn) {
+      patch.costReturn = source.costReturn ?? undefined;
+    }
+    if (copyOpts.costCommission) {
+      patch.costCommission = source.costCommission ?? undefined;
+    }
+    if (copyOpts.moq) {
+      patch.moq = source.moq ?? undefined;
+    }
+    setCreateForm(prev => ({ ...prev, ...patch }));
+    const copied = ["基础信息", copyOpts.price && "售价", copyOpts.costFob && "FOB成本", copyOpts.logistics && "交货/库存", copyOpts.costOther && "运费/配送/仓储", copyOpts.costAd && "广告费", copyOpts.costReturn && "退货费", copyOpts.costCommission && "佣金", copyOpts.moq && "起订量"].filter(Boolean).join("、");
+    setCreateMsg({ ok: true, msg: "已从" + sourceSiteName + "复制: " + copied });
   };
 
   const handleCreate = async () => {
@@ -970,8 +1007,25 @@ export default function SkuList() {
                 <div className="rounded-lg border border-primary-200 bg-primary-50/40 p-3">
                   <div className="flex items-center gap-1.5 mb-2">
                     <i className="ri-file-copy-line text-primary-600 text-sm" />
-                    <span className="text-[11px] font-semibold text-primary-700">从其他站点复制基础信息</span>
-                    <span className="text-[10px] text-foreground-400">（复制产品信息和FOB成本，其他费用按本站填写）</span>
+                    <span className="text-[11px] font-semibold text-primary-700">从其他站点复制</span>
+                    <span className="text-[10px] text-foreground-400">（勾选要复制的数据）</span>
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mb-2">
+                    {[
+                      { key: "price", label: "售价/标价/优惠券" },
+                      { key: "costFob", label: "FOB成本" },
+                      { key: "logistics", label: "交货/安全库存" },
+                      { key: "costOther", label: "运费/配送/仓储" },
+                      { key: "costAd", label: "广告费" },
+                      { key: "costReturn", label: "退货费" },
+                      { key: "costCommission", label: "佣金" },
+                      { key: "moq", label: "起订量" },
+                    ].map(opt => (
+                      <label key={opt.key} className="flex items-center gap-1 text-[10px] cursor-pointer select-none">
+                        <input type="checkbox" checked={copyOpts[opt.key as keyof typeof copyOpts]} onChange={() => toggleCopyOpt(opt.key as keyof typeof copyOpts)} className="w-3 h-3 accent-primary-500" />
+                        <span className="text-foreground-600">{opt.label}</span>
+                      </label>
+                    ))}
                   </div>
                   <div className="grid grid-cols-3 gap-2 items-end">
                     <div>
