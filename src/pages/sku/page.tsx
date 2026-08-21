@@ -362,9 +362,12 @@ export default function SkuList() {
     setCreateSaving(true);
     setCreateMsg(null);
     try {
+      // Read current siteId directly from DB to avoid state sync issues
+      const activeSiteId = await getCurrentSiteId();
       const parentSku = createForm.sku.trim();
       const mskuVal = createForm.msku?.trim() || undefined;
-      const existingParent = await db.skuMaster.get(parentSku);
+      // Check for duplicates only within the same site (allow same SKU on different sites)
+      const existingParent = (await db.skuMaster.toArray()).find(s => s.sku === parentSku && (s.siteId ?? "site_us") === activeSiteId);
       let finalSku = parentSku;
       let groupSku: string | undefined;
 
@@ -396,7 +399,7 @@ export default function SkuList() {
       }
 
       const row: SkuMaster = {
-        siteId: currentSiteId,
+        siteId: activeSiteId,
         sku: finalSku,
         name: createForm.name.trim(),
         msku: mskuVal,
