@@ -784,8 +784,42 @@ export default function SkuList() {
     "w-full rounded-md border border-background-200 bg-background-50 px-3 py-2 text-sm text-foreground-800 placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200/50";
   const labelCls = "mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-500";
 
+  const [showFobDiag, setShowFobDiag] = useState(false);
+  const [fobDiag, setFobDiag] = useState<string>("");
+  const checkFobStatus = async () => {
+    setShowFobDiag(true);
+    setFobDiag("Loading...");
+    try {
+      const all = await db.skuMaster.toArray();
+      const withFob = all.filter(s => s.costFob != null);
+      const withoutFob = all.filter(s => s.costFob == null);
+      const msg = [
+        "Total SKUs: " + all.length,
+        "With costFob: " + withFob.length,
+        "Without costFob: " + withoutFob.length,
+        "",
+        "All SKUs:",
+        ...all.map(s => "  " + s.sku + " => costFob=" + (s.costFob ?? "undefined") + ", siteId=" + (s.siteId ?? "none")),
+      ].join("\n");
+      setFobDiag(msg);
+    } catch (e) {
+      setFobDiag("Error: " + String(e));
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {showFobDiag && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" onClick={() => setShowFobDiag(false)}>
+          <div className="max-w-2xl w-full mx-4 rounded-xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-bold">FOB Cost Diagnostic</h3>
+              <button onClick={() => setShowFobDiag(false)} className="text-foreground-400 hover:text-foreground-700"><i className="ri-close-line text-xl" /></button>
+            </div>
+            <pre className="text-xs bg-background-50 rounded-lg p-4 overflow-auto max-h-[70vh] whitespace-pre-wrap font-mono">{fobDiag}</pre>
+          </div>
+        </div>
+      )}
       <div>
         <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-primary-700">
           SKU Catalog
@@ -799,6 +833,15 @@ export default function SkuList() {
               点击展开查看各 MSKU 数据，点击 MSKU 名称进入详情页
             </p>
           </div>
+          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={checkFobStatus}
+            className="inline-flex items-center gap-1.5 rounded-[9px] border border-background-200 bg-white px-3 py-2 text-sm font-medium text-foreground-600 hover:bg-background-50"
+          >
+            <i className="ri-stethoscope-line" aria-hidden />
+            诊断FOB
+          </button>
           <button
             type="button"
             onClick={openCreate}
@@ -807,6 +850,7 @@ export default function SkuList() {
             <i className="ri-add-line" aria-hidden />
             新建 SKU
           </button>
+          </div>
         </div>
       </div>
 
