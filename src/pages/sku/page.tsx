@@ -1065,6 +1065,33 @@ export default function SkuList() {
                       <i className="ri-file-copy-line mr-1" />复制基础信息
                     </button>
                   </div>
+                  {copySourceSkuId && copySourceSkus.find(s => s.sku === copySourceSkuId) && (
+                    <div className="mt-2 rounded border border-background-200 bg-background-50 p-2 text-[10px] text-foreground-500">
+                      <span className="font-semibold">源数据预览: </span>
+                      {(() => {
+                        const s = copySourceSkus.find(s => s.sku === copySourceSkuId)!;
+                        const fields = [
+                          ["售价", s.price],
+                          ["FOB成本", s.costFob],
+                          ["运费", s.costShipping],
+                          ["配送费", s.costDelivery],
+                          ["佣金", s.costCommission],
+                          ["仓储费", s.costStorage],
+                          ["退货费", s.costReturn],
+                          ["广告费", s.costAd],
+                          ["交货天数", s.leadTimeDays],
+                          ["安全库存", s.safetyStockDays],
+                        ];
+                        return fields.map(([label, val]) => (
+                          <span key={label as string} className="ml-2">
+                            {label as string}: <span className={val != null ? "text-foreground-700 font-medium" : "text-foreground-300"}>
+                              {val != null ? String(val) : "无"}
+                            </span>
+                          </span>
+                        ));
+                      })()}
+                    </div>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
