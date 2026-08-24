@@ -128,6 +128,17 @@ export class AmzOpsDB extends Dexie {
       opsLogs: "id, sku, siteId, date, action",
       sites: "id, name, marketplace, currency, isActive, sortOrder",
     });
+    this.version(10).stores({
+      skuMaster: "[sku+siteId], store, siteId, fulfillment, saleStatus, owner, category, lifecycle",
+    }).upgrade(async (tx) => {
+      const all = await tx.table("skuMaster").toArray();
+      const fixed = all.map((item: any) => ({
+        ...item,
+        siteId: item.siteId || "site_us",
+      }));
+      await tx.table("skuMaster").clear();
+      await tx.table("skuMaster").bulkPut(fixed);
+    });
   }
 }
 
