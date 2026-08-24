@@ -241,8 +241,9 @@ export default function SkuList() {
 
   const executeBatchDelete = async () => {
     const skus = Array.from(selectedSkus);
+    const activeSiteId = await getCurrentSiteId();
     try {
-      await db.skuMaster.bulkDelete(skus);
+      await db.skuMaster.bulkDelete(skus.map(s => [s, activeSiteId] as [string, string]));
       setSelectedSkus(new Set());
       setDeleteConfirm(null);
       reload();
@@ -435,10 +436,10 @@ export default function SkuList() {
       // ── 智能 MSKU 追加：父SKU已存在 + 填了不同MSKU → 追加子记录 ──
       if (existingParent && mskuVal && mskuVal !== parentSku) {
         let candidate = mskuVal;
-        const existingChild = await db.skuMaster.get(candidate);
+        const existingChild = await db.skuMaster.get([candidate, activeSiteId]);
         if (existingChild) {
           let suffix = 2;
-          while (await db.skuMaster.get(`${candidate}-${suffix}`)) suffix++;
+          while (await db.skuMaster.get([`${candidate}-${suffix}`, activeSiteId])) suffix++;
           candidate = `${candidate}-${suffix}`;
         }
         finalSku = candidate;
@@ -451,7 +452,7 @@ export default function SkuList() {
 
       // ── 如果新SKU已存在且没走上面的分支 → 重复SKU ──
       if (!groupSku) {
-        const dup = await db.skuMaster.get(finalSku);
+        const dup = await db.skuMaster.get([finalSku, activeSiteId]);
         if (dup) {
           setCreateMsg({ ok: false, msg: `SKU ${finalSku} 已存在。请换一个SKU编号，或填写MSKU字段追加到现有父SKU下` });
           setCreateSaving(false);
@@ -518,16 +519,17 @@ export default function SkuList() {
 
   const handleDeleteConfirm = async () => {
     if (!deleteConfirm) return;
+    const activeSiteId = await getCurrentSiteId();
     try {
       if (deleteConfirm.type === "group") {
         // 删除父 SKU 及所有子 SKU
-        const children = skuMaster.filter((s) => s.groupSku === deleteConfirm.sku).map((s) => s.sku);
-        await db.skuMaster.bulkDelete([deleteConfirm.sku, ...children]);
+        const children = skuMaster.filter((s) => s.groupSku === deleteConfirm.sku).map((s) => [s.sku, s.siteId ?? activeSiteId] as [string, string]);
+        await db.skuMaster.bulkDelete([[deleteConfirm.sku, activeSiteId], ...children]);
       } else if (deleteConfirm.type === "batch") {
         await executeBatchDelete();
         return;
       } else {
-        await db.skuMaster.delete(deleteConfirm.sku);
+        await db.skuMaster.delete([deleteConfirm.sku, activeSiteId]);
       }
       setDeleteConfirm(null);
       reload();
