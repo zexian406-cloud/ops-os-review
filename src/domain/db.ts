@@ -128,16 +128,32 @@ export class AmzOpsDB extends Dexie {
       opsLogs: "id, sku, siteId, date, action",
       sites: "id, name, marketplace, currency, isActive, sortOrder",
     });
+    // Step 1: Backup skuMaster data and delete original table
+    // (Dexie doesn't support changing primary key directly, so we use backup+restore)
     this.version(10).stores({
+      skuMasterBackup: "sku, store, siteId",
+      // Omitting skuMaster deletes it
+    }).upgrade(async (tx) => {
+      // Copy all data from old skuMaster to backup before it's deleted
+      const all = await tx.table("skuMaster").toArray();
+      await tx.table("skuMasterBackup").bulkPut(all);
+    });
+
+    // Step 2: Create new skuMaster with [sku+siteId] compound key + restore from backup
+    this.version(11).stores({
       skuMaster: "[sku+siteId], store, siteId, fulfillment, saleStatus, owner, category, lifecycle",
     }).upgrade(async (tx) => {
-      const all = await tx.table("skuMaster").toArray();
+      const all = await tx.table("skuMasterBackup").toArray();
       const fixed = all.map((item: any) => ({
         ...item,
         siteId: item.siteId || "site_us",
       }));
-      await tx.table("skuMaster").clear();
       await tx.table("skuMaster").bulkPut(fixed);
+    });
+
+    // Step 3: Delete backup table
+    this.version(12).stores({
+      // Omitting skuMasterBackup deletes it
     });
   }
 }
