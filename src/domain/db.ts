@@ -24,7 +24,7 @@ import type { Site, SiteConfig, CrossSiteSummary, CrossSiteReport } from "./type
  * Every module reads from these tables. There is no duplicated data anywhere.
  */
 export class AmzOpsDB extends Dexie {
-  skuMaster!: Table<SkuMaster, string>;
+  skuMaster!: Table<SkuMaster, [string, string]>;
   dailySnapshot!: Table<DailySnapshot, number>;
   inventoryLayer!: Table<InventoryLayer, number>;
   campaigns!: Table<Campaign, string>;
@@ -154,6 +154,22 @@ export class AmzOpsDB extends Dexie {
     // Step 3: Delete backup table
     this.version(12).stores({
       // Omitting skuMasterBackup deletes it
+    });
+
+    // Step 4: Fix records with missing/empty siteId (caused by import page using single-string keys)
+    this.version(13).stores({
+      // No schema change, just data fix
+    }).upgrade(async (tx) => {
+      const all = await tx.table("skuMaster").toArray();
+      const needsFix = all.filter((r: any) => !r.siteId || r.siteId === "" || r.siteId === "undefined");
+      if (needsFix.length === 0) return;
+      // Clear and re-insert all with guaranteed siteId
+      await tx.table("skuMaster").clear();
+      const fixed = all.map((r: any) => ({
+        ...r,
+        siteId: r.siteId || "site_us",
+      }));
+      await tx.table("skuMaster").bulkPut(fixed);
     });
   }
 }
@@ -317,7 +333,9 @@ export async function getShopDataCount(shopId: string): Promise<number> {
 // ==================== Bulk operations ====================
 export async function upsertSkuMaster(rows: SkuMaster[]): Promise<void> {
   if (rows.length === 0) return;
-  await db.skuMaster.bulkPut(rows);
+  const currentSiteId = await getCurrentSiteId();
+  const withSiteId = rows.map((r) => ({ ...r, siteId: r.siteId || currentSiteId }));
+  await db.skuMaster.bulkPut(withSiteId);
 }
 
 /**
@@ -333,9 +351,9 @@ export async function upsertSkuMaster(rows: SkuMaster[]): Promise<void> {
 export async function upsertSkuMasterPartial(rows: SkuMaster[]): Promise<void> {
   if (rows.length === 0) return;
 
-  // 批量查询已有记录
-  const skuKeys = rows.map((r) => r.sku);
-  const existing = await db.skuMaster.bulkGet(skuKeys);
+  const currentSiteId = await getCurrentSiteId();
+  const compoundKeys = rows.map((r) => [r.sku, r.siteId || currentSiteId] as [string, string]);
+  const existing = await db.skuMaster.bulkGet(compoundKeys);
   const existingMap = new Map<string, SkuMaster>();
   for (const e of existing) {
     if (e) existingMap.set(e.sku, e);
@@ -430,7 +448,8 @@ export async function upsertSkuMasterPartial(rows: SkuMaster[]): Promise<void> {
     return result;
   });
 
-  await db.skuMaster.bulkPut(merged);
+  const withSiteId = merged.map((r) => ({ ...r, siteId: r.siteId || currentSiteId }));
+  await db.skuMaster.bulkPut(withSiteId);
 }
 
 export async function upsertSnapshots(rows: DailySnapshot[]): Promise<void> {
@@ -1053,7 +1072,12 @@ export async function updateSite(id: string, updates: Partial<Site>): Promise<vo
 export async function deleteSite(id: string): Promise<void> {
   if (id === "site_us") throw new Error("默认站点不可删除");
   await db.sites.delete(id);
-  await db.skuMaster.where("siteId").equals(id).modify({ siteId: "site_us" });
+  // skuMaster uses compound key [sku+siteId], can't modify primary key via .modify()
+  const siteSkus = await db.skuMaster.where("siteId").equals(id).toArray();
+  if (siteSkus.length > 0) {
+    await db.skuMaster.bulkDelete(siteSkus.map(s => [s.sku, s.siteId!] as [string, string]));
+    await db.skuMaster.bulkPut(siteSkus.map(s => ({ ...s, siteId: "site_us" })));
+  }
   await db.shops.where("siteId").equals(id).modify({ siteId: "site_us" });
   await db.promotions.where("siteId").equals(id).modify({ siteId: "site_us" });
   await db.dailySnapshot.where("siteId").equals(id).modify({ siteId: "site_us" });

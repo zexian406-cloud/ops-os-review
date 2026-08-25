@@ -12,7 +12,7 @@ import {
 import { computeAll, computeWeeklyPromoCost, isCostFullyMissing, isReturnRateMissing, formatCoverDays, COVER_NO_SALES_SUB } from "@/domain/calculator";
 import { useOpsData } from "@/domain/store";
 import { computeDiagnosis, type DiagnosisResult } from "@/domain/diagnosis";
-import { upsertSnapshots, db, addOpsLog, deleteOpsLog, getAllShops, ensureDefaultShops } from "@/domain/db";
+import { upsertSnapshots, db, addOpsLog, deleteOpsLog, getAllShops, ensureDefaultShops, getCurrentSiteId } from "@/domain/db";
 import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
@@ -355,7 +355,8 @@ export default function SkuDetail() {
     setTransferSaving(true);
     try {
       // 1. 查找目标 SKU
-      const target = await db.skuMaster.where("sku").equals(transferTarget).first();
+      const siteId = await getCurrentSiteId();
+      const target = await db.skuMaster.get([transferTarget, siteId]);
       if (!target) {
         alert(`未找到 SKU: ${transferTarget}`);
         setTransferSaving(false);

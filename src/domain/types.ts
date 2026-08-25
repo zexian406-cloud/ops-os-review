@@ -5,7 +5,8 @@
 
 /** SKU 主档（静态属性，人工维护一次即可） */
 export interface SkuMaster {
-  sku: string;                // 主键
+  sku: string;                // 主键（与 siteId 组成复合主键 [sku+siteId]）
+  siteId?: string;             // 站点ID（复合主键第二部分，默认 "site_us"）
   name: string;               // 品名
   image?: string;             // 图片 URL / 文件名
   asin?: string;

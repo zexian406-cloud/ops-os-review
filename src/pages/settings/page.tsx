@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { db, DEFAULT_GLOBAL_CONFIG, getGlobalConfig, setGlobalConfig } from "@/domain/db";
+import { db, DEFAULT_GLOBAL_CONFIG, getGlobalConfig, setGlobalConfig, getCurrentSiteId } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import type { GlobalConfig, SkuMaster, WarehouseProvider, RateTier } from "@/domain/types";
@@ -123,7 +123,8 @@ export default function Settings() {
   };
 
   const updateSkuField = async (sku: string, patch: Partial<SkuMaster>) => {
-    const cur = await db.skuMaster.get(sku);
+    const siteId = await getCurrentSiteId();
+    const cur = await db.skuMaster.get([sku, siteId]);
     if (!cur) return;
     await db.skuMaster.put({ ...cur, ...patch });
     setSkus((prev) => prev.map((r) => (r.sku === sku ? { ...r, ...patch } : r)));

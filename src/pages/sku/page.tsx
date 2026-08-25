@@ -259,7 +259,8 @@ export default function SkuList() {
     if (skus.length === 0) return;
     setBatchShopSaving(true);
     try {
-      const records = await db.skuMaster.bulkGet(skus);
+      const siteId = await getCurrentSiteId();
+      const records = await db.skuMaster.bulkGet(skus.map(s => [s, siteId] as [string, string]));
       let mskuCount = 0;
       const updates = records
         .filter((r): r is SkuMaster => !!r)
@@ -424,11 +425,10 @@ export default function SkuList() {
     setCreateSaving(true);
     setCreateMsg(null);
     try {
-      // Read current siteId directly from DB to avoid state sync issues
       const activeSiteId = await getCurrentSiteId();
+      const activeSiteName = sites.find(s => s.id === activeSiteId)?.name || activeSiteId;
       const parentSku = createForm.sku.trim();
       const mskuVal = createForm.msku?.trim() || undefined;
-      // Check for duplicates only within the same site (allow same SKU on different sites)
       const existingParent = (await db.skuMaster.toArray()).find(s => s.sku === parentSku && (s.siteId ?? "site_us") === activeSiteId);
       let finalSku = parentSku;
       let groupSku: string | undefined;
@@ -445,7 +445,7 @@ export default function SkuList() {
         finalSku = candidate;
         groupSku = parentSku;
       } else if (existingParent && (!mskuVal || mskuVal === parentSku)) {
-        setCreateMsg({ ok: false, msg: `SKU ${parentSku} 已存在。如需新增子MSKU，请在MSKU字段填写不同的值（如 ${parentSku}-1），系统会自动追加到该SKU下` });
+        setCreateMsg({ ok: false, msg: `SKU ${parentSku} 在${activeSiteName}已存在。如需新增子MSKU，请在MSKU字段填写不同的值（如 ${parentSku}-1），系统会自动追加到该SKU下` });
         setCreateSaving(false);
         return;
       }
@@ -454,7 +454,7 @@ export default function SkuList() {
       if (!groupSku) {
         const dup = await db.skuMaster.get([finalSku, activeSiteId]);
         if (dup) {
-          setCreateMsg({ ok: false, msg: `SKU ${finalSku} 已存在。请换一个SKU编号，或填写MSKU字段追加到现有父SKU下` });
+          setCreateMsg({ ok: false, msg: `SKU ${finalSku} 在${activeSiteName}已存在。请换一个SKU编号，或填写MSKU字段追加到现有父SKU下` });
           setCreateSaving(false);
           return;
         }

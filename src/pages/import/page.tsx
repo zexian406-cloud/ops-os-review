@@ -14,6 +14,7 @@ import {
   getCloudConfig,
   getAllShops,
   getOrCreateShopByName,
+  getCurrentSiteId,
   setCloudConfig,
   setLatestHealthReport,
   upsertSkuMaster,
@@ -357,7 +358,8 @@ export default function ImportPage() {
       // 这样健康检查看到的是合并后的数据，不会对「数据库已有但 Excel 未填」的字段报空值警告
       let dataToValidate = parsed;
       if (mode === "partial" && parsed.skuMaster.length > 0) {
-        const existingRows = await db.skuMaster.bulkGet(parsed.skuMaster.map((s) => s.sku));
+        const siteId = await getCurrentSiteId();
+        const existingRows = await db.skuMaster.bulkGet(parsed.skuMaster.map((s) => [s.sku, s.siteId || siteId] as [string, string]));
         const existingMap = new Map<string, SkuMaster>();
         for (const e of existingRows) {
           if (e) existingMap.set(e.sku, e);
@@ -566,6 +568,7 @@ export default function ImportPage() {
     setImportMsg(null);
     setImporting("sales");
     try {
+      const siteId = await getCurrentSiteId();
       const rows = await parseExcelFile(file);
       const today = importDateStart;
       // 合并原运营数据导入字段：msku/asin/store/name/productUrl/competitorUrls
@@ -623,7 +626,7 @@ export default function ImportPage() {
         }
         if (!sku) continue;
 
-        const existing = await db.skuMaster.get(sku);
+        const existing = await db.skuMaster.get([sku, siteId]);
         const prevSnapshot = existing ? await db.dailySnapshot.where({ sku }).reverse().first() : undefined;
 
         // 合并原运营数据导入：品名/店铺/ASIN/链接 → 更新或创建 SkuMaster
@@ -652,6 +655,7 @@ export default function ImportPage() {
         } else {
           const master: SkuMaster = {
             sku,
+            siteId,
             name: nameVal || sku,
             store: storeVal,
             price: 0,
@@ -962,6 +966,7 @@ export default function ImportPage() {
     setImportMsg(null);
     setImporting("shipping");
     try {
+      const siteId = await getCurrentSiteId();
       const rows = await parseExcelFile(file);
       const cm = buildColumnMap(["sku", "shipping", "delivery"], headersOf(rows));
       if (!cm.sku) {
@@ -973,7 +978,7 @@ export default function ImportPage() {
       for (const row of rows) {
         const sku = str(pickCell(row, cm.sku));
         if (!sku) continue;
-        const master = await db.skuMaster.get(sku);
+        const master = await db.skuMaster.get([sku, siteId]);
         if (!master) continue;
 
         const updates: Partial<SkuMaster> = {};
@@ -1000,6 +1005,7 @@ export default function ImportPage() {
     setImportMsg(null);
     setImporting("identifiers");
     try {
+      const siteId = await getCurrentSiteId();
       const rows = await parseExcelFile(file);
       const cm = buildColumnMap(
         ["sku", "store", "name", "msku", "asin", "price", "fob", "costStorage", "fulfillment"],
@@ -1030,7 +1036,7 @@ export default function ImportPage() {
         if (!seenSku.has(sku)) {
           // 首次出现 → 父SKU
           seenSku.add(sku);
-          const existing = await db.skuMaster.get(sku);
+          const existing = await db.skuMaster.get([sku, siteId]);
           if (existing) {
             const updates: Partial<SkuMaster> = {};
             if (store) updates.store = store;
@@ -1048,6 +1054,7 @@ export default function ImportPage() {
           } else {
             const master: SkuMaster = {
               sku,
+              siteId,
               name: name || sku,
               store,
               price: price || 0,
@@ -1071,12 +1078,13 @@ export default function ImportPage() {
           }
           let finalChildSku = childSku;
           let suffix = 1;
-          while (await db.skuMaster.get(finalChildSku)) {
+          while (await db.skuMaster.get([finalChildSku, siteId])) {
             suffix++;
             finalChildSku = `${childSku}_${suffix}`;
           }
           const child: SkuMaster = {
             sku: finalChildSku,
+            siteId,
             name: name || sku,
             store,
             price: price || 0,

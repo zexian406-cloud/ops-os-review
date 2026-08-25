@@ -1,4 +1,4 @@
-﻿import { db } from "./db";
+import { db, getCurrentSiteId } from "./db";
 import type { SkuMaster } from "./types";
 
 /**
@@ -13,10 +13,11 @@ export async function applyIncrementalCostUpdate(
 ): Promise<void> {
   if (shippingMap.size === 0) return;
 
+  const siteId = await getCurrentSiteId();
   const updates: SkuMaster[] = [];
 
   for (const [sku, { shipping, delivery }] of shippingMap) {
-    const existing = await db.skuMaster.where("sku").equals(sku).first();
+    const existing = await db.skuMaster.get([sku, siteId]);
     if (!existing) continue;
 
     const updated: SkuMaster = {

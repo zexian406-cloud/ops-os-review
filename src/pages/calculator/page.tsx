@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { db } from "@/domain/db";
+import { db, getCurrentSiteId } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import type { WarehouseProvider, SkuMaster, CalculationRecord } from "@/domain/types";
@@ -955,12 +955,14 @@ export default function CalculatorPage() {
                   if (!newSkuName.trim()) { setSaveMsg("请输入品名"); setTimeout(() => setSaveMsg(null), 2000); return; }
 
                   // 检查 SKU 编码是否已存在
-                  const existing = await db.skuMaster.get(newSkuCode.trim());
+                  const siteId = await getCurrentSiteId();
+                  const existing = await db.skuMaster.get([newSkuCode.trim(), siteId]);
                   if (existing) { setSaveMsg(`SKU ${newSkuCode.trim()} 已存在，请换一个编码`); setTimeout(() => setSaveMsg(null), 3000); return; }
 
                   const r = firstResult;
                   const newSku: SkuMaster = {
                     sku: newSkuCode.trim(),
+                    siteId,
                     name: newSkuName.trim(),
                     saleStatus: "active",
                     fulfillment: r.deliveryMode,
