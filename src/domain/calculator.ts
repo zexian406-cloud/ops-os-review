@@ -126,6 +126,7 @@ export function computeTotalCost(
   snap?: DailySnapshot,
   discountPrice?: number,
   promoCost = 0,
+  defaultCommissionRate = 15,
 ): { total: number; detail: CostDetail; inferred: InferredFlags } {
   const price = discountPrice ?? sku.price;
 
@@ -142,7 +143,7 @@ export function computeTotalCost(
     if (sku.commissionRate && sku.commissionRate > 0) {
       commission = (sku.commissionRate / 100) * price;
     } else {
-      commission = price * 0.15;
+      commission = (defaultCommissionRate / 100) * price;
       isCommissionInferred = true;
     }
   }
@@ -205,9 +206,10 @@ export function computeDiscountTotalCost(
   discountPrice?: number,
   normalDetail?: CostDetail,
   promoCost = 0,
+  defaultCommissionRate = 15,
 ): { total: number; detail: CostDetail; inferred: InferredFlags } {
   const dp = discountPrice ?? sku.discountPrice ?? sku.price;
-  const nd = normalDetail ?? computeTotalCost(sku, snap, dp, promoCost).detail;
+  const nd = normalDetail ?? computeTotalCost(sku, snap, dp, promoCost, defaultCommissionRate).detail;
 
   // 折扣字段为空 → 用正常字段值替代
   const fob = sku.discountFob != null ? n(sku.discountFob) : nd.fob;
@@ -225,7 +227,7 @@ export function computeDiscountTotalCost(
     commission = nd.commission * (dp / sku.price);
     isCommissionInferred = nd.commission === 0 || sku.costCommission == null;
   } else {
-    commission = dp * (sku.commissionRate && sku.commissionRate > 0 ? sku.commissionRate / 100 : 0.15);
+    commission = dp * (sku.commissionRate && sku.commissionRate > 0 ? sku.commissionRate / 100 : defaultCommissionRate / 100);
     isCommissionInferred = true;
   }
 
@@ -459,18 +461,19 @@ export function computeAll(params: {
   defaultLeadTime?: number;
   defaultSafetyStockDays?: number;
   promoCost?: number;
+  defaultCommissionRate?: number;
 }): CalcResult {
-  const { sku, snap, inv, activePromo, defaultLeadTime = 40, defaultSafetyStockDays = 30, promoCost = 0 } = params;
+  const { sku, snap, inv, activePromo, defaultLeadTime = 40, defaultSafetyStockDays = 30, promoCost = 0, defaultCommissionRate = 15 } = params;
 
   const discountPrice = activePromo?.discountPrice ?? sku.discountPrice ?? undefined;
   const effectivePrice = discountPrice ?? sku.price;
 
   // Step 1: 正常列总成本
-  const normal = computeTotalCost(sku, snap, undefined, promoCost);
+  const normal = computeTotalCost(sku, snap, undefined, promoCost, defaultCommissionRate);
   const totalCost = normal.total;
 
   // Step 2: 折扣列总成本
-  const discount = computeDiscountTotalCost(sku, snap, discountPrice, normal.detail, promoCost);
+  const discount = computeDiscountTotalCost(sku, snap, discountPrice, normal.detail, promoCost, defaultCommissionRate);
   const disTotalCost = discount.total;
 
   // Step 3: 单件净利
@@ -604,9 +607,12 @@ export function computeWeeklyPromoCost(
   manualPromos: ManualPromotion[],
   skuMasterMap?: Map<string, SkuMaster>,
   snapMap?: Map<string, DailySnapshot>,
+  siteId?: string,
 ): { total: number; count: number } {
   const weekStart = getWeekStart(weekDate);
   const weekEnd = getWeekEnd(weekStart);
+
+  const compositeKey = `${sku}__${siteId ?? "site_us"}`;
 
   let total = 0;
   let count = 0;
@@ -620,9 +626,9 @@ export function computeWeeklyPromoCost(
     if (promo.costMode === "amount" && promo.amount != null && promo.amount > 0) {
       total += promo.amount;
     } else if (promo.costMode === "rate" && promo.rate != null && promo.rate > 0) {
-      const skuMaster = skuMasterMap?.get(sku);
+      const skuMaster = skuMasterMap?.get(compositeKey) ?? skuMasterMap?.get(sku);
       const price = skuMaster?.price ?? 0;
-      const snap = snapMap?.get(sku);
+      const snap = snapMap?.get(compositeKey) ?? snapMap?.get(sku);
       const dailySales = snap?.dailySales7d ?? 0;
       const weeklySales = dailySales * 7;
 

@@ -5,7 +5,8 @@ import {
 } from "recharts";
 import { type Layout } from "react-grid-layout";
 import { useOpsData } from "@/domain/store";
-import { computeWarehouseTotals } from "@/domain/calculator";
+import { computeAll, computeWarehouseTotals } from "@/domain/calculator";
+import { snapKey } from "@/domain/engine";
 import { db, getAllShops } from "@/domain/db";
 import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
@@ -37,7 +38,7 @@ export default function Dashboard() {
   const {
     loading, skuMaster, alerts, promotions,
     shipmentSuggestions, wowDeltas, latestSnapshot,
-    latestInventory, previousSnapshot, today,
+    latestInventory, previousSnapshot, today, currentSite,
   } = useOpsData();
 
   const [todos, setTodos] = useState<TodoItem[]>([]);
@@ -142,35 +143,39 @@ export default function Dashboard() {
     if (!previousSnapshot || previousSnapshot.size === 0) {
       return { chartData: [], items: [], hasTwoWeeks: false };
     }
-    const curSalesSum = Array.from(latestSnapshot.values()).reduce((s, r) => s + r.dailySales7d, 0);
-    const prevSalesSum = Array.from(previousSnapshot.values()).reduce((s, r) => s + r.dailySales7d, 0);
-    const curAds = Array.from(latestSnapshot.values()).filter((r) => r.adRatio > 0);
-    const prevAds = Array.from(previousSnapshot.values()).filter((r) => r.adRatio > 0);
+    const curSnaps = Array.from(latestSnapshot.values()).filter((r) =>
+      shopFilterId === "all" || filteredSkuMaster.some((s) => s.sku === r.sku)
+    );
+    const prevSnaps = Array.from(previousSnapshot.values()).filter((r) =>
+      shopFilterId === "all" || filteredSkuMaster.some((s) => s.sku === r.sku)
+    );
+    const curSalesSum = curSnaps.reduce((s, r) => s + r.dailySales7d, 0);
+    const prevSalesSum = prevSnaps.reduce((s, r) => s + r.dailySales7d, 0);
+    const curAds = curSnaps.filter((r) => r.adRatio > 0);
+    const prevAds = prevSnaps.filter((r) => r.adRatio > 0);
     const curAdRatio = curAds.length > 0 ? curAds.reduce((s, r) => s + r.adRatio, 0) / curAds.length : 0;
     const prevAdRatio = prevAds.length > 0 ? prevAds.reduce((s, r) => s + r.adRatio, 0) / prevAds.length : 0;
-    const curReturns = Array.from(latestSnapshot.values());
-    const prevReturns = Array.from(previousSnapshot.values());
-    const curReturnRate = curReturns.length > 0 ? curReturns.reduce((s, r) => s + r.returnRate, 0) / curReturns.length : 0;
-    const prevReturnRate = prevReturns.length > 0 ? prevReturns.reduce((s, r) => s + r.returnRate, 0) / prevReturns.length : 0;
-    const curRatings = Array.from(latestSnapshot.values()).filter((r) => r.rating > 0);
-    const prevRatings = Array.from(previousSnapshot.values()).filter((r) => r.rating > 0);
+    const curReturnRate = curSnaps.length > 0 ? curSnaps.reduce((s, r) => s + r.returnRate, 0) / curSnaps.length : 0;
+    const prevReturnRate = prevSnaps.length > 0 ? prevSnaps.reduce((s, r) => s + r.returnRate, 0) / prevSnaps.length : 0;
+    const curRatings = curSnaps.filter((r) => r.rating > 0);
+    const prevRatings = prevSnaps.filter((r) => r.rating > 0);
     const curRating = curRatings.length > 0 ? curRatings.reduce((s, r) => s + r.rating, 0) / curRatings.length : 0;
     const prevRating = prevRatings.length > 0 ? prevRatings.reduce((s, r) => s + r.rating, 0) / prevRatings.length : 0;
 
     const items: WeekCompareItem[] = [
       { label: "日均销量", current: curSalesSum, previous: prevSalesSum, unit: "件" },
       { label: "广告费比", current: curAdRatio, previous: prevAdRatio, unit: "%" },
-      { label: "退货退款率", current: curReturnRate, previous: prevReturnRate, unit: "%" },
+      { label: "退货率", current: curReturnRate, previous: prevReturnRate, unit: "%" },
       { label: "评分", current: curRating, previous: prevRating, unit: "" },
     ];
     const chartData = [
       { label: "日均销量", current: Number(curSalesSum.toFixed(1)), previous: Number(prevSalesSum.toFixed(1)) },
       { label: "广告费比", current: Number(curAdRatio.toFixed(1)), previous: Number(prevAdRatio.toFixed(1)) },
-      { label: "退货退款率", current: Number(curReturnRate.toFixed(1)), previous: Number(prevReturnRate.toFixed(1)) },
+      { label: "退货率", current: Number(curReturnRate.toFixed(1)), previous: Number(prevReturnRate.toFixed(1)) },
       { label: "评分", current: Number(curRating.toFixed(2)), previous: Number(prevRating.toFixed(2)) },
     ];
     return { chartData, items, hasTwoWeeks: true };
-  }, [latestSnapshot, previousSnapshot]);
+  }, [latestSnapshot, previousSnapshot, shopFilterId, filteredSkuMaster]);
 
   const activeProductGroups = useMemo(() => {
     const groups = new Set<string>();
@@ -186,7 +191,7 @@ export default function Dashboard() {
   // ── KPI 指标值池（所有可配指标的计算结果）── 必须放在 loading 检查之前
 
   const totalStock = useMemo(() => filteredSkuMaster.reduce((s, sku) => {
-    const inv = latestInventory.get(sku.sku);
+    const inv = latestInventory.get(snapKey(sku.sku, sku.siteId));
     const wh = computeWarehouseTotals(inv);
     return s + wh.total;
   }, 0), [filteredSkuMaster, latestInventory]);
@@ -200,10 +205,14 @@ export default function Dashboard() {
   const wowTotalStockDelta = useMemo(() => wowDeltas.reduce((s, d) => s + d.stockDelta, 0), [wowDeltas]);
 
   const kpiValues = useMemo((): Record<KpiMetricKey, { value: string | number; sub: React.ReactNode }> => {
-    const avgMarginVal = filteredSkuMaster.filter((s) => s.saleStatus === "active").reduce((sum, s, _, arr) => {
-      const cost = (s.costFob ?? 0) + (s.costShipping ?? 0) + (s.costDelivery ?? 0) + (s.costCommission ?? 0) + (s.costStorage ?? 0) + (s.costReturn ?? 0) + (s.costAd ?? 0) + (s.coupon ?? 0);
-      return s.price > 0 ? sum + (s.price - cost) / s.price * 100 : sum;
-    }, 0) / (filteredSkuMaster.filter((s) => s.saleStatus === "active").length || 1);
+    const activeSkusList = filteredSkuMaster.filter((s) => s.saleStatus === "active");
+    const avgMarginVal = activeSkusList.reduce((sum, s) => {
+      const key = snapKey(s.sku, s.siteId);
+      const snap = latestSnapshot.get(key);
+      const inv = latestInventory.get(key);
+      const calc = computeAll({ sku: s, snap, inv, defaultCommissionRate: currentSite?.commissionRate });
+      return sum + calc.grossMargin;
+    }, 0) / (activeSkusList.length || 1);
 
     const avgAdRatioVal = Array.from(latestSnapshot.values()).filter((r) => r.adRatio > 0 && (shopFilterId === "all" || filteredSkuMaster.some((s) => s.sku === r.sku))).reduce((sum, r, _, arr) => sum + r.adRatio / arr.length, 0);
 
@@ -221,7 +230,7 @@ export default function Dashboard() {
       promoCount: { value: filteredPromotions.filter((p) => p.status === "upcoming" || p.status === "active").length, sub: `${filteredPromotions.filter((p) => p.status === "active").length} 个进行中` },
       todoCount: { value: todos.filter((t) => !t.completed).length, sub: `${todos.filter((t) => !t.completed && t.dueDate && t.dueDate < today).length} 个已逾期` },
     };
-  }, [activeProductGroups, activeMskuLinks, totalStock, totalDailySales, wowDeltas, wowTotalStockDelta, wowTotalSalesDelta, filteredSkuMaster, latestSnapshot, filteredAlerts, filteredShipmentSuggestions, filteredPromotions, todos, today, shopFilterId]);
+  }, [activeProductGroups, activeMskuLinks, totalStock, totalDailySales, wowDeltas, wowTotalStockDelta, wowTotalSalesDelta, filteredSkuMaster, latestSnapshot, latestInventory, currentSite, filteredAlerts, filteredShipmentSuggestions, filteredPromotions, todos, today, shopFilterId]);
 
   if (loading) return <div className="text-sm text-foreground-400">加载中...</div>;
 
@@ -363,7 +372,7 @@ export default function Dashboard() {
     ),
 
     weekCompare: (
-      <Section title="本周 vs 上周环比对比" icon="ri-bar-chart-grouped-line" subtitle="柱状图对比近7天 vs 上期近7天 · 销量 / 广告费比 / 退货退款率 / 评分">
+      <Section title="本周 vs 上周环比对比" icon="ri-bar-chart-grouped-line" subtitle="柱状图对比近7天 vs 上期近7天 · 销量 / 广告费比 / 退货率 / 评分">
         {weekCompare.hasTwoWeeks ? (
           <div>
             <div className="h-64 w-full">
@@ -382,7 +391,7 @@ export default function Dashboard() {
               {weekCompare.items.map((item) => {
                 const delta = item.previous > 0 ? ((item.current - item.previous) / item.previous * 100) : 0;
                 const isUp = delta >= 0;
-                const isGood = item.label === "广告费比" || item.label === "退货退款率" ? !isUp : isUp;
+                const isGood = item.label === "广告费比" || item.label === "退货率" ? !isUp : isUp;
                 return (
                   <div key={item.label} className="glass-card p-4 text-center">
                     <div className="text-[11px] font-medium text-foreground-400">{item.label}</div>

@@ -171,6 +171,19 @@ export class AmzOpsDB extends Dexie {
       }));
       await tx.table("skuMaster").bulkPut(fixed);
     });
+
+    // Step 5: Backfill siteId for dailySnapshot & inventoryLayer historical data
+    this.version(14).stores({
+      // No schema change, just data fix
+    }).upgrade(async (tx) => {
+      for (const table of ["dailySnapshot", "inventoryLayer"]) {
+        const all = await tx.table(table).toArray();
+        const needsFix = all.filter((r: any) => !r.siteId || r.siteId === "" || r.siteId === "undefined");
+        if (needsFix.length === 0) continue;
+        const fixed = needsFix.map((r: any) => ({ ...r, siteId: "site_us" }));
+        await tx.table(table).bulkPut(fixed);
+      }
+    });
   }
 }
 
@@ -454,24 +467,27 @@ export async function upsertSkuMasterPartial(rows: SkuMaster[]): Promise<void> {
 
 export async function upsertSnapshots(rows: DailySnapshot[]): Promise<void> {
   if (rows.length === 0) return;
-  // Normalize: adRatio must always be positive
-  const normalized = rows.map((r) => ({ ...r, adRatio: Math.abs(r.adRatio) }));
-  const keys = new Set(normalized.map((r) => `${r.sku}__${r.date}`));
+  // Normalize: adRatio must always be positive, ensure siteId is set
+  const siteId = rows[0].siteId || "site_us";
+  const normalized = rows.map((r) => ({ ...r, adRatio: Math.abs(r.adRatio), siteId: r.siteId || siteId }));
+  const keys = new Set(normalized.map((r) => `${r.sku}__${r.date}__${r.siteId}`));
   const existing = await db.dailySnapshot
     .where("date")
     .equals(normalized[0].date)
+    .filter((e) => (e.siteId || "site_us") === siteId)
     .toArray();
-  const toDelete = existing.filter((e) => keys.has(`${e.sku}__${e.date}`));
+  const toDelete = existing.filter((e) => keys.has(`${e.sku}__${e.date}__${e.siteId || "site_us"}`));
 
   // Merge: for existing entries with same SKU+date, keep non-zero values from both sides
   const merged: DailySnapshot[] = [];
-  const existingMap = new Map(toDelete.map((e) => [`${e.sku}__${e.date}`, e]));
+  const existingMap = new Map(toDelete.map((e) => [`${e.sku}__${e.date}__${e.siteId || "site_us"}`, e]));
   for (const row of normalized) {
-    const key = `${row.sku}__${row.date}`;
+    const key = `${row.sku}__${row.date}__${row.siteId}`;
     const old = existingMap.get(key);
     if (old) {
       merged.push({
         ...old,
+        siteId: row.siteId,
         // New data fills gaps: only overwrite if old is 0/empty and new has value
         dailySales7d: row.dailySales7d || old.dailySales7d,
         monthlySales: row.monthlySales || old.monthlySales,
@@ -501,18 +517,21 @@ export async function upsertSnapshots(rows: DailySnapshot[]): Promise<void> {
 
 export async function upsertInventoryLayers(rows: InventoryLayer[]): Promise<void> {
   if (rows.length === 0) return;
-  const keys = new Set(rows.map((r) => `${r.sku}__${r.date}`));
+  const siteId = rows[0].siteId || "site_us";
+  const normalized = rows.map((r) => ({ ...r, siteId: r.siteId || siteId }));
+  const keys = new Set(normalized.map((r) => `${r.sku}__${r.date}__${r.siteId}`));
   const existing = await db.inventoryLayer
     .where("date")
-    .equals(rows[0].date)
+    .equals(normalized[0].date)
+    .filter((e) => (e.siteId || "site_us") === siteId)
     .toArray();
-  const toDelete = existing.filter((e) => keys.has(`${e.sku}__${e.date}`));
+  const toDelete = existing.filter((e) => keys.has(`${e.sku}__${e.date}__${e.siteId || "site_us"}`));
   if (toDelete.length > 0) {
     await db.inventoryLayer.bulkDelete(
       toDelete.map((e) => e.id as number).filter((id) => id != null)
     );
   }
-  await db.inventoryLayer.bulkAdd(rows);
+  await db.inventoryLayer.bulkAdd(normalized);
 }
 
 /**
@@ -527,24 +546,27 @@ export async function upsertInventoryLayers(rows: InventoryLayer[]): Promise<voi
 export async function upsertInventoryLayersPartial(rows: InventoryLayer[]): Promise<void> {
   if (rows.length === 0) return;
 
-  // 批量查询已有记录（按 date + sku 查找）
-  const date = rows[0].date;
+  const siteId = rows[0].siteId || "site_us";
+  const normalized = rows.map((r) => ({ ...r, siteId: r.siteId || siteId }));
+
+  // 批量查询已有记录（按 date + siteId 查找，不跨站）
+  const date = normalized[0].date;
   const existing = await db.inventoryLayer
     .where("date")
     .equals(date)
+    .filter((e) => (e.siteId || "site_us") === siteId)
     .toArray();
   const existingMap = new Map<string, InventoryLayer>();
   for (const e of existing) {
-    existingMap.set(`${e.sku}__${e.date}`, e);
+    existingMap.set(`${e.sku}__${e.date}__${e.siteId || "site_us"}`, e);
   }
 
   // FIX: 查询每个 SKU 的最近一次库存记录（不含当前日期），用于继承 FBM/海外仓等数据
-  // 解决：新日期导入时如果 Excel 没有 FBM 库存 sheet，海外仓可售会显示 0
-  const skuList = [...new Set(rows.map((r) => r.sku))];
+  const skuList = [...new Set(normalized.map((r) => r.sku))];
   const allPrevInventory = await db.inventoryLayer
     .where("sku")
     .anyOf(skuList)
-    .and((r) => r.date !== date)
+    .and((r) => r.date !== date && (r.siteId || "site_us") === siteId)
     .toArray();
   const latestPrevBySku = new Map<string, InventoryLayer>();
   for (const inv of allPrevInventory) {
@@ -562,8 +584,8 @@ export async function upsertInventoryLayersPartial(rows: InventoryLayer[]): Prom
     "southeastTransit", "southcentralTransit",
   ];
 
-  const merged: InventoryLayer[] = rows.map((row) => {
-    const key = `${row.sku}__${row.date}`;
+  const merged: InventoryLayer[] = normalized.map((row) => {
+    const key = `${row.sku}__${row.date}__${row.siteId}`;
     const old = existingMap.get(key);
     if (!old) {
       // 新日期的记录：从上一次库存记录继承 FBM/海外仓数据
@@ -597,7 +619,7 @@ export async function upsertInventoryLayersPartial(rows: InventoryLayer[]): Prom
       return row; // 无历史记录，直接写入
     }
 
-    const result: InventoryLayer = { ...old };
+    const result: InventoryLayer = { ...old, siteId: row.siteId };
     const prev = latestPrevBySku.get(row.sku);
 
     // 数值字段：新值 > 0 才覆盖；新值为 0 且旧值也为 0 时，从上一次记录继承（修复历史脏数据）
@@ -636,10 +658,10 @@ export async function upsertInventoryLayersPartial(rows: InventoryLayer[]): Prom
     return result;
   });
 
-  // 删除已有记录（用合并后的数据替换）
+  // 删除已有记录（用合并后的数据替换，不跨站）
   const toDelete = existing.filter((e) => {
-    const key = `${e.sku}__${e.date}`;
-    return rows.some((r) => `${r.sku}__${r.date}` === key);
+    const key = `${e.sku}__${e.date}__${e.siteId || "site_us"}`;
+    return normalized.some((r) => `${r.sku}__${r.date}__${r.siteId}` === key);
   });
   if (toDelete.length > 0) {
     await db.inventoryLayer.bulkDelete(

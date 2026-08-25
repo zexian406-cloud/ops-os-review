@@ -98,13 +98,14 @@ export default function Settings() {
 
   useEffect(() => {
     (async () => {
+      const siteId = await getCurrentSiteId();
       const [c, s, p] = await Promise.all([
         getGlobalConfig(),
         db.skuMaster.toArray(),
         db.warehouseProviders.toArray(),
       ]);
       setCfg(c);
-      setSkus(s);
+      setSkus(s.filter(x => (x.siteId ?? "site_us") === siteId));
       if (p.length === 0) {
         // Seed two providers with real rates
         const [wy, lg] = SEED_PROVIDERS;

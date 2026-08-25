@@ -145,7 +145,11 @@ export default function CalculatorPage() {
       setProviders(valid);
     });
     loadRecords();
-    db.skuMaster.toArray().then(setSkuList);
+    getCurrentSiteId().then(sid => {
+      db.skuMaster.toArray().then((all) => {
+        setSkuList(all.filter(x => (x.siteId ?? "site_us") === sid));
+      });
+    });
   }, []);
 
   const providersMap = useMemo(() => {

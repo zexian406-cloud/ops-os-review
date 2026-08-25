@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { Link, useSearchParams, Navigate } from "react-router-dom";
-import { db, getAllShops } from "@/domain/db";
+import { db, getAllShops, getCurrentSiteId } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
@@ -74,6 +74,7 @@ export default function PromoCenterPage() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
+    const siteId = await getCurrentSiteId();
     const [s, p, mp, snap, allShops] = await Promise.all([
       db.skuMaster.toArray(),
       db.promotions.toArray(),
@@ -81,11 +82,11 @@ export default function PromoCenterPage() {
       db.dailySnapshot.toArray(),
       getAllShops(),
     ]);
-    setSkus(s);
-    setPromotions(p);
-    setManualPromotions(mp);
-    setSnapshots(snap);
-    setShops(allShops);
+    setSkus(s.filter(x => (x.siteId ?? "site_us") === siteId));
+    setPromotions(p.filter(x => (x.siteId ?? "site_us") === siteId));
+    setManualPromotions(mp.filter(x => (x.siteId ?? "site_us") === siteId));
+    setSnapshots(snap.filter(x => (x.siteId ?? "site_us") === siteId));
+    setShops(allShops.filter(x => (x.siteId ?? "site_us") === siteId || !x.siteId));
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);

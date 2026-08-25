@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { db, getAllShops } from "@/domain/db";
+import { db, getAllShops, getCurrentSiteId } from "@/domain/db";
 import { computeWeeklyPromoCost } from "@/domain/calculator";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
@@ -67,16 +67,17 @@ export default function PromoCostPage() {
 
   // ── Load data ──
   const loadData = useCallback(async () => {
+    const siteId = await getCurrentSiteId();
     const [s, snap, mp, allShops] = await Promise.all([
       db.skuMaster.toArray(),
       db.dailySnapshot.toArray(),
       db.manualPromotions.toArray(),
       getAllShops(),
     ]);
-    setSkus(s);
-    setSnapshots(snap);
-    setPromos(mp);
-    setShops(allShops);
+    setSkus(s.filter(x => (x.siteId ?? "site_us") === siteId));
+    setSnapshots(snap.filter(x => (x.siteId ?? "site_us") === siteId));
+    setPromos(mp.filter(x => (x.siteId ?? "site_us") === siteId));
+    setShops(allShops.filter(x => (x.siteId ?? "site_us") === siteId || !x.siteId));
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);

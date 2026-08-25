@@ -492,6 +492,7 @@ export default function ImportPage() {
           mergedLayers.push({
             date: today,
             sku,
+            siteId,
             fbaStock: 0,
             fbmStock: 0,
             factoryStock: fb ? fb.reduce((s, b) => s + b.qty, 0) : 0,
@@ -596,7 +597,8 @@ export default function ImportPage() {
       const mskuToSkuMap = new Map<string, string>();
       if (!cm.sku) {
         const allSkus = await db.skuMaster.toArray();
-        for (const s of allSkus) {
+        const siteSkus = allSkus.filter(s => (s.siteId ?? "site_us") === siteId);
+        for (const s of siteSkus) {
           if (s.asin) asinToSkuMap.set(s.asin, s.sku);
           if (s.msku) {
             for (const m of s.msku.split(",")) {
@@ -627,7 +629,7 @@ export default function ImportPage() {
         if (!sku) continue;
 
         const existing = await db.skuMaster.get([sku, siteId]);
-        const prevSnapshot = existing ? await db.dailySnapshot.where({ sku }).reverse().first() : undefined;
+        const prevSnapshot = existing ? await db.dailySnapshot.where({ sku }).filter(s => (s.siteId ?? "site_us") === siteId).reverse().first() : undefined;
 
         // 合并原运营数据导入：品名/店铺/ASIN/链接 → 更新或创建 SkuMaster
         const storeName = str(pickCell(row, cm.store));
@@ -687,6 +689,7 @@ export default function ImportPage() {
         const snap: Omit<DailySnapshot, "id"> = {
           date: today,
           sku,
+          siteId,
           dailySales7d,
           monthlySales,
           stockOnHand: prevSnapshot?.stockOnHand ?? 0,
@@ -729,6 +732,7 @@ export default function ImportPage() {
     try {
       const rows = await parseExcelFile(file);
       const today = importDateStart;
+      const siteId = await getCurrentSiteId();
       const cm = buildColumnMap(["sku", "fbaStock"], headersOf(rows));
       if (!cm.sku) {
         setImportMsg({ tone: "err", msg: "未识别到 SKU 列，已阻断导入。请检查表头（SKU / 产品SKU / SKU码 均可识别）。" });
@@ -739,9 +743,9 @@ export default function ImportPage() {
       for (const row of rows) {
         const sku = str(pickCell(row, cm.sku));
         if (!sku) continue;
-        const existing = await db.inventoryLayer.where({ sku, date: today }).first();
+        const existing = await db.inventoryLayer.where({ sku, date: today }).filter(e => (e.siteId ?? "site_us") === siteId).first();
         layers.push({
-          date: today, sku,
+          date: today, sku, siteId,
           fbaStock: num(pickCell(row, cm.fbaStock)),
           fbmStock: existing?.fbmStock ?? 0,
           factoryStock: existing?.factoryStock ?? 0,
@@ -767,6 +771,7 @@ export default function ImportPage() {
     try {
       const rows = await parseExcelFile(file);
       const today = importDateStart;
+      const siteId = await getCurrentSiteId();
       const cm = buildColumnMap(["sku", "warehouse", "qty"], headersOf(rows));
       if (!cm.sku) {
         setImportMsg({ tone: "err", msg: "未识别到 SKU 列，已阻断导入。请检查表头（SKU / 产品SKU / SKU码 均可识别）。" });
@@ -804,7 +809,7 @@ export default function ImportPage() {
 
       const layers: Omit<InventoryLayer, "id">[] = [];
       for (const [sku, warehouses] of skuWarehouses) {
-        const existing = await db.inventoryLayer.where({ sku, date: today }).first();
+        const existing = await db.inventoryLayer.where({ sku, date: today }).filter(e => (e.siteId ?? "site_us") === siteId).first();
         // 按区域汇总在库库存
         let eastStock = 0, westStock = 0, southeastStock = 0, southcentralStock = 0;
         for (const w of warehouses) {
@@ -817,7 +822,7 @@ export default function ImportPage() {
           }
         }
         layers.push({
-          date: today, sku,
+          date: today, sku, siteId,
           fbaStock: existing?.fbaStock ?? 0,
           fbmStock: warehouses.reduce((s, w) => s + w.qty, 0),
           factoryStock: existing?.factoryStock ?? 0,
@@ -855,6 +860,7 @@ export default function ImportPage() {
     try {
       const rows = await parseExcelFile(file);
       const today = importDateStart;
+      const siteId = await getCurrentSiteId();
       const cm = buildColumnMap(["sku", "provider", "dest", "etaDate", "shipDate", "qty", "statusText"], headersOf(rows));
       if (!cm.sku) {
         setImportMsg({ tone: "err", msg: "未识别到 SKU 列，已阻断导入。请检查表头（SKU / 产品SKU / SKU码 均可识别）。" });
@@ -885,12 +891,12 @@ export default function ImportPage() {
       // Merge into inventoryLayer
       const layers: Omit<InventoryLayer, "id">[] = [];
       for (const [sku, batches] of skuBatches) {
-        const existing = await db.inventoryLayer.where({ sku, date: today }).first();
+        const existing = await db.inventoryLayer.where({ sku, date: today }).filter(e => (e.siteId ?? "site_us") === siteId).first();
         if (existing) {
           layers.push({ ...existing, transitBatches: batches });
         } else {
           layers.push({
-            date: today, sku,
+            date: today, sku, siteId,
             fbaStock: 0, fbmStock: 0, factoryStock: 0,
             eastTransit: 0, westTransit: 0, southeast: 0, southcentral: 0,
             transitBatches: batches,
@@ -913,6 +919,7 @@ export default function ImportPage() {
     try {
       const rows = await parseExcelFile(file);
       const today = importDateStart;
+      const siteId = await getCurrentSiteId();
       const cm = buildColumnMap(["sku", "factoryName", "qty", "totalQty", "deliveryDate", "factoryStatus"], headersOf(rows));
       if (!cm.sku) {
         setImportMsg({ tone: "err", msg: "未识别到 SKU 列，已阻断导入。请检查表头（SKU / 产品SKU / SKU码 均可识别）。" });
@@ -938,13 +945,13 @@ export default function ImportPage() {
       // Merge into inventoryLayer
       const layers: Omit<InventoryLayer, "id">[] = [];
       for (const [sku, batches] of skuBatches) {
-        const existing = await db.inventoryLayer.where({ sku, date: today }).first();
+        const existing = await db.inventoryLayer.where({ sku, date: today }).filter(e => (e.siteId ?? "site_us") === siteId).first();
         const factoryQty = batches.reduce((s, b) => s + b.qty, 0);
         if (existing) {
           layers.push({ ...existing, factoryStock: factoryQty, factoryBatches: batches });
         } else {
           layers.push({
-            date: today, sku,
+            date: today, sku, siteId,
             fbaStock: 0, fbmStock: 0, factoryStock: factoryQty,
             eastTransit: 0, westTransit: 0, southeast: 0, southcentral: 0,
             factoryBatches: batches,

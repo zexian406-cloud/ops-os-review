@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { db, getAllShops } from "@/domain/db";
+import { db, getAllShops, getCurrentSiteId } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import PageLayoutCustomizer from "@/components/layout/PageLayoutCustomizer";
@@ -62,14 +62,15 @@ export default function PromotionsPage() {
 
   useEffect(() => {
     (async () => {
+      const siteId = await getCurrentSiteId();
       const [s, p, snap] = await Promise.all([
         db.skuMaster.toArray(),
         db.promotions.toArray(),
         db.dailySnapshot.toArray(),
       ]);
-      setSkus(s);
-      setPromos(p);
-      setSnapshots(snap);
+      setSkus(s.filter(x => (x.siteId ?? "site_us") === siteId));
+      setPromos(p.filter(x => (x.siteId ?? "site_us") === siteId));
+      setSnapshots(snap.filter(x => (x.siteId ?? "site_us") === siteId));
     })();
   }, []);
 

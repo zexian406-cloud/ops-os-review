@@ -103,6 +103,7 @@ export interface DailySnapshot {
   id?: number;
   date: string;              // YYYY-MM-DD
   sku: string;
+  siteId?: string;           // 站点 ID（多站点隔离）
   // 销量
   dailySales7d: number;      // 近 7 天日均
   dailySales30d?: number;    // 近 30 天日均（由 sales30d 导入 ÷30；可选，缺省按 7d）
@@ -170,6 +171,7 @@ export interface InventoryLayer {
   id?: number;
   date: string;
   sku: string;
+  siteId?: string;           // 站点 ID（多站点隔离）
   fbaStock: number;
   fbmStock: number;
   factoryStock: number;

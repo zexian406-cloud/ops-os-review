@@ -4,7 +4,7 @@ import Section from "@/components/ui/Section";
 import KpiCard from "@/components/ui/KpiCard";
 import Badge from "@/components/ui/Badge";
 import { computeShipmentSuggestions } from "@/domain/engine";
-import { db } from "@/domain/db";
+import { db, getCurrentSiteId } from "@/domain/db";
 import type { Campaign, SkuMaster } from "@/domain/types";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -40,7 +40,8 @@ export default function Season() {
   /* 加载 campaigns */
   useEffect(() => {
     (async () => {
-      let list = await db.campaigns.toArray();
+      const siteId = await getCurrentSiteId();
+      let list = (await db.campaigns.toArray()).filter(c => (c.siteId ?? "site_us") === siteId);
       if (list.length === 0) {
         const defaults: Campaign[] = DEFAULT_PRESETS.map((p) => ({
           id: uid(),

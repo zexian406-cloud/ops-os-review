@@ -19,6 +19,9 @@ import { computeAll, computeWarehouseTotals, computeWeeklyPromoCost } from "./ca
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
+export const snapKey = (sku: string, siteId?: string): string =>
+  `${sku}__${siteId ?? "site_us"}`;
+
 // -------- Promotion alerts --------
 export function computePromotionAlerts(input: {
   promotions: Promotion[];
@@ -111,25 +114,29 @@ export function computeWowDeltas(input: {
   latestInventory: Map<string, InventoryLayer>;
   previousSnapshot: Map<string, DailySnapshot>;
   config: GlobalConfig;
+  defaultCommissionRate?: number;
 }): WowDelta[] {
-  const { skuMaster, latestSnapshot, latestInventory, previousSnapshot, config } = input;
+  const { skuMaster, latestSnapshot, latestInventory, previousSnapshot, config, defaultCommissionRate } = input;
   const deltas: WowDelta[] = [];
 
   for (const sku of skuMaster) {
-    const cur = latestSnapshot.get(sku.sku);
-    const prev = previousSnapshot.get(sku.sku);
+    const key = snapKey(sku.sku, sku.siteId);
+    const cur = latestSnapshot.get(key);
+    const prev = previousSnapshot.get(key);
     if (!cur || !prev) continue;
 
-    const inv = latestInventory.get(sku.sku);
+    const inv = latestInventory.get(key);
     const curCalc = computeAll({
       sku, snap: cur, inv,
       defaultLeadTime: config.defaultLeadTime,
       defaultSafetyStockDays: config.defaultSafetyStockDays,
+      defaultCommissionRate,
     });
     const prevCalc = computeAll({
       sku, snap: prev, inv,
       defaultLeadTime: config.defaultLeadTime,
       defaultSafetyStockDays: config.defaultSafetyStockDays,
+      defaultCommissionRate,
     });
 
     deltas.push({
@@ -165,6 +172,7 @@ export function computeAlerts(input: {
   previousSnapshot?: Map<string, DailySnapshot>;
   config: GlobalConfig;
   today: string;
+  defaultCommissionRate?: number;
 }): Alert[] {
   const alerts: Alert[] = [];
   const {
@@ -175,25 +183,28 @@ export function computeAlerts(input: {
     previousSnapshot,
     config,
     today,
+    defaultCommissionRate,
   } = input;
 
   // Build SKU map for promo cost lookup
   const skuMasterMapInternal = new Map<string, SkuMaster>();
-  for (const s of skuMaster) skuMasterMapInternal.set(s.sku, s);
+  for (const s of skuMaster) skuMasterMapInternal.set(snapKey(s.sku, s.siteId), s);
 
   for (const sku of skuMaster) {
     if (sku.saleStatus === "discontinued") continue;
-    const snap = latestSnapshot.get(sku.sku);
+    const key = snapKey(sku.sku, sku.siteId);
+    const snap = latestSnapshot.get(key);
     if (!snap) continue;
 
-    const prev = previousSnapshot?.get(sku.sku);
-    const inv = latestInventory.get(sku.sku);
+    const prev = previousSnapshot?.get(key);
+    const inv = latestInventory.get(key);
 
     // ── 统一计算引擎 ──
     const calc = computeAll({
       sku, snap, inv,
       defaultLeadTime: config.defaultLeadTime,
       defaultSafetyStockDays: config.defaultSafetyStockDays,
+      defaultCommissionRate,
     });
 
     const safety = sku.safetyStockDays ?? config.defaultSafetyStockDays;
@@ -382,6 +393,7 @@ export function computeAlerts(input: {
         manualPromotions,
         skuMasterMapInternal,
         latestSnapshot,
+        sku.siteId,
       );
       if (weekPromo.count > 0 && weekPromo.total > 0) {
         const promoRatio = (weekPromo.total / sku.price) * 100;
@@ -416,6 +428,7 @@ export function computeShipmentSuggestions(input: {
   config: GlobalConfig;
   today: string;
   salesBasis?: "7d" | "30d";
+  defaultCommissionRate?: number;
 }): ShipmentSuggestion[] {
   const {
     skuMaster,
@@ -425,6 +438,7 @@ export function computeShipmentSuggestions(input: {
     config,
     today,
     salesBasis = "7d",
+    defaultCommissionRate,
   } = input;
 
   const suggestions: ShipmentSuggestion[] = [];
@@ -432,16 +446,18 @@ export function computeShipmentSuggestions(input: {
 
   for (const sku of skuMaster) {
     if (sku.saleStatus === "discontinued") continue;
-    const snap = latestSnapshot.get(sku.sku);
+    const key = snapKey(sku.sku, sku.siteId);
+    const snap = latestSnapshot.get(key);
     if (!snap) continue;
 
-    const inv = latestInventory.get(sku.sku);
+    const inv = latestInventory.get(key);
 
     // Get real total stock from calculator (4-region sum)
     const calc = computeAll({
       sku, snap, inv,
       defaultLeadTime: config.defaultLeadTime,
       defaultSafetyStockDays: config.defaultSafetyStockDays,
+      defaultCommissionRate,
     });
 
     // Choose daily sales basis
@@ -530,14 +546,15 @@ export function buildSnapshotMap(
 ): Map<string, DailySnapshot> {
   const map = new Map<string, DailySnapshot>();
   for (const s of snapshots) {
-    const existing = map.get(s.sku);
+    const key = snapKey(s.sku, s.siteId);
+    const existing = map.get(key);
     if (!existing || existing.date < s.date) {
       // Newer date: replace
       const normalized: DailySnapshot = {
         ...s,
         adRatio: Math.abs(s.adRatio),
       };
-      map.set(s.sku, normalized);
+      map.set(key, normalized);
     } else if (existing.date === s.date) {
       // Same date: merge (fill gaps in existing with new data)
       const merged: DailySnapshot = {
@@ -556,7 +573,7 @@ export function buildSnapshotMap(
         profitMargin: s.profitMargin || existing.profitMargin,
         totalCost: s.totalCost || existing.totalCost,
       };
-      map.set(s.sku, merged);
+      map.set(key, merged);
     }
   }
   return map;
@@ -567,8 +584,9 @@ export function buildInventoryMap(
 ): Map<string, InventoryLayer> {
   const map = new Map<string, InventoryLayer>();
   for (const l of layers) {
-    const existing = map.get(l.sku);
-    if (!existing || existing.date < l.date) map.set(l.sku, l);
+    const key = snapKey(l.sku, l.siteId);
+    const existing = map.get(key);
+    if (!existing || existing.date < l.date) map.set(key, l);
   }
   return map;
 }

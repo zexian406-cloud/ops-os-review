@@ -32,6 +32,7 @@ import {
   computePromotionAlerts,
   computeShipmentSuggestions,
   computeWowDeltas,
+  snapKey,
   type WowDelta,
 } from "./engine";
 
@@ -160,14 +161,12 @@ export function useOpsData() {
   }, [allSkuMaster, currentSiteId]);
 
   const siteSnapshots = useMemo(() => {
-    const skuSet = new Set(siteSkuMaster.map(s => s.sku));
-    return allSnapshots.filter(s => skuSet.has(s.sku));
-  }, [allSnapshots, siteSkuMaster]);
+    return allSnapshots.filter(s => (s.siteId ?? "site_us") === currentSiteId);
+  }, [allSnapshots, currentSiteId]);
 
   const siteInventory = useMemo(() => {
-    const skuSet = new Set(siteSkuMaster.map(s => s.sku));
-    return allInventory.filter(s => skuSet.has(s.sku));
-  }, [allInventory, siteSkuMaster]);
+    return allInventory.filter(s => (s.siteId ?? "site_us") === currentSiteId);
+  }, [allInventory, currentSiteId]);
 
   const skuMaster = useMemo(() => {
     if (currentShopId === "all") return siteSkuMaster;
@@ -208,7 +207,7 @@ export function useOpsData() {
     const map = new Map<string, DailySnapshot>();
     snapshots
       .filter((s) => s.date === prevDate)
-      .forEach((s) => map.set(s.sku, { ...s, adRatio: Math.abs(s.adRatio) }));
+      .forEach((s) => map.set(snapKey(s.sku, s.siteId), { ...s, adRatio: Math.abs(s.adRatio) }));
     return map;
   }, [snapshots]);
 
@@ -235,7 +234,7 @@ export function useOpsData() {
     const map = new Map<string, DailySnapshot>();
     allSnapshots
       .filter((s) => s.date === prevDate)
-      .forEach((s) => map.set(s.sku, { ...s, adRatio: Math.abs(s.adRatio) }));
+      .forEach((s) => map.set(snapKey(s.sku, s.siteId), { ...s, adRatio: Math.abs(s.adRatio) }));
     return map;
   }, [allSnapshots]);
 
@@ -257,9 +256,10 @@ export function useOpsData() {
       previousSnapshot: allPreviousSnapshot,
       config,
       today: allToday,
+      defaultCommissionRate: currentSite?.commissionRate,
     });
     return [...base, ...promotionAlerts];
-  }, [allSkuMaster, allLatestSnapshot, allLatestInventory, allManualPromotions, allPreviousSnapshot, config, allToday, promotionAlerts]);
+  }, [allSkuMaster, allLatestSnapshot, allLatestInventory, allManualPromotions, allPreviousSnapshot, config, allToday, promotionAlerts, currentSite]);
 
   useEffect(() => {
     setAlerts(computedAlerts);
@@ -273,8 +273,9 @@ export function useOpsData() {
       activeCampaigns,
       config,
       today,
+      defaultCommissionRate: currentSite?.commissionRate,
     });
-  }, [skuMaster, latestSnapshot, latestInventory, activeCampaigns, config, today]);
+  }, [skuMaster, latestSnapshot, latestInventory, activeCampaigns, config, today, currentSite]);
 
   const wowDeltas = useMemo((): WowDelta[] => {
     if (!previousSnapshot) return [];
@@ -284,8 +285,9 @@ export function useOpsData() {
       latestInventory,
       previousSnapshot,
       config,
+      defaultCommissionRate: currentSite?.commissionRate,
     });
-  }, [skuMaster, latestSnapshot, latestInventory, previousSnapshot, config]);
+  }, [skuMaster, latestSnapshot, latestInventory, previousSnapshot, config, currentSite]);
 
   return {
     loading,

@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { useOpsData } from "@/domain/store";
-import { db } from "@/domain/db";
+import { db, getCurrentSiteId } from "@/domain/db";
 import { computeAll } from "@/domain/calculator";
 import type { DailySnapshot, SkuMaster } from "@/domain/types";
 
@@ -246,8 +246,9 @@ export default function HistoryPage() {
   // 加载SKU主档
   useEffect(() => {
     (async () => {
+      const siteId = await getCurrentSiteId();
       const all = await db.skuMaster.toArray();
-      setSkuMap(new Map(all.map((s) => [s.sku, s])));
+      setSkuMap(new Map(all.filter(s => (s.siteId ?? "site_us") === siteId).map((s) => [s.sku, s])));
     })();
   }, []);
 
