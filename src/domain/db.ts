@@ -190,6 +190,82 @@ export class AmzOpsDB extends Dexie {
 
 export const db = new AmzOpsDB();
 
+const DB_NAME = "amazon-ops-os";
+const UPGRADE_KEY_CHANGE_ERR = /changing primary key/i;
+
+/**
+ * Raw-dump the contents of every object store in the existing database using a
+ * versionless IndexedDB connection (no Dexie schema upgrade), so data can be
+ * recovered even when the schema upgrade itself is unsupported.
+ */
+async function dumpAllObjectStores(): Promise<Record<string, unknown[]>> {
+  const idb = await new Promise<IDBDatabase>((resolve, reject) => {
+    if (!(globalThis as Record<string, unknown>).indexedDB) {
+      reject(new Error("IndexedDB 不可用"));
+      return;
+    }
+    const req = (globalThis as { indexedDB: IDBFactory }).indexedDB.open(DB_NAME);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error ?? new Error("打开数据库失败"));
+  });
+  const dump: Record<string, unknown[]> = {};
+  try {
+    for (const storeName of Array.from(idb.objectStoreNames)) {
+      const rows = await new Promise<unknown[]>((resolve, reject) => {
+        const tx = idb.transaction(storeName, "readonly");
+        const getReq = tx.objectStore(storeName).getAll();
+        getReq.onsuccess = () => resolve(getReq.result);
+        getReq.onerror = () => reject(getReq.error ?? new Error("读取数据失败"));
+      });
+      dump[storeName] = rows;
+    }
+  } finally {
+    idb.close();
+  }
+  return dump;
+}
+
+/**
+ * Open the database. Older browser databases whose `skuMaster` primary key
+ * predates the `[sku+siteId]` compound key cannot be upgraded in place by
+ * Dexie ("Not yet support for changing primary key"). In that case we rescue
+ * all existing data, rebuild the database with the current schema, and restore
+ * it — so users are never left on an infinite loading screen.
+ */
+export async function ensureDatabaseOpen(): Promise<void> {
+  try {
+    await db.open();
+    return;
+  } catch (err) {
+    const msg = String((err as { message?: unknown })?.message ?? err);
+    if (!err || !UPGRADE_KEY_CHANGE_ERR.test(msg)) {
+      try { await db.close(); } catch { /* noop */ }
+      throw err;
+    }
+  }
+
+  // Known schema-conflict: back up, tear down, rebuild.
+  const dump = await dumpAllObjectStores();
+  try { await db.close(); } catch { /* noop */ }
+  await Dexie.delete(DB_NAME);
+  await db.open();
+
+  const skuSource = (dump["skuMasterBackup"]?.length ? dump["skuMasterBackup"] : dump["skuMaster"]) as
+    | Array<Record<string, unknown>>
+    | undefined;
+  if (skuSource?.length) {
+    await db.skuMaster.bulkPut(
+      skuSource.map((r) => ({ ...r, siteId: r.siteId ? String(r.siteId) : "site_us" })) as SkuMaster[]
+    );
+  }
+  for (const [table, rows] of Object.entries(dump)) {
+    if (!rows.length) continue;
+    if (table === "skuMaster" || table === "skuMasterBackup") continue;
+    if (!db.tables.some((t) => t.name === table)) continue;
+    await (db.table(table) as Table<unknown, unknown>).bulkPut(rows as unknown[]);
+  }
+}
+
 // ==================== Config helpers ====================
 export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   defaultLeadTime: 40,

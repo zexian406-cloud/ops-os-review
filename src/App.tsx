@@ -4,27 +4,54 @@ import { I18nextProvider } from "react-i18next";
 import i18n from "./i18n";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { ensureDefaultSites } from "./domain/db";
+import { ensureDatabaseOpen, ensureDefaultSites } from "./domain/db";
 
 function App() {
   const [ready, setReady] = useState(false);
+  const [bootErr, setBootErr] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      // 恢复主题偏好
-      const saved = localStorage.getItem("aos-theme");
-      if (saved === "dark") {
-        document.documentElement.classList.add("dark");
-      } else if (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        document.documentElement.classList.add("dark");
+      try {
+        // 恢复主题偏好
+        const saved = localStorage.getItem("aos-theme");
+        if (saved === "dark") {
+          document.documentElement.classList.add("dark");
+        } else if (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+          document.documentElement.classList.add("dark");
+        }
+
+        // 先确保数据库可打开（旧库主键冲突会在此自动重建恢复)，再初始化站点
+        await ensureDatabaseOpen();
+        // 确保默认站点在组件渲染前初始化
+        await ensureDefaultSites();
+
+        setReady(true);
+      } catch (err) {
+        console.error("应用初始化失败：", err);
+        setBootErr(String((err as Error)?.message ?? err));
       }
-
-      // 确保默认站点在组件渲染前初始化
-      await ensureDefaultSites();
-
-      setReady(true);
     })();
   }, []);
+
+  if (bootErr) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background-50 text-foreground-500 px-6">
+        <div className="flex max-w-md flex-col items-center gap-3 text-center">
+          <i className="ri-alert-line text-3xl text-danger-600" aria-hidden />
+          <span className="text-sm font-medium text-foreground-800">应用初始化失败</span>
+          <span className="text-xs break-all">{bootErr}</span>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-2 rounded-lg bg-primary-600 px-4 py-2 text-sm text-white"
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!ready) {
     return (
