@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { getAllSites, getCurrentSiteId, setCurrentSiteId, updateSite } from "@/domain/db";
+import { getAllSites, getCurrentSiteId, setCurrentSiteId, updateSite, ensureDefaultSites } from "@/domain/db";
 import type { Site } from "@/domain/types";
 
 export const SITE_CHANGE_EVENT = "ops-site-change";
@@ -14,6 +14,7 @@ export default function SiteSwitcher() {
   const ref = useRef<HTMLDivElement>(null);
 
   const loadSites = useCallback(async () => {
+    await ensureDefaultSites();
     const all = await getAllSites();
     setSites(all);
   }, []);

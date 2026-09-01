@@ -4,20 +4,26 @@ import { I18nextProvider } from "react-i18next";
 import i18n from "./i18n";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { ensureDefaultSites } from "./domain/db";
 
 function App() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // 恢复主题偏好
-    const saved = localStorage.getItem("aos-theme");
-    if (saved === "dark") {
-      document.documentElement.classList.add("dark");
-    } else if (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      document.documentElement.classList.add("dark");
-    }
+    (async () => {
+      // 恢复主题偏好
+      const saved = localStorage.getItem("aos-theme");
+      if (saved === "dark") {
+        document.documentElement.classList.add("dark");
+      } else if (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        document.documentElement.classList.add("dark");
+      }
 
-    setReady(true);
+      // 确保默认站点在组件渲染前初始化
+      await ensureDefaultSites();
+
+      setReady(true);
+    })();
   }, []);
 
   if (!ready) {
