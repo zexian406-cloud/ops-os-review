@@ -40,6 +40,8 @@ const num = (v: unknown, fallback = 0): number => {
   const n = typeof v === "number" ? v : parseFloat(String(v).replace(/[^\d.\-]/g, ""));
   return Number.isFinite(n) ? n : fallback;
 };
+/** 判断单元格是否有显式值（区分"空单元格"与"真实的 0 值"，避免 0 被误当成空） */
+const hasCellValue = (v: unknown): boolean => v != null && v !== "";
 const str = (v: unknown, fallback = ""): string =>
   v == null ? fallback : String(v).trim();
 
@@ -688,11 +690,18 @@ export default function ImportPage() {
         const monthlySales = isMonthlyTotal ? Math.round(monthlyRaw / 30 * 100) / 100 : monthlyRaw;
 
         // 可选字段：评分、评论数、广告费比、退货率、退款率
-        const rating = num(pickCell(row, cm.rating));
-        const reviewCount = num(pickCell(row, cm.reviewCount));
-        const adRatio = num(pickCell(row, cm.adRatio));
-        const returnRate = num(pickCell(row, cm.returnRate));
-        const refundRate = num(pickCell(row, cm.refundRate));
+        // 仅当 Excel 单元格显式有值时写入（含 0），空单元格保留数据库旧值
+        const rawAdRatio = pickCell(row, cm.adRatio);
+        const rawRating = pickCell(row, cm.rating);
+        const rawReviewCount = pickCell(row, cm.reviewCount);
+        const rawReturnRate = pickCell(row, cm.returnRate);
+        const rawRefundRate = pickCell(row, cm.refundRate);
+
+        const adRatio = hasCellValue(rawAdRatio) ? num(rawAdRatio) : (prevSnapshot?.adRatio ?? 0);
+        const rating = hasCellValue(rawRating) ? num(rawRating) : (prevSnapshot?.rating ?? 0);
+        const reviewCount = hasCellValue(rawReviewCount) ? num(rawReviewCount) : (prevSnapshot?.reviewCount ?? 0);
+        const returnRate = hasCellValue(rawReturnRate) ? num(rawReturnRate) : (prevSnapshot?.returnRate ?? 0);
+        const refundRate = hasCellValue(rawRefundRate) ? num(rawRefundRate) : (prevSnapshot?.refundRate ?? 0);
 
         const snap: Omit<DailySnapshot, "id"> = {
           date: today,
@@ -705,14 +714,14 @@ export default function ImportPage() {
           daysOfCoverOnHand: 0,
           daysOfCoverWithTransit: 0,
           adSpend: prevSnapshot?.adSpend ?? 0,
-          adRatio: adRatio || (prevSnapshot?.adRatio ?? 0),
+          adRatio,
           profit: prevSnapshot?.profit ?? 0,
           profitMargin: prevSnapshot?.profitMargin ?? 0,
           totalCost: prevSnapshot?.totalCost ?? 0,
-          rating: rating || (prevSnapshot?.rating ?? 0),
-          reviewCount: reviewCount > 0 ? reviewCount : prevSnapshot?.reviewCount,
-          returnRate: returnRate || (prevSnapshot?.returnRate ?? 0),
-          refundRate: refundRate > 0 ? refundRate : prevSnapshot?.refundRate,
+          rating,
+          reviewCount,
+          returnRate,
+          refundRate,
         };
         snap.daysOfCoverOnHand = snap.dailySales7d > 0 ? Number((snap.stockOnHand / snap.dailySales7d).toFixed(1)) : Infinity;
         snap.daysOfCoverWithTransit = snap.dailySales7d > 0 ? Number(((snap.stockOnHand + snap.stockInTransit) / snap.dailySales7d).toFixed(1)) : Infinity;
@@ -997,10 +1006,11 @@ export default function ImportPage() {
         if (!master) continue;
 
         const updates: Partial<SkuMaster> = {};
-        const shipping = num(pickCell(row, cm.shipping));
-        const delivery = num(pickCell(row, cm.delivery));
-        if (shipping > 0) updates.costShipping = shipping;
-        if (delivery > 0) updates.costDelivery = delivery;
+        // 头程费/配送费显式有值时写入（含 0），空单元格跳过
+        const rawShipping = pickCell(row, cm.shipping);
+        const rawDelivery = pickCell(row, cm.delivery);
+        if (hasCellValue(rawShipping)) updates.costShipping = num(rawShipping);
+        if (hasCellValue(rawDelivery)) updates.costDelivery = num(rawDelivery);
 
         if (Object.keys(updates).length > 0) {
           await db.skuMaster.put({ ...master, ...updates });

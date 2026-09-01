@@ -2035,7 +2035,7 @@ export default function SkuDetail() {
                     ]).map(({ k, l }) => (
                       <div key={k}>
                         <label className={labelCls}>{l}</label>
-                        <input type="number" step="0.01" className={inputCls} value={editSku[k] ?? ""} onChange={(e) => updateEditSku({ [k]: Number(e.target.value) || undefined })} placeholder="0.00" />
+                        <input type="number" step="0.01" className={inputCls} value={editSku[k] ?? ""} onChange={(e) => { const raw = e.target.value; const n = Number(raw); updateEditSku({ [k]: raw !== "" && Number.isFinite(n) ? n : undefined }); }} placeholder="0.00" />
                       </div>
                     ))}
                   </div>

@@ -35,8 +35,8 @@ interface SkuGroup {
   totalChildren: number;
 }
 
-function computeMskuProfit(sku: SkuMaster, snap?: DailySnapshot, inv?: InventoryLayer) {
-  const calc = computeAll({ sku, snap, inv });
+function computeMskuProfit(sku: SkuMaster, snap?: DailySnapshot, inv?: InventoryLayer, defaultCommissionRate?: number) {
+  const calc = computeAll({ sku, snap, inv, defaultCommissionRate });
   return { profit: calc.grossProfit, margin: calc.grossMargin, totalCost: calc.totalCost, adRatio: Math.abs(calc.adRatio), returnRate: calc.returnRate, refundRate: calc.refundRate };
 }
 
@@ -1035,6 +1035,7 @@ export default function SkuList() {
                 onSelectAll={() => selectAllInGroup(group.parent.sku, group.children.filter((c) => !c.isVirtualMsku).map((c) => c.sku))}
                 onDeselectAll={() => deselectAllInGroup(group.children.filter((c) => !c.isVirtualMsku).map((c) => c.sku))}
                 allSelected={allSelectedInGroup(group.children.filter((c) => !c.isVirtualMsku).map((c) => c.sku))}
+                defaultCommissionRate={currentSite?.commissionRate}
               />
             ))}
           </div>
@@ -1547,6 +1548,7 @@ function SkuGroupCard({
   onSelectAll,
   onDeselectAll,
   allSelected,
+  defaultCommissionRate,
 }: {
   group: SkuGroup;
   selectionMode: boolean;
@@ -1567,6 +1569,7 @@ function SkuGroupCard({
   onSelectAll: () => void;
   onDeselectAll: () => void;
   allSelected: boolean;
+  defaultCommissionRate?: number;
 }) {
   const { parent, children: rawChildren, totalChildren } = group;
 
@@ -1815,6 +1818,7 @@ function SkuGroupCard({
                     getShopName={getShopName}
                     selected={selectedSkus.has(child.sku)}
                     onToggleSelect={() => onToggleSelect(child.sku)}
+                    defaultCommissionRate={defaultCommissionRate}
                   />
                 ))}
               </tbody>
@@ -1845,6 +1849,7 @@ function ChildRow({
   onToggleSelect,
   selectionMode,
   isVirtualMsku,
+  defaultCommissionRate,
 }: {
   child: SkuGroupChild;
   parentSku?: string;
@@ -1862,6 +1867,7 @@ function ChildRow({
   onToggleSelect: () => void;
   selectionMode: boolean;
   isVirtualMsku?: boolean;
+  defaultCommissionRate?: number;
 }) {
   // FIX: 所有子项（真实/虚拟 MSKU）均优先使用 mskuMetrics 中的独立指标
   //      修复"展开列表显示相同数据"——各 MSKU 的退款率/退货率/广告费比/星级差异化展示
@@ -1884,7 +1890,7 @@ function ChildRow({
   const childForCalc = mskuMetric?.price != null
     ? { ...child, price: mskuMetric.price, listPrice: mskuMetric.listPrice ?? child.listPrice }
     : child;
-  const { profit, margin, adRatio, returnRate, refundRate } = computeMskuProfit(childForCalc, mskuSnap, inv);
+  const { profit, margin, adRatio, returnRate, refundRate } = computeMskuProfit(childForCalc, mskuSnap, inv, defaultCommissionRate);
   // 成本全缺失 → 利润率失真（算成 100%），应标注「成本缺失」而非 0
   const costMissing = isCostFullyMissing(child);
   // 退货率/退款率底层数据缺失 → 标注「缺失」而非误导性的 0%

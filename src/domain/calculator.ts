@@ -136,10 +136,10 @@ export function computeTotalCost(
   const storage = n(sku.costStorage);
   const coupon = n(sku.coupon);
 
-  // 佣金：costCommission 优先；为空时若显式设定 commissionRate 则用 费率×售价，否则 15% 估算
+  // 佣金：costCommission 显式有值（含 0）时采用；为 null/undefined 时用费率×售价，否则 15% 估算
   let commission = n(sku.costCommission);
   let isCommissionInferred = false;
-  if (commission === 0 && price > 0) {
+  if (sku.costCommission == null && price > 0) {
     if (sku.commissionRate && sku.commissionRate > 0) {
       commission = (sku.commissionRate / 100) * price;
     } else {
@@ -148,10 +148,10 @@ export function computeTotalCost(
     }
   }
 
-  // 广告费：有值保留，空则从费比×售价反推
+  // 广告费：有值保留，空(null/undefined)则从费比×售价反推
   let ad = n(sku.costAd);
   let isAdInferred = false;
-  if (ad === 0 && snap && snap.adRatio > 0 && price > 0) {
+  if (sku.costAd == null && snap && snap.adRatio > 0 && price > 0) {
     ad = (snap.adRatio / 100) * price;
     isAdInferred = true;
   }
@@ -162,7 +162,7 @@ export function computeTotalCost(
   //    导致退货率和退款率显示值完全一致，两个指标失去区分意义。
   let ret = n(sku.costReturn);
   let isReturnInferred = false;
-  if (ret === 0 && snap && price > 0 && snap.returnRate && snap.returnRate > 0) {
+  if (sku.costReturn == null && snap && price > 0 && snap.returnRate && snap.returnRate > 0) {
     ret = (snap.returnRate / 100) * price;
     isReturnInferred = true;
   }
