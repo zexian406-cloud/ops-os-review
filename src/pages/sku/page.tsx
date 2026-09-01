@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
 import { db, getAllShops, ensureDefaultShops, getCurrentSiteId, getAllSites } from "@/domain/db";
 import { computeAll, computeWarehouseTotals, isCostFullyMissing, isReturnRateMissing } from "@/domain/calculator";
+import { snapKey } from "@/domain/engine";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
@@ -1591,13 +1592,13 @@ function SkuGroupCard({
   const isVirtualGroup =
     children.length > 0 && children.every((c) => c.isVirtualMsku);
   const resolveInv = (c: SkuGroupChild): InventoryLayer | undefined =>
-    c.isVirtualMsku ? latestInventory.get(parent.sku) : latestInventory.get(c.sku);
+    c.isVirtualMsku ? latestInventory.get(snapKey(parent.sku, parent.siteId)) : latestInventory.get(snapKey(c.sku, parent.siteId));
   const resolveSnap = (c: SkuGroupChild): DailySnapshot | undefined =>
-    c.isVirtualMsku ? latestSnapshot.get(parent.sku) : latestSnapshot.get(c.sku);
+    c.isVirtualMsku ? latestSnapshot.get(snapKey(parent.sku, parent.siteId)) : latestSnapshot.get(snapKey(c.sku, parent.siteId));
 
   // Total stock: use 4-region warehouse totals
   const totalStock = isVirtualGroup
-    ? computeWarehouseTotals(latestInventory.get(parent.sku)).total
+    ? computeWarehouseTotals(latestInventory.get(snapKey(parent.sku, parent.siteId))).total
     : children.reduce((sum, c) => {
         const wh = computeWarehouseTotals(resolveInv(c));
         return sum + wh.total;
@@ -1617,7 +1618,7 @@ function SkuGroupCard({
 
   const ratings = isVirtualGroup
     ? (() => {
-        const r = latestSnapshot.get(parent.sku)?.rating ?? 0;
+        const r = latestSnapshot.get(snapKey(parent.sku, parent.siteId))?.rating ?? 0;
         return r > 0 ? [r] : [];
       })()
     : children

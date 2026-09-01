@@ -14,7 +14,7 @@ import {
   DEFAULT_SHIPMENT_KPI_SLOTS,
 } from "@/hooks/useLayoutPrefs";
 import type { ShipmentKpiMetricKey } from "@/hooks/useLayoutPrefs";
-import { computeShipmentSuggestions } from "@/domain/engine";
+import { computeShipmentSuggestions, snapKey } from "@/domain/engine";
 import type { TransitBatch, InventoryLayer } from "@/domain/types";
 
 const PRIORITY_WEIGHT: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
@@ -30,7 +30,7 @@ const SORT_LABELS: Record<SortMode, string> = {
 };
 
 export default function Shipment() {
-  const { loading, skuMaster, snapshots, activeCampaigns, config, latestSnapshot, latestInventory } = useOpsData();
+  const { loading, currentSiteId, skuMaster, snapshots, activeCampaigns, config, latestSnapshot, latestInventory } = useOpsData();
   const [filter, setFilter] = useState<"all" | "urgent" | "high" | "normal" | "low">("all");
   const [keyword, setKeyword] = useState("");
   const [salesBasis, setSalesBasis] = useState<"7d" | "30d">("7d");
@@ -54,8 +54,8 @@ export default function Shipment() {
     const items = skuMaster
       .filter((sm) => sm.saleStatus !== "discontinued")
       .map((sm) => {
-        const snap = latestSnapshot.get(sm.sku);
-        const inv = latestInventory.get(sm.sku);
+        const snap = latestSnapshot.get(snapKey(sm.sku, currentSiteId));
+        const inv = latestInventory.get(snapKey(sm.sku, currentSiteId));
         const sug = sugMap.get(sm.sku);
         const wh = computeWarehouseTotals(inv);
         const totalStock = wh.inStock;
@@ -142,8 +142,8 @@ export default function Shipment() {
   const minCoverDays = useMemo(() => {
     const vals = shipmentSuggestions
       .map((s) => {
-        const inv = latestInventory.get(s.sku);
-        const snap = latestSnapshot.get(s.sku);
+        const inv = latestInventory.get(snapKey(s.sku, currentSiteId));
+        const snap = latestSnapshot.get(snapKey(s.sku, currentSiteId));
         const wh = computeWarehouseTotals(inv);
         const combined = wh.inStock + wh.inTransit;
         const daily = salesBasis === "30d"
@@ -158,8 +158,8 @@ export default function Shipment() {
   const avgCoverDays = useMemo(() => {
     const vals = shipmentSuggestions
       .map((s) => {
-        const inv = latestInventory.get(s.sku);
-        const snap = latestSnapshot.get(s.sku);
+        const inv = latestInventory.get(snapKey(s.sku, currentSiteId));
+        const snap = latestSnapshot.get(snapKey(s.sku, currentSiteId));
         const wh = computeWarehouseTotals(inv);
         const combined = wh.inStock + wh.inTransit;
         const daily = salesBasis === "30d"

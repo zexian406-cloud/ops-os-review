@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
+import { snapKey } from "@/domain/engine";
 import { diagnoseProfitDecline, diagnoseSalesDecline, type DiagnosisOutput } from "@/domain/diagnose";
 import type { AlertType } from "@/domain/types";
 
@@ -10,7 +11,7 @@ const TABS: Array<{ key: "profit" | "sales"; label: string; icon: string; alertT
 ];
 
 export default function DiagnosisPage() {
-  const { skuMaster, latestSnapshot, previousSnapshot, latestInventory, config, loading } = useOpsData();
+  const { currentSiteId, skuMaster, latestSnapshot, previousSnapshot, latestInventory, config, loading } = useOpsData();
   const [searchParams, setSearchParams] = useSearchParams();
   const type = (searchParams.get("type") ?? "profit") as "profit" | "sales";
   const skuParam = searchParams.get("sku") ?? "";
@@ -37,9 +38,9 @@ export default function DiagnosisPage() {
     if (!currentSku) return null;
     const params = {
       sku: currentSku,
-      latestSnap: latestSnapshot.get(currentSku.sku),
-      previousSnap: previousSnapshot?.get(currentSku.sku),
-      latestInv: latestInventory.get(currentSku.sku),
+      latestSnap: latestSnapshot.get(snapKey(currentSku.sku, currentSiteId)),
+      previousSnap: previousSnapshot?.get(snapKey(currentSku.sku, currentSiteId)),
+      latestInv: latestInventory.get(snapKey(currentSku.sku, currentSiteId)),
       config,
     };
     return activeTab === "profit" ? diagnoseProfitDecline(params) : diagnoseSalesDecline(params);

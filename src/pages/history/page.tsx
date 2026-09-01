@@ -120,7 +120,7 @@ function aggregateSnapshots(
   return result;
 }
 
-function aggregate(snapMap: Map<string, DailySnapshot>, skuMap?: Map<string, SkuMaster>): AggMetrics {
+function aggregate(snapMap: Map<string, DailySnapshot>, skuMap?: Map<string, SkuMaster>, defaultCommissionRate?: number): AggMetrics {
   const vals = Array.from(snapMap.values());
   if (vals.length === 0) {
     return { salesSum: 0, salesCount: 0, avgAdRatio: 0, avgRating: 0, avgReturnRate: 0, avgProfitMargin: 0, totalStock: 0, totalAdSpend: 0, skuCount: 0 };
@@ -140,7 +140,7 @@ function aggregate(snapMap: Map<string, DailySnapshot>, skuMap?: Map<string, Sku
       const master = skuMap.get(sku);
       if (!master || !master.price || master.price <= 0) continue;
       try {
-        const calc = computeAll({ sku: master, snap });
+        const calc = computeAll({ sku: master, snap, defaultCommissionRate });
         if (Number.isFinite(calc.grossMargin)) {
           marginVals.push(calc.grossMargin);
         }
@@ -194,7 +194,7 @@ function MetricCard({
 
 /* ────────── 主页面 ────────── */
 export default function HistoryPage() {
-  const { snapshots, skuMaster, loading, reload } = useOpsData();
+  const { snapshots, skuMaster, currentSite, loading, reload } = useOpsData();
 
   // 时间维度：单日 / 按周 / 按月
   const [dimension, setDimension] = useState<Dimension>("date");
@@ -261,8 +261,8 @@ export default function HistoryPage() {
   const prevSnapshots = useMemo(() => aggregateSnapshots(snapshots, prevDates), [snapshots, prevDates]);
 
   // 聚合指标
-  const curAgg = useMemo(() => aggregate(curSnapshots, skuMap), [curSnapshots, skuMap]);
-  const prevAgg = useMemo(() => aggregate(prevSnapshots, skuMap), [prevSnapshots, skuMap]);
+  const curAgg = useMemo(() => aggregate(curSnapshots, skuMap, currentSite?.commissionRate), [curSnapshots, skuMap, currentSite]);
+  const prevAgg = useMemo(() => aggregate(prevSnapshots, skuMap, currentSite?.commissionRate), [prevSnapshots, skuMap, currentSite]);
 
   // 图表数据
   const chartData = useMemo(() => {
@@ -303,7 +303,7 @@ export default function HistoryPage() {
       const calcMargin = (snap?: DailySnapshot): number => {
         if (!master || !master.price || master.price <= 0 || !snap) return 0;
         try {
-          const calc = computeAll({ sku: master, snap });
+          const calc = computeAll({ sku: master, snap, defaultCommissionRate: currentSite?.commissionRate });
           return Number.isFinite(calc.grossMargin) ? calc.grossMargin : 0;
         } catch { return 0; }
       };

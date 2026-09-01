@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { Link, useSearchParams, Navigate } from "react-router-dom";
-import { db, getAllShops, getCurrentSiteId } from "@/domain/db";
+import { db, getAllSites, getAllShops, getCurrentSiteId } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
@@ -72,24 +72,33 @@ export default function PromoCenterPage() {
   const [snapshots, setSnapshots] = useState<DailySnapshot[]>([]);
   const [shops, setShops] = useState<Shop[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  const [commissionRate, setCommissionRate] = useState<number | undefined>(undefined);
 
   const loadData = useCallback(async () => {
     const siteId = await getCurrentSiteId();
-    const [s, p, mp, snap, allShops] = await Promise.all([
+    const [s, p, mp, snap, allShops, allSites] = await Promise.all([
       db.skuMaster.toArray(),
       db.promotions.toArray(),
       db.manualPromotions.toArray(),
       db.dailySnapshot.toArray(),
       getAllShops(),
+      getAllSites(),
     ]);
+    if (!mountedRef.current) return;
     setSkus(s.filter(x => (x.siteId ?? "site_us") === siteId));
     setPromotions(p.filter(x => (x.siteId ?? "site_us") === siteId));
     setManualPromotions(mp.filter(x => (x.siteId ?? "site_us") === siteId));
     setSnapshots(snap.filter(x => (x.siteId ?? "site_us") === siteId));
     setShops(allShops.filter(x => (x.siteId ?? "site_us") === siteId || !x.siteId));
+    setCommissionRate(allSites.find(x => x.id === siteId)?.commissionRate);
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    mountedRef.current = true;
+    loadData();
+    return () => { mountedRef.current = false; };
+  }, [loadData]);
 
   // SKU / 快照 / 店铺 map
   const skuMap = useMemo(() => new Map(skus.map((s) => [s.sku, s])), [skus]);
@@ -153,7 +162,7 @@ export default function PromoCenterPage() {
         const snap = snapMap.get(p.sku);
         if (!sku || !snap) continue;
         const pc = getEffectivePromoCost(p, sku, snap);
-        const calc = computeAll({ sku, snap, activePromo: p, promoCost: pc });
+        const calc = computeAll({ sku, snap, activePromo: p, promoCost: pc, defaultCommissionRate: commissionRate });
         totalMargin += calc.grossMargin;
         count++;
       }
@@ -161,7 +170,7 @@ export default function PromoCenterPage() {
     })();
 
     return { activeCount: active, upcomingCount: upcoming, thisWeekCost, avgMarginActive, totalRecords: promotions.length + manualPromotions.length };
-  }, [promotions, manualPromotions, skuMap, snapMap]);
+  }, [promotions, manualPromotions, skuMap, snapMap, commissionRate]);
 
   // 周成本时间线数据
   const weeklyBuckets = useMemo(() => aggregateWeeklyCosts(promotions, manualPromotions, skuMap, snapMap), [promotions, manualPromotions, skuMap, snapMap]);
@@ -283,6 +292,7 @@ export default function PromoCenterPage() {
             prefilledSku={prefilledSku}
             reload={reload}
             flash={flash}
+            defaultCommissionRate={commissionRate}
           />
       )}
 
@@ -332,8 +342,9 @@ function ActivitySection(props: {
   prefilledSku: string;
   reload: () => void;
   flash: (m: string) => void;
+  defaultCommissionRate?: number;
 }) {
-  const { promotions, skus, skuMap, snapMap, prefilledSku, reload, flash, getShopName } = props;
+  const { promotions, skus, skuMap, snapMap, prefilledSku, reload, flash, getShopName, defaultCommissionRate } = props;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<Promotion["status"] | "all">("all");
   const [typeFilter, setTypeFilter] = useState<PromotionType | "all">("all");
@@ -378,11 +389,11 @@ function ActivitySection(props: {
       const snap = snapMap.get(p.sku);
       if (!sku || !snap) continue;
       const pc = getEffectivePromoCost(p, sku, snap);
-      const calc = computeAll({ sku, snap, activePromo: p, promoCost: pc });
+      const calc = computeAll({ sku, snap, activePromo: p, promoCost: pc, defaultCommissionRate });
       m.set(p.id, { margin: calc.grossMargin, profit: calc.grossProfit, adRatio: calc.adRatio, promoCost: pc });
     }
     return m;
-  }, [promotions, skuMap, snapMap]);
+  }, [promotions, skuMap, snapMap, defaultCommissionRate]);
 
   const rateEstimate = useMemo(() => {
     if (form.costMode !== "rate" || !form.sku || !form.rate) return null;

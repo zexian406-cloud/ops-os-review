@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
 import { computeAll } from "@/domain/calculator";
+import { snapKey } from "@/domain/engine";
 import { getAllShops } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
@@ -21,7 +22,7 @@ const TABS: Array<{ key: TabKey; label: string; icon: string; desc: string }> = 
 ];
 
 export default function Operations() {
-  const { loading, skuMaster, latestSnapshot, latestInventory, config } = useOpsData();
+  const { loading, currentSiteId, currentSite, skuMaster, latestSnapshot, latestInventory, config } = useOpsData();
   const [params, setParams] = useSearchParams();
   const initial = (params.get("tab") as TabKey) ?? "profit";
   const [tab, setTab] = useState<TabKey>(initial);
@@ -59,7 +60,7 @@ export default function Operations() {
     }> = [];
 
     for (const sku of skuMaster) {
-      const snap = latestSnapshot.get(sku.sku);
+      const snap = latestSnapshot.get(snapKey(sku.sku, currentSiteId));
       if (tab === "listing") {
         if (sku.aPlus === "todo") {
           list.push({
@@ -93,7 +94,8 @@ export default function Operations() {
       if (!snap || sku.saleStatus === "discontinued") continue;
 
       if (tab === "profit") {
-        const calc = computeAll({ sku, snap, inv: latestInventory.get(sku.sku) });
+        const inv = latestInventory.get(snapKey(sku.sku, currentSiteId));
+        const calc = computeAll({ sku, snap, inv, defaultCommissionRate: currentSite?.commissionRate });
         if (calc.grossMargin < config.profitMarginThreshold) {
           list.push({
             sku,

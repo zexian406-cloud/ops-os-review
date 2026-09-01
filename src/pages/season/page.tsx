@@ -3,7 +3,7 @@ import { useOpsData } from "@/domain/store";
 import Section from "@/components/ui/Section";
 import KpiCard from "@/components/ui/KpiCard";
 import Badge from "@/components/ui/Badge";
-import { computeShipmentSuggestions } from "@/domain/engine";
+import { computeShipmentSuggestions, snapKey } from "@/domain/engine";
 import { db, getCurrentSiteId } from "@/domain/db";
 import type { Campaign, SkuMaster } from "@/domain/types";
 
@@ -17,7 +17,7 @@ const DEFAULT_PRESETS: Omit<Campaign, "id" | "active" | "skus" | "discountPrice"
 ];
 
 export default function Season() {
-  const { loading, skuMaster, latestSnapshot, latestInventory, config, today } = useOpsData();
+  const { loading, currentSiteId, skuMaster, latestSnapshot, latestInventory, config, today } = useOpsData();
 
   /* ────────── Campaigns ────────── */
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -134,7 +134,7 @@ export default function Season() {
 
     for (const sku of skuMaster) {
       if (sku.saleStatus === "discontinued") continue;
-      const snap = latestSnapshot.get(sku.sku);
+      const snap = latestSnapshot.get(snapKey(sku.sku, currentSiteId));
       if (!snap || snap.dailySales7d <= 0) continue;
 
       const costFob = sku.costFob ?? 0;

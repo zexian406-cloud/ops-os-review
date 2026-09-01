@@ -21,7 +21,7 @@ import SkuLayoutCustomizer from "@/components/layout/SkuLayoutCustomizer";
 import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
 import { useSkuDetailLayout, type SkuDetailSectionKey, type GridItemLayout } from "@/hooks/useLayoutPrefs";
 import { type LayoutItem } from "react-grid-layout";
-import type { WowDelta } from "@/domain/engine";
+import { snapKey, type WowDelta } from "@/domain/engine";
 import type { DailySnapshot, SkuMaster, InventoryLayer, TodoItem, OpsLog, Shop } from "@/domain/types";
 
 const lifecycleLabel: Record<string, string> = { new: "新品", growth: "成长", mature: "成熟", clearance: "清货", eol: "停售" };
@@ -77,6 +77,8 @@ export default function SkuDetail() {
   const focusMsku = searchParams.get("focus") ?? undefined;
   const {
     loading,
+    currentSiteId,
+    currentSite,
     skuMaster,
     snapshots,
     latestInventory = new Map(),
@@ -112,8 +114,8 @@ export default function SkuDetail() {
     if (parentSkuId) return snapshots.filter((s) => s.sku === parentSkuId).sort((a, b) => a.date.localeCompare(b.date));
     return own;
   }, [snapshots, skuId, parentSkuId]);
-  const inv = (latestInventory.get(skuId ?? "") ?? (parentSkuId ? latestInventory.get(parentSkuId) : undefined));
-  const curSnap = (latestSnapshot.get(skuId ?? "") ?? (parentSkuId ? latestSnapshot.get(parentSkuId) : undefined));
+  const inv = (latestInventory.get(snapKey(skuId ?? "", currentSiteId)) ?? (parentSkuId ? latestInventory.get(snapKey(parentSkuId, currentSiteId)) : undefined));
+  const curSnap = (latestSnapshot.get(snapKey(skuId ?? "", currentSiteId)) ?? (parentSkuId ? latestSnapshot.get(snapKey(parentSkuId, currentSiteId)) : undefined));
   // FIX: focus=MSKU 时（从列表点击 MSKU 跳转），用 mskuMetrics 中的独立指标覆盖家族级快照，
   //      这样详情页 KPI 卡片/评分/退货率/退款率/广告费比 都展示该 MSKU 自身的值，
   //      而非家族平均值。无 focus 参数或无 mskuMetrics 时回退到 curSnap（向后兼容）。
@@ -135,7 +137,7 @@ export default function SkuDetail() {
   } : baseSnap;
   // 优先使用 merged 快照（同日多来源导入已合并），避免取到运营导入的 0 值原始记录
   const latest = focusedSnap ?? history.at(-1);
-  const prevSnap = (previousSnapshot?.get(skuId ?? "") ?? (parentSkuId ? previousSnapshot?.get(parentSkuId) : undefined));
+  const prevSnap = (previousSnapshot?.get(snapKey(skuId ?? "", currentSiteId)) ?? (parentSkuId ? previousSnapshot?.get(snapKey(parentSkuId, currentSiteId)) : undefined));
   // 促销活动：按 SKU 过滤；focus=MSKU 时优先匹配带 msku 的促销，无 msku 的促销对所有 MSKU 生效
   const skuPromos = useMemo(() => {
     const all = promotions.filter((p) => p.sku === skuId);
@@ -193,8 +195,8 @@ export default function SkuDetail() {
     const defaultLeadTime = config?.defaultLeadTime ?? 40;
     const defaultSafetyStockDays = config?.defaultSafetyStockDays ?? 30;
     try {
-      const prevCalc = computeAll({ sku, snap: prev, inv, defaultLeadTime, defaultSafetyStockDays });
-      const latestCalc = computeAll({ sku, snap: latestSnap, inv, defaultLeadTime, defaultSafetyStockDays });
+      const prevCalc = computeAll({ sku, snap: prev, inv, defaultLeadTime, defaultSafetyStockDays, defaultCommissionRate: currentSite?.commissionRate });
+      const latestCalc = computeAll({ sku, snap: latestSnap, inv, defaultLeadTime, defaultSafetyStockDays, defaultCommissionRate: currentSite?.commissionRate });
       return { prev, latest: latestSnap, prevCalc, latestCalc };
     } catch {
       return { prev, latest: latestSnap, prevCalc: null, latestCalc: null };
@@ -490,6 +492,7 @@ export default function SkuDetail() {
       inv,
       defaultLeadTime: config?.defaultLeadTime ?? 40,
       defaultSafetyStockDays: config?.defaultSafetyStockDays ?? 30,
+      defaultCommissionRate: currentSite?.commissionRate,
     });
     const updated: DailySnapshot = {
       ...base,
@@ -563,6 +566,7 @@ export default function SkuDetail() {
         activePromo: activeOrUpcomingPromo,
         defaultLeadTime: config?.defaultLeadTime ?? 40,
         defaultSafetyStockDays: config?.defaultSafetyStockDays ?? 30,
+        defaultCommissionRate: currentSite?.commissionRate,
         promoCost: weekPromoCost.total,
       });
     } catch (err) {
@@ -1077,7 +1081,7 @@ export default function SkuDetail() {
                     daysOfCoverOnHand: newDailySales7d > 0 ? Number((newStockOnHand / newDailySales7d).toFixed(1)) : Infinity,
                     daysOfCoverWithTransit: newDailySales7d > 0 ? Number(((newStockOnHand + newStockInTransit) / newDailySales7d).toFixed(1)) : Infinity,
                   };
-                  const editCalc = computeAll({ sku, snap: editSnap, inv });
+                  const editCalc = computeAll({ sku, snap: editSnap, inv, defaultCommissionRate: currentSite?.commissionRate });
                   const totalCostCalc = editCalc.totalCost;
 
                   // 利润/利润率一律由系统联动计算，不采用人工输入值
