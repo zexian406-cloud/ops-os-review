@@ -8,6 +8,8 @@ import type {
   ShipmentSuggestion,
   Campaign,
   GlobalConfig,
+  HealthFactor,
+  HealthScore,
 } from "./types";
 import { computeAll, computeWarehouseTotals, computeWeeklyPromoCost } from "./calculator";
 
@@ -589,4 +591,43 @@ export function buildInventoryMap(
     if (!existing || existing.date < l.date) map.set(key, l);
   }
   return map;
+}
+
+// -------- SKU 综合健康评分 --------
+// 基于当前站点的快照/库存/利润率，给出 100 分制健康分及命中风险因子。
+export function computeHealthScores(input: {
+  skuMaster: SkuMaster[];
+  latestSnapshot: Map<string, DailySnapshot>;
+  latestInventory: Map<string, InventoryLayer>;
+  defaultCommissionRate?: number;
+}): Map<string, HealthScore> {
+  const { skuMaster, latestSnapshot, latestInventory, defaultCommissionRate } = input;
+  const out = new Map<string, HealthScore>();
+
+  for (const sku of skuMaster) {
+    const key = snapKey(sku.sku, sku.siteId);
+    const snap = latestSnapshot.get(key);
+    const inv = latestInventory.get(key);
+
+    const factors: HealthFactor[] = [];
+    let score = 100;
+
+    const doc = snap?.daysOfCoverOnHand;
+    if (doc != null && doc !== Infinity) {
+      if (doc <= 6) { factors.push({ key: "stockout", label: "库存告急", impact: 35 }); score -= 35; }
+      else if (doc < 30) { factors.push({ key: "low_stock", label: "库存偏低", impact: 15 }); score -= 15; }
+      else if (doc > 90) { factors.push({ key: "overstock", label: "库存积压", impact: 10 }); score -= 10; }
+    }
+
+    if (snap && (snap.adRatio ?? 0) > 35) { factors.push({ key: "high_ad", label: "广告占比高", impact: 15 }); score -= 15; }
+    if (snap && (snap.returnRate ?? snap.refundRate ?? 0) > 10) { factors.push({ key: "return_rate", label: "退货率偏高", impact: 10 }); score -= 10; }
+
+    const calc = computeAll({ sku, snap, inv, defaultCommissionRate });
+    if (calc.grossMargin < 0) { factors.push({ key: "loss", label: "当前亏损", impact: 20 }); score -= 20; }
+
+    score = Math.max(0, Math.min(100, score));
+    const level: HealthScore["level"] = score >= 85 ? "健康" : score >= 60 ? "关注" : "风险";
+    out.set(sku.sku, { score, level, factors });
+  }
+  return out;
 }

@@ -478,6 +478,17 @@ export interface Shop {
   name: string;
   createdAt: string;
 }
+// ═══════ 健康评分（SKU 综合健康） ═══════
+export interface HealthFactor {
+  key: string;               // 因子标识（唯一）
+  label: string;             // 展示名
+  impact: number;            // 扣分影响
+}
+export interface HealthScore {
+  score: number;             // 综合分（0-100）
+  level: "健康" | "关注" | "风险";
+  factors: HealthFactor[];   // 命中风险因子（扣分项）
+}
 // ═══════ 运营操作记录（SKU操作日志） ═══════
 /** 异常类型（用于"诊断→处理"闭环关联） */
 export type AnomalyType =

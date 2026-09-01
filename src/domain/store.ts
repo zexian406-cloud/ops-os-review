@@ -24,11 +24,13 @@ import type {
   SiteConfig,
   CrossSiteReport,
   Shop,
+  HealthScore,
 } from "./types";
 import {
   buildInventoryMap,
   buildSnapshotMap,
   computeAlerts,
+  computeHealthScores,
   computePromotionAlerts,
   computeShipmentSuggestions,
   computeWowDeltas,
@@ -289,6 +291,15 @@ export function useOpsData() {
     });
   }, [skuMaster, latestSnapshot, latestInventory, previousSnapshot, config, currentSite]);
 
+  const healthScores = useMemo((): Map<string, HealthScore> => {
+    return computeHealthScores({
+      skuMaster,
+      latestSnapshot,
+      latestInventory,
+      defaultCommissionRate: currentSite?.commissionRate,
+    });
+  }, [skuMaster, latestSnapshot, latestInventory, currentSite]);
+
   return {
     loading,
     currentSiteId,
@@ -306,6 +317,8 @@ export function useOpsData() {
     manualPromotions,
     latestSnapshot,
     latestInventory,
+    previousSnapshot,
+    healthScores,
     activeCampaigns,
     shipmentSuggestions,
     wowDeltas,
