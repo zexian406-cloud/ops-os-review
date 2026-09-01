@@ -424,15 +424,15 @@ export default function SkuDetail() {
       await db.skuMaster.bulkPut([updatedCurrent, updatedTarget]);
 
       // 5. 记录操作日志
-      await addOpsLog({
-        sku: editSku.sku,
-        msku: m,
-        skuName: editSku.name,
-        date: new Date().toISOString().slice(0, 10),
-        action: `MSKU 转移`,
-        detail: `将 MSKU ${m} 从 ${editSku.sku} 转移到 ${transferTarget}`,
-        operator: "system",
-      });
+      await addOpsLog(
+        editSku.sku,
+        new Date().toISOString().slice(0, 10),
+        `MSKU 转移`,
+        `将 MSKU ${m} 从 ${editSku.sku} 转移到 ${transferTarget}`,
+        undefined,
+        m,
+        editSku.name,
+      );
 
       setEditSku(updatedCurrent);
       setTransferMsku(null);
@@ -1108,6 +1108,7 @@ export default function SkuDetail() {
                   await upsertSnapshots([updated]);
 
                   // ── 保存 InventoryLayer（区域库存），根据 fulfillment 区分 ──
+                  const siteId = await getCurrentSiteId();
                   const fbaStockFromForm = (sku.fulfillment === "FBA" || sku.fulfillment === "mixed")
                     ? (Number(fd.get("fbaStockField")) || (inv?.fbaStock ?? 0))
                     : (inv?.fbaStock ?? 0);
@@ -1115,6 +1116,7 @@ export default function SkuDetail() {
                   const invLayer: InventoryLayer = {
                     date: inv?.date ?? latestForEdit.date,
                     sku: latestForEdit.sku,
+                    siteId,
                     fbaStock: fbaStockFromForm,
                     fbmStock: inv?.fbmStock ?? 0,
                     factoryStock: inv?.factoryStock ?? 0,
