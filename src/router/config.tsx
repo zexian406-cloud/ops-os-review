@@ -1,10 +1,10 @@
 import type { RouteObject } from "react-router-dom";
 import { Navigate } from "react-router-dom";
+import { lazy } from "react";
 import NotFound from "@/pages/NotFound";
 import AppShell from "@/components/layout/AppShell";
 
 // P0/P1: 页面按需懒加载，避免 recharts / xlsx 等重型依赖被卷进首屏主包。
-// `lazy` 由 unplugin-auto-import 自动注入，无需显式 import。
 const Dashboard = lazy(() => import("@/pages/dashboard/page"));
 const Shipment = lazy(() => import("@/pages/shipment/page"));
 const Risk = lazy(() => import("@/pages/risk/page"));

@@ -4,16 +4,16 @@ import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import PageLayoutCustomizer from "@/components/layout/PageLayoutCustomizer";
 import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
-import { type Layout } from "react-grid-layout";
+import { type LayoutItem } from "react-grid-layout";
 import { usePageLayout, type GridItemLayout } from "@/hooks/usePageLayout";
 import type { Promotion, PromotionType, SkuMaster, DailySnapshot, Shop } from "@/domain/types";
 
 const PROMO_TYPES: { value: PromotionType; label: string }[] = [
   { value: "BD", label: "BD (Best Deal)" },
   { value: "LD", label: "LD (Lightning Deal)" },
-  { value: "7DD", label: "7DD (7-Day Deal)" },
+  { value: "Promotion", label: "7DD (7-Day Deal)" },
   { value: "Coupon", label: "Coupon" },
-  { value: "other", label: "其他" },
+  { value: "custom", label: "其他" },
 ];
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -35,7 +35,7 @@ export default function PromotionsPage() {
   } = usePageLayout("promotions");
 
   // ── 构建 ReactGridLayout 布局数组 ──
-  const rglLayout: Layout[] = useMemo(() => {
+  const rglLayout: LayoutItem[] = useMemo(() => {
     return visibleKeys.map((key) => {
       const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 6 };
       return {
@@ -51,7 +51,7 @@ export default function PromotionsPage() {
     });
   }, [visibleKeys, gridLayout]);
 
-  const handleLayoutChange = useCallback((layout: Layout[]) => {
+  const handleLayoutChange = useCallback((layout: LayoutItem[]) => {
     setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
   }, [setGridLayout]);
 

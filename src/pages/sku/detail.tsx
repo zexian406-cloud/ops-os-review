@@ -20,7 +20,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import SkuLayoutCustomizer from "@/components/layout/SkuLayoutCustomizer";
 import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
 import { useSkuDetailLayout, type SkuDetailSectionKey, type GridItemLayout } from "@/hooks/useLayoutPrefs";
-import { type Layout } from "react-grid-layout";
+import { type LayoutItem } from "react-grid-layout";
 import type { WowDelta } from "@/domain/engine";
 import type { DailySnapshot, SkuMaster, InventoryLayer, TodoItem, OpsLog, Shop } from "@/domain/types";
 
@@ -144,10 +144,8 @@ export default function SkuDetail() {
     return all.filter((p) => !p.msku || p.msku === focusMsku);
   }, [promotions, skuId, focusMsku]);
   const skuManualPromos = useMemo(() => {
-    const all = manualPromotions.filter((p) => p.sku === skuId);
-    if (!focusMsku) return all;
-    return all.filter((p) => !p.msku || p.msku === focusMsku);
-  }, [manualPromotions, skuId, focusMsku]);
+    return manualPromotions.filter((p) => p.sku === skuId);
+  }, [manualPromotions, skuId]);
 
   // Weekly promo cost for current SKU
   const weekPromoCost = useMemo(() => {
@@ -592,7 +590,7 @@ export default function SkuDetail() {
     }) as SkuDetailSectionKey[];
   }, [visibleKeys, latest, activeOrUpcomingPromo, sku, calc, skuWow]);
 
-  const rglLayout: Layout[] = useMemo(() => {
+  const rglLayout: LayoutItem[] = useMemo(() => {
     return renderedKeys.map((key) => {
       const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 4 };
       return {
@@ -608,7 +606,7 @@ export default function SkuDetail() {
     });
   }, [renderedKeys, gridLayout]);
 
-  const handleLayoutChange = useCallback((layout: Layout[]) => {
+  const handleLayoutChange = useCallback((layout: LayoutItem[]) => {
     setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
   }, [setGridLayout]);
 
@@ -1510,7 +1508,7 @@ export default function SkuDetail() {
                     return (
                       <tr key={p.id}>
                         <td className="border-b border-background-200/70 px-2 py-2">
-                          <Badge tone={p.type === "BD" ? "primary" : p.type === "LD" ? "danger" : p.type === "7DD" ? "warn" : "accent"}>{p.type}</Badge>
+                          <Badge tone={p.type === "BD" ? "primary" : p.type === "LD" ? "danger" : p.type === "Promotion" ? "warn" : "accent"}>{p.type}</Badge>
                         </td>
                         <td className="border-b border-background-200/70 px-2 py-2 text-[11px] text-foreground-600">
                           {p.msku ? <span className="rounded bg-primary-100 px-1.5 py-0.5 text-primary-700">{p.msku}</span> : <span className="text-foreground-300">全部</span>}

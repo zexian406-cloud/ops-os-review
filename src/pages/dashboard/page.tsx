@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import {
   BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { type Layout } from "react-grid-layout";
+import { type LayoutItem } from "react-grid-layout";
 import { useOpsData } from "@/domain/store";
 import { computeAll, computeWarehouseTotals } from "@/domain/calculator";
 import { snapKey } from "@/domain/engine";
@@ -78,7 +78,7 @@ export default function Dashboard() {
   } = useDashboardLayout();
 
   // ── 构建 ReactGridLayout 布局数组 ──
-  const rglLayout: Layout[] = useMemo(() => {
+  const rglLayout: LayoutItem[] = useMemo(() => {
     return visibleKeys.map((key) => {
       const item = (gridLayout as Record<string, GridItemLayout>)[key] ?? { x: 0, y: 0, w: 12, h: 6 };
       // Clamp all values to prevent 0-width/height cards from corrupting the layout
@@ -95,7 +95,7 @@ export default function Dashboard() {
     });
   }, [visibleKeys, gridLayout]);
 
-  const handleLayoutChange = useCallback((layout: Layout[]) => {
+  const handleLayoutChange = useCallback((layout: LayoutItem[]) => {
     setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
   }, [setGridLayout]);
 
@@ -473,7 +473,7 @@ export default function Dashboard() {
                       <tr key={p.id}>
                         <td className="border-b border-background-200/50 px-3 py-2 font-medium text-foreground-900">{p.skuName ?? p.sku}</td>
                         <td className="mono-num border-b border-background-200/50 px-3 py-2 text-[12px] text-foreground-500">{shopsMap.get(p.store) || p.store}</td>
-                        <td className="border-b border-background-200/50 px-3 py-2"><Badge tone={p.type === "BD" ? "primary" : p.type === "LD" ? "danger" : p.type === "7DD" ? "warn" : "accent"}>{p.type}</Badge></td>
+                        <td className="border-b border-background-200/50 px-3 py-2"><Badge tone={p.type === "BD" ? "primary" : p.type === "LD" ? "danger" : p.type === "Promotion" ? "warn" : "accent"}>{p.type}</Badge></td>
                         <td className="border-b border-background-200/50 px-3 py-2 text-foreground-700">{p.name}</td>
                         <td className="mono-num border-b border-background-200/50 px-3 py-2 text-[12px]"><span className="flex items-center gap-1.5">{p.startDate}{p.status === "upcoming" && daysToStart <= 2 && daysToStart >= 0 && <Badge tone="warn">{daysToStart === 0 ? "今天" : `${daysToStart}d`}</Badge>}</span></td>
                         <td className="mono-num border-b border-background-200/50 px-3 py-2 text-[12px]"><span className="flex items-center gap-1.5">{p.endDate}{daysToEnd <= 2 && daysToEnd >= 0 && <Badge tone="danger">{daysToEnd === 0 ? "今天" : `${daysToEnd}d`}</Badge>}</span></td>

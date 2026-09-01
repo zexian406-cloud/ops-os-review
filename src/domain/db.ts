@@ -400,7 +400,7 @@ export async function upsertSkuMasterPartial(rows: SkuMaster[]): Promise<void> {
     for (const f of numFields) {
       const newVal = row[f] as number | undefined;
       if (newVal != null && newVal > 0) {
-        (result as Record<string, unknown>)[f] = newVal;
+        (result as unknown as Record<string, unknown>)[f] = newVal;
       }
     }
 
@@ -408,7 +408,7 @@ export async function upsertSkuMasterPartial(rows: SkuMaster[]): Promise<void> {
     for (const f of strFields) {
       const newVal = row[f] as string | undefined;
       if (newVal && newVal.trim() !== "" && newVal !== "-") {
-        (result as Record<string, unknown>)[f] = newVal;
+        (result as unknown as Record<string, unknown>)[f] = newVal;
       }
     }
 
@@ -599,7 +599,7 @@ export async function upsertInventoryLayersPartial(rows: InventoryLayer[]): Prom
           if (newVal == null || newVal <= 0) {
             const prevVal = prev[f] as number | undefined;
             if (prevVal != null && prevVal > 0) {
-              (result as Record<string, unknown>)[f] = prevVal;
+              (result as unknown as Record<string, unknown>)[f] = prevVal;
             }
           }
         }
@@ -627,13 +627,13 @@ export async function upsertInventoryLayersPartial(rows: InventoryLayer[]): Prom
     for (const f of numFields) {
       const newVal = row[f] as number | undefined;
       if (newVal != null && newVal > 0) {
-        (result as Record<string, unknown>)[f] = newVal;
+        (result as unknown as Record<string, unknown>)[f] = newVal;
       } else {
         const oldVal = result[f] as number | undefined;
         if ((oldVal == null || oldVal <= 0) && prev) {
           const prevVal = prev[f] as number | undefined;
           if (prevVal != null && prevVal > 0) {
-            (result as Record<string, unknown>)[f] = prevVal;
+            (result as unknown as Record<string, unknown>)[f] = prevVal;
           }
         }
       }
@@ -724,6 +724,7 @@ export async function exportSnapshot(): Promise<{
   config: { key: string; value: unknown }[];
   shops: Shop[];
   opsLogs: OpsLog[];
+  warehouseMappings: WarehouseMapping[];
   exportedAt: string;
 }> {
   const [skuMaster, dailySnapshot, inventoryLayer, campaigns, promotions, manualPromotions, alerts, config, shops, opsLogs, warehouseMappings] =

@@ -68,7 +68,7 @@ interface PageLayout {
 }
 
 interface LayoutStore {
-  pages: Record<PageId, PageLayout>;
+  pages: Partial<Record<PageId, PageLayout>>;
 }
 
 const STORAGE_KEY = "aos-page-layout-v8";
@@ -94,7 +94,7 @@ export const DEFAULT_SECTIONS: Record<PageId, string[]> = {
   season: [],
   settings: [],
   import: [],
-  promoCenter: [
+  "promo-center": [
     "summaryCards", "activityTab", "costTab", "timelineTab",
     "activityForm", "activityList", "costKpi", "costForm", "costList",
   ],
@@ -155,7 +155,7 @@ export const PAGE_LABELS: Record<PageId, string> = {
   season: "旺季模拟",
   settings: "参数中心",
   import: "数据导入",
-  promoCenter: "促销运营中心",
+  "promo-center": "促销运营中心",
 };
 
 export const SECTION_LABELS: Record<string, Record<string, string>> = {

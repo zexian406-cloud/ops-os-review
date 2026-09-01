@@ -151,8 +151,15 @@ const tmplIdentifiers = () =>
 
 /* ────────── 标签页配置 ────────── */
 const tabDefs = [
-  { key: "bundle", label: "\u7efc\u5408\u8fd0\u8425\u8868", icon: "ri-file-excel-2-line", freq: "\u9996\u6b21", desc: "\u4e00\u952e\u4e0b\u8f7d\u5168\u90e8 7 \u4e2a Sheet \u00b7 \u5468\u9500\u91cf(\u542b\u54c1\u540d/\u94fe\u63a5) / FBA / \u4ed3\u5e93 / \u5728\u9014 / \u5de5\u5382 / \u5934\u7a0b / SKU", tmpl: tmplBundle },
-  { key: "warehouse_mapping", label: "\u4ed3\u5e93\u6620\u5c04", icon: "ri-map-2-line", freq: "\u914d\u7f6e", desc: "\u4ed3\u5e93\u540d\u79f0 \u2192 \u533a\u57df\u6620\u5c04\uff08\u7f8e\u4e1c/\u7f8e\u897f/\u4e1c\u5357/\u4e2d\u5357\uff09\uff0c\u5bfc\u5165\u65f6\u81ea\u52a8\u5339\u914d" },
+  { key: "bundle", label: "综合运营表", icon: "ri-file-excel-2-line", freq: "首次", desc: "一键下载全部 7 个 Sheet · 周销量(含品名/链接) / FBA / 仓库 / 在途 / 工厂 / 头程 / SKU", tmpl: tmplBundle },
+  { key: "sales", label: "周销量", icon: "ri-bar-chart-line", freq: "每周", desc: "SKU · 近7天日均 · 近30天销量", tmpl: tmplSales },
+  { key: "fba", label: "FBA 库存明细", icon: "ri-archive-line", freq: "每周", desc: "SKU · FBA 在库数量", tmpl: tmplFba },
+  { key: "warehouse", label: "仓库明细(FBM)", icon: "ri-store-2-line", freq: "每周", desc: "SKU · 仓库 · 库存（各海外仓拆分）", tmpl: tmplWarehouse },
+  { key: "transit_detail", label: "在途明细", icon: "ri-ship-line", freq: "每周", desc: "SKU · 承运商 · 目的仓 · 件数 · 预计到仓", tmpl: tmplTransitDetail },
+  { key: "factory", label: "工厂明细", icon: "ri-factory-line", freq: "按需", desc: "SKU · 工厂名 · 件数 · 交期", tmpl: tmplFactory },
+  { key: "shipping", label: "头程更新", icon: "ri-ship-2-line", freq: "每月/手动", desc: "更新头程费 + 配送费", tmpl: tmplShipping },
+  { key: "identifiers", label: "SKU 标识符", icon: "ri-barcode-line", freq: "一次性迁移", desc: "店铺 · SKU · 品名 · MSKU · ASIN · 售价 · FOB", tmpl: tmplIdentifiers },
+  { key: "warehouse_mapping", label: "仓库映射", icon: "ri-map-2-line", freq: "配置", desc: "仓库名称 → 区域映射（美东/美西/东南/中南），导入时自动匹配" },
 ] as const;
 
 type TabKey = (typeof tabDefs)[number]["key"];
@@ -382,7 +389,7 @@ export default function ImportPage() {
             if (newVal == null || newVal <= 0) {
               const oldVal = old[f] as number | undefined;
               if (oldVal != null && oldVal > 0) {
-                (result as Record<string, unknown>)[f] = oldVal;
+                (result as unknown as Record<string, unknown>)[f] = oldVal;
               }
             }
           }
@@ -411,6 +418,7 @@ export default function ImportPage() {
     setConfirming(true);
     setError(null);
     try {
+      const siteId = await getCurrentSiteId();
       // 使用校验后的有效数据（已自动修正警告项，已过滤错误行）
       const validSkuMaster = validation.validRows.skuMaster;
       const validSnapshots = validation.validRows.dailySnapshot;
@@ -607,8 +615,8 @@ export default function ImportPage() {
             }
           }
           if (s.mskuStores) {
-            for (const ms of s.mskuStores) {
-              if (ms.msku) mskuToSkuMap.set(ms.msku, s.sku);
+            for (const ms of Object.keys(s.mskuStores)) {
+              mskuToSkuMap.set(ms, s.sku);
             }
           }
         }

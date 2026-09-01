@@ -1,16 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import type { AlertType } from "@/domain/types";
-
-interface AlertItem {
-  id: string;
-  sku: string;
-  skuName?: string;
-  type: AlertType;
-  severity: "critical" | "warning" | "info";
-  value: string;
-  suggestion: string;
-}
+import type { Alert, AlertType } from "@/domain/types";
 
 const typeLabels: Record<AlertType, string> = {
   stockout: "断货风险",
@@ -59,7 +49,7 @@ const severityConfig = {
   },
 };
 
-export default function AlertList({ alerts }: { alerts: AlertItem[] }) {
+export default function AlertList({ alerts }: { alerts: Alert[] }) {
   if (alerts.length === 0) return null;
 
   return (
@@ -77,7 +67,7 @@ export default function AlertList({ alerts }: { alerts: AlertItem[] }) {
                 {typeLabels[a.type]}
               </span>
               <span className={`text-[14px] font-bold mono-num ${cfg.textClass}`}>
-                {a.value}
+                {a.detail}
               </span>
               <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-wider ${cfg.badgeClass}`}>
                 {cfg.badge}

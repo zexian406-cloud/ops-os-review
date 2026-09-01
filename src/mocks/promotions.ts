@@ -48,7 +48,7 @@ export const mockPromotions: Promotion[] = [
     sku: "HK-BFEF41-54",
     skuName: "545-1 方形大头炉 (SIXDAY)",
     store: "SIXDAY-SHOP-US",
-    type: "7DD",
+    type: "Promotion",
     name: "7-Day Deal Aug",
     startDate: "2026-08-15",
     endDate: "2026-08-22",

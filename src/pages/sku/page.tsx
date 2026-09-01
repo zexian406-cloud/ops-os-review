@@ -275,7 +275,7 @@ export default function SkuList() {
           mskuCount += allMs.length;
           return { ...r, mskuStores: newStores };
         })
-        .filter((r): r is SkuMaster => r !== null);
+        .filter((r) => r !== null);
       if (updates.length === 0) {
         alert("选中的 SKU 都没有 MSKU，无法转移店铺。\n\nMSKU 店铺转移仅针对有 MSKU 的 SKU，父 SKU 店铺保持不变。");
         setBatchShopSaving(false);
