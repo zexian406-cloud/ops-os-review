@@ -395,6 +395,7 @@ function ActivitySection(props: {
   }, [form.costMode, form.sku, form.rate, skuMap, snapMap]);
 
   const submit = async () => {
+    const siteId = await getCurrentSiteId();
     // 逐项校验，明确提示缺失字段
     const missing: string[] = [];
     if (bulkMode) {
@@ -427,7 +428,7 @@ function ActivitySection(props: {
         const sk = skuMap.get(s);
         const ov = bulkOverrides[s] ?? {};
         rows.push({
-          id: uid(),
+          id: uid(), siteId,
           sku: s, skuName: sk?.name, store: sk?.store ?? "-",
           type: form.type ?? "BD",
           customTypeName: form.type === "custom" ? form.customTypeName : undefined,
@@ -449,7 +450,7 @@ function ActivitySection(props: {
       setBulkMode(false);
     } else {
       await db.promotions.put({
-        id: uid(),
+        id: uid(), siteId,
         sku: form.sku!, skuName: sku?.name, store: sku?.store ?? "-",
         type: form.type ?? "BD",
         customTypeName: form.type === "custom" ? form.customTypeName : undefined,
@@ -1116,8 +1117,9 @@ function CostSection(props: {
     if (form.costMode === "rate" && form.rate && weeklySales > 0 && price > 0) {
       estimatedCost = Number(((Number(form.rate) / 100) * price * weeklySales).toFixed(2));
     }
+    const siteId = await getCurrentSiteId();
     await db.manualPromotions.put({
-      id: uid(), sku: form.sku, skuName: found?.name ?? form.sku,
+      id: uid(), siteId, sku: form.sku, skuName: found?.name ?? form.sku,
       type: form.type, startDate: form.startDate, endDate: form.endDate,
       costMode: form.costMode,
       amount: form.costMode === "amount" ? Number(form.amount) : undefined,

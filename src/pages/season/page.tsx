@@ -44,7 +44,7 @@ export default function Season() {
       let list = (await db.campaigns.toArray()).filter(c => (c.siteId ?? "site_us") === siteId);
       if (list.length === 0) {
         const defaults: Campaign[] = DEFAULT_PRESETS.map((p) => ({
-          id: uid(),
+          id: uid(), siteId,
           active: true,
           ...p,
         }));
@@ -86,13 +86,14 @@ export default function Season() {
   };
 
   const handleAddCampaign = async () => {
+    const siteId = await getCurrentSiteId();
     if (!newForm.name || !newForm.startDate || !newForm.endDate) {
       setSaveMsg("请填写活动名称、开始日期、结束日期");
       setTimeout(() => setSaveMsg(null), 2000);
       return;
     }
     const newCampaign: Campaign = {
-      id: uid(),
+      id: uid(), siteId,
       active: true,
       ...newForm,
     };
