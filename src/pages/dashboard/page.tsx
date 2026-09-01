@@ -196,10 +196,10 @@ export default function Dashboard() {
     return s + wh.total;
   }, 0), [filteredSkuMaster, latestInventory]);
 
-  const totalDailySales = useMemo(() => Array.from(latestSnapshot.values()).filter((snap) => {
-    if (shopFilterId === "all") return true;
-    return filteredSkuMaster.some((s) => s.sku === snap.sku);
-  }).reduce((s, r) => s + r.dailySales7d, 0), [latestSnapshot, shopFilterId, filteredSkuMaster]);
+  const totalDailySales = useMemo(() => filteredSkuMaster.reduce((s, sku) => {
+    const snap = latestSnapshot.get(snapKey(sku.sku, sku.siteId));
+    return s + (snap?.dailySales7d ?? 0);
+  }, 0), [filteredSkuMaster, latestSnapshot]);
 
   const wowTotalSalesDelta = useMemo(() => wowDeltas.reduce((s, d) => s + d.dailySalesDelta, 0), [wowDeltas]);
   const wowTotalStockDelta = useMemo(() => wowDeltas.reduce((s, d) => s + d.stockDelta, 0), [wowDeltas]);
@@ -214,7 +214,8 @@ export default function Dashboard() {
       return sum + calc.grossMargin;
     }, 0) / (activeSkusList.length || 1);
 
-    const avgAdRatioVal = Array.from(latestSnapshot.values()).filter((r) => r.adRatio > 0 && (shopFilterId === "all" || filteredSkuMaster.some((s) => s.sku === r.sku))).reduce((sum, r, _, arr) => sum + r.adRatio / arr.length, 0);
+    const adSnaps = Array.from(latestSnapshot.values()).filter((r) => r.adRatio > 0 && (shopFilterId === "all" || filteredSkuMaster.some((s) => s.sku === r.sku)));
+    const avgAdRatioVal = adSnaps.length ? adSnaps.reduce((sum, r) => sum + r.adRatio, 0) / adSnaps.length : 0;
 
     const urgent = filteredAlerts.filter((a) => a.severity !== "info").length;
 
