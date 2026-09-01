@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, createContext, useContext } from "react";
-import { GridLayout, useContainerWidth, getCompactor, type Layout } from "react-grid-layout";
+import { GridLayout, useContainerWidth, getCompactor, type Layout, type LayoutItem } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
@@ -81,9 +81,9 @@ export const CanvasItem = React.forwardRef<HTMLDivElement, CanvasItemProps>(
 );
 
 interface CanvasLayoutProps {
-  layout: Layout[];
+  layout: LayoutItem[];
   customizing: boolean;
-  onLayoutChange: (layout: Layout[]) => void;
+  onLayoutChange: (layout: LayoutItem[]) => void;
   children: React.ReactNode;
   /** 隐藏指定模块 */
   onHideItem?: (key: string) => void;
@@ -141,7 +141,7 @@ export default function CanvasLayout({
   // GridLayout 的 onLayoutChange 在组件挂载时也会触发（可能返回经过 correctBounds
   // 调整的布局），直接持久化会覆盖正确的默认布局。因此用内部状态渲染，
   // 仅在用户拖拽/缩放完成（onDragStop / onResizeStop）时才持久化。
-  const [internalLayout, setInternalLayout] = useState<Layout[]>(layout);
+  const [internalLayout, setInternalLayout] = useState<LayoutItem[]>(layout);
 
   // ── ref 镜像内部布局 ──
   // measureAndAdjust / handleResizeStop 通过 ref 读取最新的 internalLayout，避免闭包过期
@@ -229,7 +229,7 @@ export default function CanvasLayout({
   // onDragStop: 用户拖拽完成，持久化到父组件
   // 同时立即更新 internalLayout（含 y），让压缩结果即时生效
   const handleDragStop = useCallback((newLayout: Layout) => {
-    const arr = [...newLayout] as Layout[];
+    const arr = [...newLayout] as LayoutItem[];
     setInternalLayout(arr);
     onLayoutChange(arr);
   }, [onLayoutChange]);
@@ -238,7 +238,7 @@ export default function CanvasLayout({
   // 同时记录被手动调整高度的卡片：仅 h 变化视为手动缩放（位置变化不算），
   // 之后自动测高会跳过这些卡片，尊重用户的手动设定
   const handleResizeStop = useCallback((newLayout: Layout) => {
-    const newLayoutArr = [...newLayout] as Layout[];
+    const newLayoutArr = [...newLayout] as LayoutItem[];
     const prevByI = new Map(internalLayoutRef.current.map((it) => [it.i, it]));
     for (const item of newLayoutArr) {
       const prev = prevByI.get(item.i);
