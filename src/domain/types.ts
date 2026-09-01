@@ -194,6 +194,7 @@ export interface InventoryLayer {
 /** 活动配置 */
 export interface Campaign {
   id: string;
+  siteId?: string;           // 站点隔离
   name: string;              // Prime Day / BF / Xmas
   startDate: string;
   endDate: string;
@@ -215,6 +216,7 @@ export type PromotionType =
 
 export interface Promotion {
   id: string;
+  siteId?: string;           // 站点隔离
   sku: string;
   skuName?: string;
   /** 子链接 MSKU：促销针对特定 MSKU（如跟卖链接）而非父 SKU 时填写 */
@@ -244,6 +246,7 @@ export type ManualPromoType = "coupon" | "flash_sale" | "offsite_discount" | "ot
 /** 手动促销成本记录 — 存 IndexedDB manualPromotions 表 */
 export interface ManualPromotion {
   id: string;
+  siteId?: string;           // 站点隔离
   sku: string;
   skuName?: string;
   type: ManualPromoType;
@@ -276,6 +279,7 @@ export type AlertSeverity = "critical" | "warning" | "info";
 
 export interface Alert {
   id: string;
+  siteId?: string;           // 站点隔离
   date: string;
   sku: string;
   skuName?: string;
@@ -424,6 +428,7 @@ export interface EstimateResult {
 // ═══════ 新品测算记录 ═══════
 export interface CalculationRecord {
   id: string;
+  siteId?: string;           // 站点隔离
   sku?: string;                // 关联 SKU（如果保存到已有 SKU）
   name: string;               // 品名
   asin?: string;
@@ -458,6 +463,7 @@ export interface CalculationRecord {
 // ═══════ 待办事项 ═══════
 export interface TodoItem {
   id: string;
+  siteId?: string;           // 站点隔离
   content: string;             // 必填，文字
   relatedSku?: string;         // 选填，关联SKU
   relatedMsku?: string;        // 选填，关联MSKU（子链接）
@@ -468,6 +474,7 @@ export interface TodoItem {
 }// ═══════ 店铺管理 ═══════
 export interface Shop {
   id: string;
+  siteId?: string;           // 站点隔离
   name: string;
   createdAt: string;
 }
@@ -486,6 +493,7 @@ export type AnomalyType =
 
 export interface OpsLog {
   id?: string;
+  siteId?: string;         // 站点隔离
   sku: string;             // 所属 SKU（父SKU或MSKU）
   msku?: string;           // 具体 MSKU（选填，关联到具体子SKU）
   skuName?: string;        // 品名（冗余，方便展示）

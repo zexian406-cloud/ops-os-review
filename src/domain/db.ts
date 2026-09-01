@@ -32,6 +32,7 @@ export class AmzOpsDB extends Dexie {
   manualPromotions!: Table<ManualPromotion, string>;
   alerts!: Table<Alert, string>;
   config!: Table<{ key: string; value: unknown }, string>;
+  estimates!: Table<CalculationRecord, string>;
   warehouseProviders!: Table<WarehouseProvider, string>;
   warehouseMappings!: Table<WarehouseMapping, number>;
   calculationRecords!: Table<CalculationRecord, string>;
@@ -674,19 +675,23 @@ export async function upsertInventoryLayersPartial(rows: InventoryLayer[]): Prom
 export async function clearAllData(): Promise<void> {
   await db.transaction(
     "rw",
-    db.skuMaster,
-    db.dailySnapshot,
-    db.inventoryLayer,
-    db.campaigns,
-    db.promotions,
-    db.manualPromotions,
-    db.alerts,
-    db.config,
-    db.warehouseProviders,
-    db.estimates,
-    db.todos,
-    db.calculationRecords,
-    db.shops,
+    [
+      db.skuMaster,
+      db.dailySnapshot,
+      db.inventoryLayer,
+      db.campaigns,
+      db.promotions,
+      db.manualPromotions,
+      db.alerts,
+      db.config,
+      db.warehouseProviders,
+      db.estimates,
+      db.todos,
+      db.calculationRecords,
+      db.shops,
+      db.opsLogs,
+      db.warehouseMappings,
+    ],
     async () => {
       await db.skuMaster.clear();
       await db.dailySnapshot.clear();
@@ -767,21 +772,23 @@ export async function importSnapshot(payload: {
 }): Promise<void> {
   await db.transaction(
     "rw",
-    db.skuMaster,
-    db.dailySnapshot,
-    db.inventoryLayer,
-    db.campaigns,
-    db.promotions,
-    db.manualPromotions,
-    db.alerts,
-    db.config,
-    db.warehouseProviders,
-    db.estimates,
-    db.todos,
-    db.calculationRecords,
-    db.shops,
-    db.opsLogs,
-    db.warehouseMappings,
+    [
+      db.skuMaster,
+      db.dailySnapshot,
+      db.inventoryLayer,
+      db.campaigns,
+      db.promotions,
+      db.manualPromotions,
+      db.alerts,
+      db.config,
+      db.warehouseProviders,
+      db.estimates,
+      db.todos,
+      db.calculationRecords,
+      db.shops,
+      db.opsLogs,
+      db.warehouseMappings,
+    ],
     async () => {
       if (payload.skuMaster) {
         await db.skuMaster.clear();
@@ -1104,6 +1111,12 @@ export async function deleteSite(id: string): Promise<void> {
   await db.promotions.where("siteId").equals(id).modify({ siteId: "site_us" });
   await db.dailySnapshot.where("siteId").equals(id).modify({ siteId: "site_us" });
   await db.inventoryLayer.where("siteId").equals(id).modify({ siteId: "site_us" });
+  await db.campaigns.where("siteId").equals(id).modify({ siteId: "site_us" });
+  await db.manualPromotions.where("siteId").equals(id).modify({ siteId: "site_us" });
+  await db.alerts.where("siteId").equals(id).modify({ siteId: "site_us" });
+  await db.calculationRecords.where("siteId").equals(id).modify({ siteId: "site_us" });
+  await db.todos.where("siteId").equals(id).modify({ siteId: "site_us" });
+  await db.opsLogs.where("siteId").equals(id).modify({ siteId: "site_us" });
 }
 
 export async function getCurrentSiteId(): Promise<string> {
