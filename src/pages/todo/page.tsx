@@ -26,7 +26,7 @@ function getMskuOptions(sku?: SkuMaster): string[] {
 }
 
 export default function TodoPage() {
-  const { skuMaster } = useOpsData();
+  const { skuMaster, currentSiteId } = useOpsData();
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [newContent, setNewContent] = useState("");
   const [newSku, setNewSku] = useState("");
@@ -37,13 +37,14 @@ export default function TodoPage() {
 
   const loadTodos = async () => {
     const all = await db.todos.toArray();
-    setTodos(all.sort((a, b) => {
+    const filtered = all.filter((t) => (t.siteId ?? "site_us") === currentSiteId);
+    setTodos(filtered.sort((a, b) => {
       if (a.completed !== b.completed) return a.completed ? 1 : -1;
       return b.createdAt.localeCompare(a.createdAt);
     }));
   };
 
-  useEffect(() => { loadTodos(); }, []);
+  useEffect(() => { loadTodos(); }, [currentSiteId]);
 
   // 选中 SKU 的对象，用于获取 MSKU 列表
   const selectedSkuObj = useMemo(
@@ -57,6 +58,7 @@ export default function TodoPage() {
     if (!content) return;
     const item: TodoItem = {
       id: uid(),
+      siteId: currentSiteId,
       content,
       relatedSku: newSku || undefined,
       relatedMsku: newMsku || undefined,
@@ -92,6 +94,7 @@ export default function TodoPage() {
         undefined,
         item.relatedMsku || undefined,
         skuObj?.name,
+        item.siteId ?? currentSiteId,
       );
       setToast({ msg: "待办已完成，已自动记录到操作记录", ok: true });
       setTimeout(() => setToast(null), 2500);

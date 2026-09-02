@@ -572,23 +572,31 @@ export function computeAll(params: {
 
 // ────────── 促销成本按周聚合 ──────────
 
+/** 本地时区 YYYY-MM-DD 格式化（避免 toISOString 的 UTC 偏移导致日期错位） */
+function fmtLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 /** 获取指定日期所在周的周一 */
 export function getWeekStart(dateStr: string): string {
-  if (!dateStr) dateStr = new Date().toISOString().slice(0, 10);
+  if (!dateStr) dateStr = fmtLocal(new Date());
   const d = new Date(dateStr + "T00:00:00");
-  if (isNaN(d.getTime())) return new Date().toISOString().slice(0, 10);
+  if (isNaN(d.getTime())) return fmtLocal(new Date());
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   const mon = new Date(d);
   mon.setDate(diff);
-  return mon.toISOString().slice(0, 10);
+  return fmtLocal(mon);
 }
 
 /** 获取指定日期所在周的周日 */
 export function getWeekEnd(weekStart: string): string {
   const d = new Date(weekStart + "T00:00:00");
   d.setDate(d.getDate() + 6);
-  return d.toISOString().slice(0, 10);
+  return fmtLocal(d);
 }
 
 /** 两段日期区间是否有重叠 */
@@ -619,6 +627,7 @@ export function computeWeeklyPromoCost(
 
   for (const promo of manualPromos) {
     if (promo.sku !== sku) continue;
+    if (siteId && (promo.siteId ?? "site_us") !== siteId) continue;
     if (!rangesOverlap(promo.startDate, promo.endDate, weekStart, weekEnd)) continue;
 
     count++;
@@ -710,7 +719,7 @@ export function aggregateWeeklyCosts(
   for (let i = weeksBack - 1; i >= 0; i--) {
     const d = new Date(todayWeekDate);
     d.setDate(d.getDate() - i * 7);
-    const weekStart = d.toISOString().slice(0, 10);
+    const weekStart = fmtLocal(d);
     const weekEnd = getWeekEnd(weekStart);
     buckets.push({ weekStart, weekEnd, promoCost: 0, otherCost: 0, total: 0, count: 0 });
   }

@@ -61,7 +61,7 @@ function groupByDate(logs: OpsLog[]): Map<string, OpsLog[]> {
 }
 
 export default function OpsLogsPage() {
-  const { skuMaster } = useOpsData();
+  const { skuMaster, currentSiteId } = useOpsData();
   const [logs, setLogs] = useState<OpsLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -85,8 +85,9 @@ export default function OpsLogsPage() {
     db.opsLogs
       .toArray()
       .then((data) => {
-        data.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
-        setLogs(data);
+        const filtered = data.filter((l) => (l.siteId ?? "site_us") === currentSiteId);
+        filtered.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+        setLogs(filtered);
         setLoading(false);
       })
       .catch(() => {
@@ -95,7 +96,7 @@ export default function OpsLogsPage() {
       });
   };
 
-  useEffect(() => { loadLogs(); }, []);
+  useEffect(() => { loadLogs(); }, [currentSiteId]);
 
   const handleAdd = async () => {
     if (!newSku || !newAction || !newDetail) return;
@@ -108,8 +109,9 @@ export default function OpsLogsPage() {
       newImpact || undefined,
       newMsku || undefined,
       skuObj?.name,
+      currentSiteId,
     );
-    setLogs((prev) => [{ id, sku: newSku, msku: newMsku || undefined, skuName: skuObj?.name, date: newDate, action: newAction, detail: newDetail, impact: newImpact || undefined, createdAt: new Date().toISOString() }, ...prev]);
+    setLogs((prev) => [{ id, siteId: currentSiteId, sku: newSku, msku: newMsku || undefined, skuName: skuObj?.name, date: newDate, action: newAction, detail: newDetail, impact: newImpact || undefined, createdAt: new Date().toISOString() }, ...prev]);
     setNewSku(""); setNewMsku(""); setNewAction(""); setNewDetail(""); setNewImpact("");
     setToast({ msg: "已添加操作记录", ok: true });
     setTimeout(() => setToast(null), 2000);

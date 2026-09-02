@@ -5,7 +5,9 @@ const BOM = "\uFEFF";
 function csvLine(cells: (string | number)[]): string {
   return cells
     .map((c) => {
-      const s = String(c ?? "");
+      let s = String(c ?? "");
+      // 防公式注入：以 = + - @ 开头的值加前导单引号，避免 Excel 将其解析为公式/命令
+      if (/^[=+\-@]/.test(s)) s = "'" + s;
       if (s.includes(",") || s.includes('"') || s.includes("\n")) {
         return `"${s.replace(/"/g, '""')}"`;
       }

@@ -1,30 +1,41 @@
 import type { RouteObject } from "react-router-dom";
 import { Navigate } from "react-router-dom";
-import { lazy } from "react";
+import { lazy, type ComponentType } from "react";
 import NotFound from "@/pages/NotFound";
 import AppShell from "@/components/layout/AppShell";
 
+// 懒加载 + chunk 加载失败自动重试一次（部署更新后旧 chunk 失效时可自愈）
+function lazyRetry(factory: () => Promise<{ default: ComponentType }>) {
+  return lazy(() =>
+    factory().catch(() => {
+      return new Promise<{ default: ComponentType }>((resolve) => {
+        window.setTimeout(() => resolve(factory()), 1200);
+      });
+    }),
+  );
+}
+
 // P0/P1: 页面按需懒加载，避免 recharts / xlsx 等重型依赖被卷进首屏主包。
-const Dashboard = lazy(() => import("@/pages/dashboard/page"));
-const Shipment = lazy(() => import("@/pages/shipment/page"));
-const Risk = lazy(() => import("@/pages/risk/page"));
-const Operations = lazy(() => import("@/pages/operations/page"));
-const SkuList = lazy(() => import("@/pages/sku/page"));
-const SkuDetail = lazy(() => import("@/pages/sku/detail"));
-const Season = lazy(() => import("@/pages/season/page"));
-const ImportPage = lazy(() => import("@/pages/import/page"));
-const Settings = lazy(() => import("@/pages/settings/page"));
-const GuidePage = lazy(() => import("@/pages/guide/page"));
+const Dashboard = lazyRetry(() => import("@/pages/dashboard/page"));
+const Shipment = lazyRetry(() => import("@/pages/shipment/page"));
+const Risk = lazyRetry(() => import("@/pages/risk/page"));
+const Operations = lazyRetry(() => import("@/pages/operations/page"));
+const SkuList = lazyRetry(() => import("@/pages/sku/page"));
+const SkuDetail = lazyRetry(() => import("@/pages/sku/detail"));
+const Season = lazyRetry(() => import("@/pages/season/page"));
+const ImportPage = lazyRetry(() => import("@/pages/import/page"));
+const Settings = lazyRetry(() => import("@/pages/settings/page"));
+const GuidePage = lazyRetry(() => import("@/pages/guide/page"));
 // 合并后的促销运营中心（替换原来的 PromotionsPage 和 PromoCostPage）
-const PromoCenterPage = lazy(() => import("@/pages/promo-center/page"));
-const ProfitEstimate = lazy(() => import("@/pages/profit-estimate/page"));
-const CalculatorPage = lazy(() => import("@/pages/calculator/page"));
-const TodoPage = lazy(() => import("@/pages/todo/page"));
-const ShopManagementPage = lazy(() => import("@/pages/shop-management/page"));
-const OpsLogsPage = lazy(() => import("@/pages/ops-logs/page"));
-const DiagnosisPage = lazy(() => import("@/pages/diagnosis/page"));
-const DataHealthPage = lazy(() => import("@/pages/data-health/page"));
-const HistoryPage = lazy(() => import("@/pages/history/page"));
+const PromoCenterPage = lazyRetry(() => import("@/pages/promo-center/page"));
+const ProfitEstimate = lazyRetry(() => import("@/pages/profit-estimate/page"));
+const CalculatorPage = lazyRetry(() => import("@/pages/calculator/page"));
+const TodoPage = lazyRetry(() => import("@/pages/todo/page"));
+const ShopManagementPage = lazyRetry(() => import("@/pages/shop-management/page"));
+const OpsLogsPage = lazyRetry(() => import("@/pages/ops-logs/page"));
+const DiagnosisPage = lazyRetry(() => import("@/pages/diagnosis/page"));
+const DataHealthPage = lazyRetry(() => import("@/pages/data-health/page"));
+const HistoryPage = lazyRetry(() => import("@/pages/history/page"));
 
 const routes: RouteObject[] = [
   {

@@ -225,43 +225,23 @@ export function useOpsData() {
     });
   }, [campaigns, today]);
 
-  // Global alerts from all data (not filtered)
-  const allLatestSnapshot = useMemo(() => buildSnapshotMap(allSnapshots), [allSnapshots]);
-  const allLatestInventory = useMemo(() => buildInventoryMap(allInventory), [allInventory]);
-
-  const allPreviousSnapshot = useMemo(() => {
-    const dates = Array.from(new Set(allSnapshots.map((s) => s.date))).sort();
-    if (dates.length < 2) return undefined;
-    const prevDate = dates[dates.length - 2];
-    const map = new Map<string, DailySnapshot>();
-    allSnapshots
-      .filter((s) => s.date === prevDate)
-      .forEach((s) => map.set(snapKey(s.sku, s.siteId), { ...s, adRatio: Math.abs(s.adRatio) }));
-    return map;
-  }, [allSnapshots]);
-
-  const allToday = useMemo(() => {
-    const dates = allSnapshots.map((s) => s.date);
-    return dates.length ? dates.sort().at(-1)! : new Date().toISOString().slice(0, 10);
-  }, [allSnapshots]);
-
   const promotionAlerts = useMemo(() => {
-    return computePromotionAlerts({ promotions: allPromotions, today: allToday });
-  }, [allPromotions, allToday]);
+    return computePromotionAlerts({ promotions, today });
+  }, [promotions, today]);
 
   const computedAlerts = useMemo(() => {
     const base = computeAlerts({
-      skuMaster: allSkuMaster,
-      latestSnapshot: allLatestSnapshot,
-      latestInventory: allLatestInventory,
-      manualPromotions: allManualPromotions,
-      previousSnapshot: allPreviousSnapshot,
+      skuMaster,
+      latestSnapshot,
+      latestInventory,
+      manualPromotions,
+      previousSnapshot,
       config,
-      today: allToday,
+      today,
       defaultCommissionRate: currentSite?.commissionRate,
     });
     return [...base, ...promotionAlerts];
-  }, [allSkuMaster, allLatestSnapshot, allLatestInventory, allManualPromotions, allPreviousSnapshot, config, allToday, promotionAlerts, currentSite]);
+  }, [skuMaster, latestSnapshot, latestInventory, manualPromotions, previousSnapshot, config, today, promotionAlerts, currentSite]);
 
   useEffect(() => {
     setAlerts(computedAlerts);

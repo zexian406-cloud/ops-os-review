@@ -155,7 +155,7 @@ export default function SkuDetail() {
     try {
       const skuMap = new Map([[sku.sku, sku]]);
       const snapMap = curSnap ? new Map([[sku.sku, curSnap]]) : new Map();
-      return computeWeeklyPromoCost(sku.sku, curSnap.date, manualPromotions, skuMap, snapMap);
+      return computeWeeklyPromoCost(sku.sku, curSnap.date, manualPromotions, skuMap, snapMap, sku.siteId);
     } catch (err) {
       console.error("[SkuDetail] weekPromoCost threw:", err);
       return { total: 0, count: 0 };

@@ -445,8 +445,12 @@ export async function upsertSkuMasterPartial(rows: SkuMaster[]): Promise<void> {
   const compoundKeys = rows.map((r) => [r.sku, r.siteId || currentSiteId] as [string, string]);
   const existing = await db.skuMaster.bulkGet(compoundKeys);
   const existingMap = new Map<string, SkuMaster>();
-  for (const e of existing) {
-    if (e) existingMap.set(e.sku, e);
+  for (let i = 0; i < existing.length; i++) {
+    const e = existing[i];
+    if (e) {
+      const [keySku, keySite] = compoundKeys[i];
+      existingMap.set(`${keySku}__${keySite}`, e);
+    }
   }
 
   // 数值字段：新值 > 0 才覆盖
@@ -467,7 +471,8 @@ export async function upsertSkuMasterPartial(rows: SkuMaster[]): Promise<void> {
   ];
 
   const merged: SkuMaster[] = rows.map((row) => {
-    const old = existingMap.get(row.sku);
+    const keySite = row.siteId || currentSiteId;
+    const old = existingMap.get(`${row.sku}__${keySite}`);
     if (!old) return row; // 新 SKU，直接写入
 
     const result: SkuMaster = { ...old };
@@ -917,8 +922,10 @@ export async function importSnapshot(payload: {
   );
 }
 // ==================== OpsLog CRUD ====================
-export async function getOpsLogs(sku: string): Promise<OpsLog[]> {
-  const data = await db.opsLogs.where("sku").equals(sku).toArray();
+export async function getOpsLogs(sku?: string, siteId?: string): Promise<OpsLog[]> {
+  let data = await db.opsLogs.toArray();
+  if (sku) data = data.filter((l) => l.sku === sku);
+  if (siteId) data = data.filter((l) => (l.siteId ?? "site_us") === siteId);
   return data.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 }
 
@@ -930,10 +937,13 @@ export async function addOpsLog(
   impact?: string,
   msku?: string,
   skuName?: string,
+  siteId?: string,
 ): Promise<string> {
+  const sid = siteId ?? (await getCurrentSiteId());
   const id = `opslog_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   await db.opsLogs.put({
     id,
+    siteId: sid,
     sku,
     msku,
     skuName,

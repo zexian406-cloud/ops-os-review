@@ -37,7 +37,17 @@ const APP_VERSION = "4958334";
 /* ────────── 工具函数 ────────── */
 const num = (v: unknown, fallback = 0): number => {
   if (v == null || v === "") return fallback;
-  const n = typeof v === "number" ? v : parseFloat(String(v).replace(/[^\d.\-]/g, ""));
+  let n: number;
+  if (typeof v === "number") {
+    n = v;
+  } else {
+    // 优先用 Number 解析（支持科学计数法，如 "1.23E+07"），失败时再做字符清洗
+    const s = String(v).trim().replace(/,/g, "");
+    n = Number(s);
+    if (!Number.isFinite(n)) {
+      n = parseFloat(s.replace(/[^\d.\-+eE]/g, ""));
+    }
+  }
   return Number.isFinite(n) ? n : fallback;
 };
 /** 判断单元格是否有显式值（区分"空单元格"与"真实的 0 值"，避免 0 被误当成空） */
