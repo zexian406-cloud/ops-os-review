@@ -28,10 +28,15 @@ export async function exportAllData(): Promise<void> {
   const wb = XLSX.utils.book_new();
   const today = new Date().toISOString().slice(0, 10);
 
+  // 站点名映射：导出"站点"列显示中文站名，另附"站点ID"列供复刻导入还原 siteId，避免多站点 round-trip 串站
+  const sites = await db.sites.toArray();
+  const siteIdToName = new Map(sites.map((s) => [s.id, s.name || s.id]));
+  const siteLabel = (id?: string) => (id ? siteIdToName.get(id) ?? id : "");
+
   // ── Sheet 1: SKU主数据 ──
   const skuHeaders = [
     "品名", "SKU", "MSKU", "ASIN", "UPC", "父体ASIN", "父体SKU", "所属父SKU分组",
-    "链接类型", "销售情况", "仓库类型", "所属店铺", "站点", "品类",
+    "链接类型", "销售情况", "仓库类型", "所属店铺", "站点", "站点ID", "品类",
     "售价", "ListPrice", "优惠券",
     "FOB", "头程", "配送费", "佣金", "仓储费", "广告费", "退货费",
     "包裹长(cm)", "包裹宽(cm)", "包裹高(cm)", "包裹重(kg)", "单箱数",
@@ -41,7 +46,7 @@ export async function exportAllData(): Promise<void> {
   ];
   const skuRows = skuMaster.map((s) => [
     s.name, s.sku, s.msku ?? "", s.asin ?? "", s.upc ?? "", s.parentAsin ?? "", s.parentSku ?? "", s.groupSku ?? "",
-    s.linkType ?? "", s.saleStatus, s.fulfillment, s.store, s.marketplace ?? "", s.category ?? "",
+    s.linkType ?? "", s.saleStatus, s.fulfillment, s.store, siteLabel(s.siteId), s.siteId ?? "", s.category ?? "",
     s.price, s.listPrice ?? "", s.coupon ?? "",
     s.costFob ?? "", s.costShipping ?? "", s.costDelivery ?? "", s.costCommission ?? "",
     s.costStorage ?? "", s.costAd ?? "", s.costReturn ?? "",

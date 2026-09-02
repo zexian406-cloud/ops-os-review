@@ -338,9 +338,35 @@ export default function ImportPage() {
   }, [importing, loadExistingDates]);
 
   /* ────────── 通用 Excel 解析 ────────── */
+  const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+
+  const validImportFile = (file: File): string | null => {
+    const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+    if (![".xlsx", ".xls", ".csv"].includes(`.${ext}`)) {
+      return `不支持的文件类型「${file.name}」（仅支持 .xlsx / .xls / .csv）`;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      return `文件过大（超过 20MB）：${file.name}`;
+    }
+    return null;
+  };
+
   const parseExcelFile = async (file: File) => {
+    const invalid = validImportFile(file);
+    if (invalid) throw new Error(invalid);
+    const ext = (file.name.split(".").pop() ?? "").toLowerCase();
     const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: "array" });
+    let wb: XLSX.WorkBook;
+    if (ext === "csv") {
+      // CSV 先按 UTF-8 解码；若出现替换符(乱码迹象)，回退到 GBK(领星/Excel 中文导出常见编码)
+      let text = new TextDecoder("utf-8").decode(buf);
+      if (text.includes("\uFFFD")) {
+        text = new TextDecoder("gbk" as string).decode(buf);
+      }
+      wb = XLSX.read(text, { type: "string" });
+    } else {
+      wb = XLSX.read(buf, { type: "array" });
+    }
     const sheet = wb.Sheets[wb.SheetNames[0]];
     return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
   };
@@ -353,6 +379,8 @@ export default function ImportPage() {
     setResult(null);
     setParsing(true);
     try {
+      const invalid = validImportFile(file);
+      if (invalid) { setError(invalid); setParsing(false); return; }
       const buf = await file.arrayBuffer();
       const parsed = parseOperationExcel(buf, importDateStart);
 
@@ -1586,6 +1614,9 @@ export default function ImportPage() {
                 e.preventDefault();
                 e.currentTarget.classList.remove("border-primary-500", "bg-primary-50/50");
                 const f = e.dataTransfer.files?.[0];
+                if (!f) return;
+                const invalid = validImportFile(f);
+                if (invalid) { setError(invalid); return; }
                 if (f) {
                   setPendingFile(f);
                   setModeModal(true);

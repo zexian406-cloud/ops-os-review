@@ -28,6 +28,8 @@ export const SYNONYMS: Record<string, string[]> = {
   launchDate: ["上架日期", "launchDate", "上架时间", "首发日期", "上市日期"],
   store: ["店铺", "店铺名", "Store", "store"],
   fulfillment: ["发货方式", "履约方式", "Fulfillment"],
+  // 站点：复刻多站点 round-trip 时据此还原 siteId（站点ID / 中文站名 / marketplace 均识别）
+  site: ["站点ID", "站点名称", "站点", "siteId", "site id", "Site", "site", "marketplace"],
 
   // ── 成本 / 价格 ──
   // 注意：fob 的兜底词 "成本" 设为整词精确，避免误命中 "头程成本"/"仓储成本"。

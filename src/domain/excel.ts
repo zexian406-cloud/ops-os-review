@@ -46,6 +46,25 @@ const mapFactoryStatus = (v: string): FactoryBatch["status"] => {
   return "producing";
 };
 
+/** 默认站点 ID → 中文站名，用于复刻站名还原 siteId 与导出展示 */
+const SITE_LABELS: Record<string, string> = {
+  site_us: "美国站",
+  site_uk: "英国站",
+  site_de: "德国站",
+  site_jp: "日本站",
+  site_ca: "加拿大站",
+};
+
+/** 把站点列值解析成 siteId：支持 site_xxx / 中文站名。marketplace 码不映射（历史导出列默认全为 US，会误钉到美站）。无法识别返回 undefined（回退当前站） */
+const resolveSiteId = (v: unknown): string | undefined => {
+  const s = str(v);
+  if (!s || s === "-") return undefined;
+  if (/^site_[a-z0-9]+$/i.test(s)) return s.toLowerCase();
+  const byName = Object.entries(SITE_LABELS).find(([, name]) => name === s);
+  if (byName) return byName[0];
+  return undefined;
+};
+
 /** 按前缀匹配 Sheet 名，返回第一个匹配的 Sheet */
 function findSheet(wb: XLSX.WorkBook, names: string[]): XLSX.WorkSheet | undefined {
   for (const name of names) {
@@ -118,7 +137,7 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
         "sku", "msku", "name", "asin", "store", "price", "shippingFee", "fob", "costStorage",
         "fulfillment", "upc", "category", "launchDate", "linkType",
         "packageLength", "packageWidth", "packageHeight", "packageWeight", "unitsPerBox",
-        "productUrl", "competitorUrls",
+        "productUrl", "competitorUrls", "site",
       ],
       idHeaders,
     );
@@ -162,6 +181,7 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
           sku,
           name,
           store,
+          siteId: resolveSiteId(pickCell(row, c.site)),
           price,
           listPrice,
           asin,

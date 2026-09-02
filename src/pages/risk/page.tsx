@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
 import Section from "@/components/ui/Section";
@@ -20,9 +20,13 @@ const TABS: Array<{ key: string; label: string; icon: string; types: AlertType[]
 export default function RiskCenter() {
   const { loading, alerts } = useOpsData();
   const [params, setParams] = useSearchParams();
-  const initialTab = params.get("type") ?? "all";
-  const [tab, setTab] = useState<string>(initialTab);
+  const [tab, setTab] = useState<string>(params.get("type") ?? "all");
   const [sev, setSev] = useState<"all" | AlertSeverity>("all");
+
+  // 浏览器前进/后退或跨入口跳转时，URL 变化需重新同步选中 tab
+  useEffect(() => {
+    setTab(params.get("type") ?? "all");
+  }, [params]);
 
   const filtered = useMemo(() => {
     const active = TABS.find((t) => t.key === tab);

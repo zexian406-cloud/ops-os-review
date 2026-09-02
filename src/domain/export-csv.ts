@@ -35,6 +35,16 @@ function delay(ms: number): Promise<void> {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+let _siteNameCache: Map<string, string> | null = null;
+async function siteName(id?: string): Promise<string> {
+  if (!id) return "";
+  if (!_siteNameCache) {
+    const sites = await db.sites.toArray();
+    _siteNameCache = new Map(sites.map((s) => [s.id, s.name || s.id]));
+  }
+  return _siteNameCache.get(id) ?? id;
+}
+
 // ── 导出全部为 CSV（分别下载，6 个文件）──
 export async function exportAllCsv(): Promise<void> {
   const [skuMaster, inventoryLayer, campaigns, promotions, alerts, todos] = await Promise.all([
@@ -51,7 +61,7 @@ export async function exportAllCsv(): Promise<void> {
   // 1. SKU主数据
   const skuHeaders = [
     "品名", "SKU", "MSKU", "ASIN", "UPC", "父体ASIN", "父体SKU", "所属父SKU分组",
-    "链接类型", "销售情况", "仓库类型", "所属店铺", "站点", "品类",
+    "链接类型", "销售情况", "仓库类型", "所属店铺", "站点", "站点ID", "品类",
     "售价", "ListPrice", "优惠券",
     "FOB", "头程", "配送费", "佣金", "仓储费", "广告费", "退货费",
     "包裹长(cm)", "包裹宽(cm)", "包裹高(cm)", "包裹重(kg)", "单箱数",
@@ -59,9 +69,10 @@ export async function exportAllCsv(): Promise<void> {
     "A+", "高级A+", "安装视频", "透明计划",
     "生命周期", "上架日期",
   ];
-  const skuRows = skuMaster.map((s) => [
+  const names = await Promise.all(skuMaster.map((s) => siteName(s.siteId)));
+  const skuRows = skuMaster.map((s, i) => [
     s.name, s.sku, s.msku ?? "", s.asin ?? "", s.upc ?? "", s.parentAsin ?? "", s.parentSku ?? "", s.groupSku ?? "",
-    s.linkType ?? "", s.saleStatus, s.fulfillment, s.store, s.marketplace ?? "", s.category ?? "",
+    s.linkType ?? "", s.saleStatus, s.fulfillment, s.store, names[i], s.siteId ?? "", s.category ?? "",
     s.price, s.listPrice ?? "", s.coupon ?? "",
     s.costFob ?? "", s.costShipping ?? "", s.costDelivery ?? "", s.costCommission ?? "",
     s.costStorage ?? "", s.costAd ?? "", s.costReturn ?? "",
@@ -169,9 +180,11 @@ export async function exportAllCsv(): Promise<void> {
 export async function exportSkuMasterCsv(): Promise<void> {
   const skuMaster = await db.skuMaster.toArray();
   const dateStr = today();
-  const headers = ["品名", "SKU", "MSKU", "ASIN", "销售情况", "仓库类型", "所属店铺", "售价", "FOB", "头程", "配送费", "佣金", "仓储费", "广告费", "退货费"];
-  const rows = skuMaster.map((s) => [
+  const headers = ["品名", "SKU", "MSKU", "ASIN", "销售情况", "仓库类型", "所属店铺", "站点", "站点ID", "售价", "FOB", "头程", "配送费", "佣金", "仓储费", "广告费", "退货费"];
+  const names = await Promise.all(skuMaster.map((s) => siteName(s.siteId)));
+  const rows = skuMaster.map((s, i) => [
     s.name, s.sku, s.msku ?? "", s.asin ?? "", s.saleStatus, s.fulfillment, s.store,
+    names[i], s.siteId ?? "",
     s.price, s.costFob ?? "", s.costShipping ?? "", s.costDelivery ?? "",
     s.costCommission ?? "", s.costStorage ?? "", s.costAd ?? "", s.costReturn ?? "",
   ]);

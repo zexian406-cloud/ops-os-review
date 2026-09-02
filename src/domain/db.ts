@@ -397,15 +397,25 @@ export async function renameShop(id: string, newName: string): Promise<void> {
 }
 
 export async function deleteShop(id: string): Promise<void> {
+  const shop = await db.shops.get(id);
   await db.shops.delete(id);
-  // Also clear store references in skuMaster and promotions
-  const skus = await db.skuMaster.where("store").equals(id).toArray();
-  for (const sku of skus) {
-    await db.skuMaster.put({ ...sku, store: "" });
-  }
-  const promos = await db.promotions.where("store").equals(id).toArray();
-  for (const promo of promos) {
-    await db.promotions.put({ ...promo, store: "" });
+  if (!shop) return;
+  // Clear store references only within this shop's site; same sku may exist on other sites
+  const siteId = shop.siteId ?? "site_us";
+  if (siteId === "site_all") {
+    await db.skuMaster.where("store").equals(id).modify({ store: "" });
+    await db.promotions.where("store").equals(id).modify({ store: "" });
+  } else {
+    const skus = await db.skuMaster.where("store").equals(id).toArray();
+    const toClear = skus.filter((s) => (s.siteId ?? "site_us") === siteId);
+    for (const sku of toClear) {
+      await db.skuMaster.put({ ...sku, store: "" });
+    }
+    const promos = await db.promotions.where("store").equals(id).toArray();
+    const promosToClear = promos.filter((p) => (p.siteId ?? "site_us") === siteId);
+    for (const promo of promosToClear) {
+      await db.promotions.put({ ...promo, store: "" });
+    }
   }
 }
 
@@ -421,10 +431,20 @@ export async function getShopDataCount(shopId: string): Promise<number> {
 }
 
 // ==================== Bulk operations ====================
+/** 导入来自文件的 SKU 时，站点必须是已知站点，否则回退当前站，避免写出幽灵站点记录 */
+async function enforceKnownSites<T extends { siteId?: string }>(rows: T[], currentSiteId: string): Promise<T[]> {
+  const known = new Set((await db.sites.toArray()).map((s) => s.id));
+  if (known.size === 0) known.add("site_us");
+  return rows.map((r) => {
+    const sid = r.siteId && known.has(r.siteId) ? r.siteId : currentSiteId;
+    return sid === r.siteId ? r : { ...r, siteId: sid };
+  });
+}
+
 export async function upsertSkuMaster(rows: SkuMaster[]): Promise<void> {
   if (rows.length === 0) return;
   const currentSiteId = await getCurrentSiteId();
-  const withSiteId = rows.map((r) => ({ ...r, siteId: r.siteId || currentSiteId }));
+  const withSiteId = await enforceKnownSites(rows, currentSiteId);
   await db.skuMaster.bulkPut(withSiteId);
 }
 
@@ -442,7 +462,8 @@ export async function upsertSkuMasterPartial(rows: SkuMaster[]): Promise<void> {
   if (rows.length === 0) return;
 
   const currentSiteId = await getCurrentSiteId();
-  const compoundKeys = rows.map((r) => [r.sku, r.siteId || currentSiteId] as [string, string]);
+  const coerced = await enforceKnownSites(rows, currentSiteId);
+  const compoundKeys = coerced.map((r) => [r.sku, r.siteId || currentSiteId] as [string, string]);
   const existing = await db.skuMaster.bulkGet(compoundKeys);
   const existingMap = new Map<string, SkuMaster>();
   for (let i = 0; i < existing.length; i++) {
@@ -470,7 +491,7 @@ export async function upsertSkuMasterPartial(rows: SkuMaster[]): Promise<void> {
     "parentAsin", "parentSku", "productUrl", "marketplace", "image",
   ];
 
-  const merged: SkuMaster[] = rows.map((row) => {
+  const merged: SkuMaster[] = coerced.map((row) => {
     const keySite = row.siteId || currentSiteId;
     const old = existingMap.get(`${row.sku}__${keySite}`);
     if (!old) return row; // 新 SKU，直接写入
@@ -551,7 +572,7 @@ export async function upsertSnapshots(rows: DailySnapshot[]): Promise<void> {
   if (rows.length === 0) return;
   // Normalize: adRatio must always be positive, ensure siteId is set
   const siteId = rows[0].siteId || "site_us";
-  const normalized = rows.map((r) => ({ ...r, adRatio: Math.abs(r.adRatio), siteId: r.siteId || siteId }));
+  const normalized = rows.map((r) => ({ ...r, adRatio: Math.abs(r.adRatio ?? 0), siteId: r.siteId || siteId }));
   const keys = new Set(normalized.map((r) => `${r.sku}__${r.date}__${r.siteId}`));
   const existing = await db.dailySnapshot
     .where("date")
@@ -1192,7 +1213,10 @@ export async function deleteSite(id: string): Promise<void> {
   const siteSkus = await db.skuMaster.where("siteId").equals(id).toArray();
   if (siteSkus.length > 0) {
     await db.skuMaster.bulkDelete(siteSkus.map(s => [s.sku, s.siteId!] as [string, string]));
-    await db.skuMaster.bulkPut(siteSkus.map(s => ({ ...s, siteId: "site_us" })));
+    // site_us 中可能已存在同 [sku, site_us] 记录，直接 bulkPut 会覆盖；冲突时跳过，保留 site_us 原记录
+    const existingSiteUs = await db.skuMaster.bulkGet(siteSkus.map(s => [s.sku, "site_us"] as [string, string]));
+    const toPut = siteSkus.filter((_, i) => !existingSiteUs[i]).map(s => ({ ...s, siteId: "site_us" }));
+    if (toPut.length > 0) await db.skuMaster.bulkPut(toPut);
   }
   await db.shops.where("siteId").equals(id).modify({ siteId: "site_us" });
   await db.promotions.where("siteId").equals(id).modify({ siteId: "site_us" });

@@ -843,8 +843,8 @@ export default function SkuDetail() {
       {latest && visibleKeys.includes("kpiSales30d") && (
       <CanvasItem key="kpiSales30d" itemKey="kpiSales30d">
         {(() => {
-          const _30dTotal = latest.monthlySales;
-          const _30dDaily = latest.monthlySales / 30;
+          const _30dTotal = latest.monthlySales ?? 0;
+          const _30dDaily = _30dTotal / 30;
           return <KpiCard label="30天销量" value={_30dTotal.toLocaleString()} sub={`日均 ${_30dDaily.toFixed(1)} 件 · 近30天累计`} icon="ri-bar-chart-2-line" />;
         })()}
       </CanvasItem>
