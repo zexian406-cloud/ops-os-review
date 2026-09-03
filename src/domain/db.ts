@@ -509,9 +509,13 @@ export async function upsertSkuMasterPartial(rows: SkuMaster[]): Promise<void> {
     // 字符串字段：新值非空才覆盖
     for (const f of strFields) {
       const newVal = row[f] as string | undefined;
-      if (newVal && newVal.trim() !== "" && newVal !== "-") {
-        (result as unknown as Record<string, unknown>)[f] = newVal;
+      if (!newVal || newVal.trim() === "" || newVal === "-") continue;
+      // 品名空单元格在解析层会回退为 SKU 编码占位，不能据此覆盖已有真实品名
+      if (f === "name" && newVal === row.sku) {
+        const oldName = (result as unknown as Record<string, unknown>)["name"];
+        if (oldName && oldName !== row.sku) continue;
       }
+      (result as unknown as Record<string, unknown>)[f] = newVal;
     }
 
     // 枚举/特殊字段
