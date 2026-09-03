@@ -35,6 +35,23 @@ interface SkuGroup {
   totalChildren: number;
 }
 
+interface HealthIssue {
+  sku: string;
+  name: string;
+  siteId: string;
+  groupSku: string;
+  category: string;
+  detail: string;
+}
+
+const HEALTH_CATEGORIES: Array<{ key: string; label: string; badge: string }> = [
+  { key: "siteId", label: "站点ID异常", badge: "bg-red-100 text-red-700" },
+  { key: "price", label: "售价缺失", badge: "bg-red-100 text-red-700" },
+  { key: "costAll", label: "成本全缺失", badge: "bg-secondary-100 text-secondary-700" },
+  { key: "costFob", label: "FOB成本缺失", badge: "bg-secondary-100 text-secondary-700" },
+  { key: "refundRate", label: "退款率缺失", badge: "bg-background-200 text-foreground-600" },
+];
+
 function computeMskuProfit(sku: SkuMaster, snap?: DailySnapshot, inv?: InventoryLayer, defaultCommissionRate?: number) {
   const calc = computeAll({ sku, snap, inv, defaultCommissionRate });
   return { profit: calc.grossProfit, margin: calc.grossMargin, totalCost: calc.totalCost, adRatio: Math.abs(calc.adRatio), returnRate: calc.returnRate, refundRate: calc.refundRate };
@@ -782,6 +799,7 @@ export default function SkuList() {
 
   const [showFobDiag, setShowFobDiag] = useState(false);
   const [fobDiag, setFobDiag] = useState<string>("");
+  const [healthIssues, setHealthIssues] = useState<HealthIssue[]>([]);
   const [fobInRmb, setFobInRmb] = useState(false);
   const [fobRmb, setFobRmb] = useState<string>("");
   const currentSite = sites.find(s => s.id === currentSiteId);
@@ -811,37 +829,116 @@ export default function SkuList() {
     }
   };
 
-  const checkFobStatus = async () => {
+  const runHealthCheck = async () => {
     setShowFobDiag(true);
     setFobDiag("Loading...");
     try {
       const all = await db.skuMaster.toArray();
-      const withFob = all.filter(s => s.costFob != null);
-      const withoutFob = all.filter(s => s.costFob == null);
-      const msg = [
-        "Total SKUs: " + all.length,
-        "With costFob: " + withFob.length,
-        "Without costFob: " + withoutFob.length,
-        "",
-        "All SKUs:",
-        ...all.map(s => "  " + s.sku + " => costFob=" + (s.costFob ?? "undefined") + ", siteId=" + (s.siteId ?? "none")),
-      ].join("\n");
-      setFobDiag(msg);
+      const knownSiteIds = new Set(sites.map(s => s.id));
+      const issues: HealthIssue[] = [];
+      const push = (s: SkuMaster, category: string, detail: string) => {
+        issues.push({
+          sku: s.sku,
+          name: s.name,
+          siteId: s.siteId ?? "",
+          groupSku: s.groupSku || s.sku,
+          category,
+          detail,
+        });
+      };
+
+      // ── 站点数据隔离：siteId 缺失/非法（全库扫描，不限于当前站点） ──
+      for (const s of all) {
+        const sid = s.siteId;
+        const bad =
+          sid == null || sid === "" || sid === "undefined" || !knownSiteIds.has(sid);
+        if (bad) push(s, "siteId", `siteId=${sid ?? "(空)"} 不属于任何已配置站点`);
+      }
+
+      // ── 成本类缺失：仅检查当前站点数据 ──
+      const currentSkus = skuMaster.filter(s => (s.siteId ?? "site_us") === currentSiteId);
+      for (const s of currentSkus) {
+        const costMissing = isCostFullyMissing(s);
+        const hasPrice = s.price != null && s.price > 0;
+        if (!hasPrice) {
+          push(s, "price", "售价为空或≤0，无法计算利润率");
+        } else if (costMissing) {
+          push(s, "costAll", "有售价但 FOB/头程/配送/佣金/仓储/广告 全为 0，利润率虚高为 100%");
+        } else if (s.costFob == null || s.costFob === 0) {
+          push(s, "costFob", "FOB 成本缺失，总成本偏低");
+        }
+        const snap = latestSnapshot.get(snapKey(s.sku, s.siteId ?? "site_us"));
+        if (!snap || snap.refundRate == null) {
+          push(s, "refundRate", snap ? "退款率未填写，退货损失未计入成本" : "无销量快照数据，退款率未知");
+        }
+      }
+
+      setHealthIssues(issues);
+      setFobDiag("");
     } catch (e) {
       setFobDiag("Error: " + String(e));
+      setHealthIssues([]);
     }
+  };
+
+  const locateSku = (groupSku: string) => {
+    setShowFobDiag(false);
+    setKeyword(groupSku);
+    setExpanded(prev => new Set(prev).add(groupSku));
+    setTimeout(() => {
+      document.getElementById("sku-group-" + groupSku)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
   };
 
   return (
     <div className="space-y-6">
       {showFobDiag && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" onClick={() => setShowFobDiag(false)}>
-          <div className="max-w-2xl w-full mx-4 rounded-xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="max-w-3xl w-full mx-4 rounded-xl bg-white p-6 shadow-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-bold">FOB Cost Diagnostic</h3>
+              <h3 className="text-lg font-bold">数据体检</h3>
               <button onClick={() => setShowFobDiag(false)} className="text-foreground-400 hover:text-foreground-700"><i className="ri-close-line text-xl" /></button>
             </div>
-            <pre className="text-xs bg-background-50 rounded-lg p-4 overflow-auto max-h-[70vh] whitespace-pre-wrap font-mono">{fobDiag}</pre>
+            {fobDiag ? (
+              <div className="text-sm text-foreground-500 py-8 text-center"><i className="ri-loader-4-line animate-spin mr-2" />体检中...</div>
+            ) : healthIssues.length === 0 ? (
+              <div className="text-sm text-foreground-500 py-8 text-center">全部正常，未发现数据异常</div>
+            ) : (
+              <div className="flex-1 overflow-y-auto space-y-4">
+                {HEALTH_CATEGORIES.map((cat) => {
+                  const items = healthIssues.filter((i) => i.category === cat.key);
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={cat.key}>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-[13px] font-semibold text-foreground-800">{cat.label}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${cat.badge}`}>{items.length}</span>
+                      </div>
+                      <div className="rounded-lg border border-background-200/70 divide-y divide-background-100 overflow-hidden">
+                        {items.map((it) => (
+                          <button
+                            key={it.category + "__" + it.sku}
+                            type="button"
+                            onClick={() => locateSku(it.groupSku)}
+                            className="flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-background-50 cursor-pointer"
+                          >
+                            <i className="ri-crosshair-2-line mt-0.5 text-[14px] text-primary-600" aria-hidden />
+                            <span className="min-w-0">
+                              <span className="block text-[13px] font-medium text-foreground-900">
+                                {it.name || it.sku}
+                                <span className="ml-2 font-mono text-[11px] text-foreground-400">{it.sku}</span>
+                                {it.siteId && <span className="ml-2 rounded bg-background-100 px-1.5 py-0.5 text-[11px] text-foreground-500">{it.siteId}</span>}
+                              </span>
+                              <span className="block text-[12px] text-foreground-500">{it.detail}</span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -861,11 +958,11 @@ export default function SkuList() {
           <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={checkFobStatus}
+            onClick={runHealthCheck}
             className="inline-flex items-center gap-1.5 rounded-[9px] border border-background-200 bg-white px-3 py-2 text-sm font-medium text-foreground-600 hover:bg-background-50"
           >
             <i className="ri-stethoscope-line" aria-hidden />
-            诊断FOB
+            数据体检
           </button>
           <button
             type="button"
@@ -1633,7 +1730,7 @@ function SkuGroupCard({
       : 0;
 
   return (
-    <div className="rounded-[14px] border border-background-200/70 overflow-hidden">
+    <div id={"sku-group-" + parent.sku} className="rounded-[14px] border border-background-200/70 overflow-hidden scroll-mt-24">
       <div
         className={`flex items-center justify-between px-4 py-3 ${
           isMultiChild
