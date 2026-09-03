@@ -44,6 +44,9 @@ importers:
       react-i18next:
         specifier: ^15.6.0
         version: 15.7.4(i18next@25.4.1(typescript@5.8.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.8.3)
+      react-resizable:
+        specifier: ^3.0.4
+        version: 3.2.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react-router-dom:
         specifier: ^7.6.3
         version: 7.18.3(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
