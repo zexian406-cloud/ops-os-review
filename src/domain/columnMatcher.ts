@@ -56,6 +56,9 @@ export const SYNONYMS: Record<string, string[]> = {
   delivery: ["配送费", "costDelivery", "配送", "delivery", "尾程费", "尾程配送费"],
   // 收入侧运费（买家支付的运费），与成本侧头程/尾程区分；"运费" 走整词匹配
   shippingFee: ["运费", "shippingFee", "shipping fee", "运费收入"],
+  // 组合款公式：SKU标识符表里的组合关系列（组件A×数量+组件B×数量 或 数字字面量固定成本）
+  // 注意：不能含 "组合SKU" 之类含 "sku" 子串的同义词——模糊匹配 ns.includes(nh) 会把 "SKU" 列误判为公式列
+  composeFormula: ["组合公式", "组合关系", "composeFormula", "combo formula", "组装公式"],
 
   // ── 销量（7 天 / 30 天分开，避免日均与周期总量混淆）──
   sales7d: ["7天销量", "近7天销量", "近七天销量", "周销量", "日销量", "日销（近七天）", "近7天日均", "dailySales7d"],
@@ -65,7 +68,7 @@ export const SYNONYMS: Record<string, string[]> = {
 
   // ── 评分 / 评论 / 广告 / 退货退款 ──
   rating: ["评分", "rating", "星级", "starRating", "评价分", "stars", "review_rating", "Review Rating", "平均评分", "商品评分"],
-  reviewCount: ["评论数", "reviewCount", "review_count", "评价数", "评论量", "reviews", "Review Count", "Rating Count", "评分数", "评论条数"],
+  reviewCount: ["评论数", "reviewCount", "review_count", "评价数", "评论量", "reviews", "Review Count", "Rating Count", "评论条数"],
   adRatio: ["广告费比", "ACoAS", "ACoS", "广告花费占比", "adRatio", "广告占比", "广告费率", "广告销售成本比", "ad ratio", "广告费用比", "广告花费/销售额"],
   returnRate: [
     "退货率", "退货比例", "退货比率", "退货率%", "退货率(FBA)", "FBA退货率", "退货率(FBM)", "FBM退货率",
@@ -188,8 +191,10 @@ export function buildColumnMap(fields: string[], headers: string[]): Record<stri
   return map;
 }
 
-/** 取一行数据的表头（用于构建列映射）。 */
+/** 取所有行表头的并集（合并多 Sheet 后第一行可能只含首个 Sheet 的列）。 */
 export function headersOf(rows: Record<string, unknown>[]): string[] {
-  return Object.keys(rows[0] ?? {});
+  const keys = new Set<string>();
+  for (const row of rows) for (const k of Object.keys(row)) keys.add(k);
+  return [...keys];
 }
 

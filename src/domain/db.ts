@@ -489,6 +489,7 @@ export async function upsertSkuMasterPartial(rows: SkuMaster[]): Promise<void> {
   const strFields: (keyof SkuMaster)[] = [
     "name", "asin", "upc", "category", "launchDate", "parentGroup",
     "parentAsin", "parentSku", "productUrl", "marketplace", "image",
+    "composeFormula",
   ];
 
   const merged: SkuMaster[] = coerced.map((row) => {

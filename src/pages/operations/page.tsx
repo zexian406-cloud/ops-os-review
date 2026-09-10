@@ -108,13 +108,15 @@ export default function Operations() {
         }
       } else if (tab === "ad") {
         if (snap.adRatio > config.adRatioThreshold) {
+          const inv = latestInventory.get(snapKey(sku.sku, currentSiteId));
+          const calc = computeAll({ sku, snap, inv, defaultCommissionRate: currentSite?.commissionRate });
           list.push({
             sku,
             snap,
             metric: snap.adRatio,
             metricLabel: `${snap.adRatio.toFixed(1)}%`,
             tone: snap.adRatio > 40 ? "danger" : "warn",
-            note: `广告花费 $${snap.adSpend.toFixed(2)}`,
+            note: `广告花费 $${calc.costAd.toFixed(2)}${calc.isAdInferred ? "（按费比×售价估算）" : ""}`,
           });
         }
       } else if (tab === "rating") {
@@ -155,7 +157,7 @@ export default function Operations() {
       }
     }
     return list.sort((a, b) => (tab === "new" ? a.metric - b.metric : b.metric - a.metric));
-  }, [skuMaster, latestSnapshot, latestInventory, tab, config]);
+  }, [skuMaster, latestSnapshot, latestInventory, tab, config, currentSite, currentSiteId]);
 
   if (loading) return <div className="text-sm text-foreground-500">加载中...</div>;
 

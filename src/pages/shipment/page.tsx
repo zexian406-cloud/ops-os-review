@@ -355,9 +355,9 @@ function ShipmentCard({ item, salesBasis }: { item: ItemType; salesBasis: "7d" |
       <div className="px-4 py-2">
         {(() => {
           const isFba = sm.fulfillment === "FBA";
-          const fbaQty = inv?.fbaStock ?? 0;
-          const fbaDays = item.daily > 0 && fbaQty > 0 ? `${Math.round(fbaQty / item.daily)}天` : undefined;
           const wh = computeWarehouseTotals(inv);
+          const fbaQty = wh.inStock; // 与海外仓口径一致：breakdown 优先，纯FBA数据回退 fbaStock
+          const fbaDays = item.daily > 0 && fbaQty > 0 ? `${Math.round(fbaQty / item.daily)}天` : undefined;
           const rqty = wh.inStock;
           const rDays = item.daily > 0 && rqty > 0 ? `${Math.round(rqty / item.daily)}天` : undefined;
           if (isFba) {

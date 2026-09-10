@@ -67,17 +67,29 @@ const resolveSiteId = (v: unknown): string | undefined => {
 
 /** 按前缀匹配 Sheet 名，返回第一个匹配的 Sheet */
 function findSheet(wb: XLSX.WorkBook, names: string[]): XLSX.WorkSheet | undefined {
+  return findSheets(wb, names)[0];
+}
+
+/** 按前缀匹配 Sheet 名，返回所有匹配的 Sheet（保留原名匹配优先、工作簿顺序） */
+function findSheets(wb: XLSX.WorkBook, names: string[]): XLSX.WorkSheet[] {
+  const found: XLSX.WorkSheet[] = [];
+  const used = new Set<XLSX.WorkSheet>();
+  // Pass 1: 精确匹配（保持 names 优先级）
   for (const name of names) {
-    const exact = wb.Sheets[name];
-    if (exact) return exact;
+    const ws = wb.Sheets[name];
+    if (ws && !used.has(ws)) { found.push(ws); used.add(ws); }
   }
-  // 前缀匹配
+  // Pass 2: 前缀匹配（保持工作簿顺序，跳过已收录）
   for (const sheetName of wb.SheetNames) {
     for (const prefix of names) {
-      if (sheetName.startsWith(prefix)) return wb.Sheets[sheetName];
+      if (sheetName.startsWith(prefix)) {
+        const ws = wb.Sheets[sheetName];
+        if (ws && !used.has(ws)) { found.push(ws); used.add(ws); }
+        break;
+      }
     }
   }
-  return undefined;
+  return found;
 }
 
 export interface ImportResult {
@@ -127,6 +139,7 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
   // ── Step 1: Parse SKU标识符 → skuMaster ──
   // 支持多MSKU：同一SKU出现多次时，首次为父SKU，后续为子MSKU（设groupSku）
   const skuMaster: SkuMaster[] = [];
+  const composeMap = new Map<string, string>();
   const idSheet = findSheet(wb, ["SKU标识符", "SKU标识符(一次性迁移)"]);
   const idSheetPresent = !!idSheet;
   if (idSheet) {
@@ -137,7 +150,7 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
         "sku", "msku", "name", "asin", "store", "price", "shippingFee", "fob", "costStorage",
         "fulfillment", "upc", "category", "launchDate", "linkType",
         "packageLength", "packageWidth", "packageHeight", "packageWeight", "unitsPerBox",
-        "productUrl", "competitorUrls", "site",
+        "productUrl", "competitorUrls", "site", "composeFormula",
       ],
       idHeaders,
     );
@@ -146,6 +159,8 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
     for (const row of rows) {
       const sku = str(pickCell(row, c.sku));
       if (!sku) continue;
+      const formula = str(pickCell(row, c.composeFormula)).trim();
+      if (formula) composeMap.set(sku, formula);
       const name = str(pickCell(row, c.name)) || sku;
       const msku = str(pickCell(row, c.msku)) || undefined;
       const store = str(pickCell(row, c.store)) || "-";
@@ -261,11 +276,16 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
 
   // ── Step 2: Parse 销量导入 → dailySnapshot（合并原运营数据导入字段：品名/链接）──
   const dailySnapshot: DailySnapshot[] = [];
-  // 支持"销量导入"、"周销量导入"、"运营数据导入"三种Sheet名（兼容旧模板）
-  const salesSheet = findSheet(wb, ["销量导入", "周销量导入", "运营数据导入"]);
-  const salesSheetPresent = !!salesSheet;
-  if (salesSheet) {
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(salesSheet, { defval: "" });
+  // 兼容"销量导入"、"周销量导入"、"运营数据导入"三张Sheet（新旧模板）。
+  // FIX: 若文件同时含"销量导入"+"运营数据导入"，需合并两者：销量/链接来自前者，
+  //      ACoAS广告费比/退款率/退货率/评分/评论数/品名来自后者——只读一张会丢字段（广告费比恒0）。
+  const salesSheets = findSheets(wb, ["销量导入", "周销量导入", "运营数据导入"]);
+  const salesSheetPresent = salesSheets.length > 0;
+  if (salesSheets.length > 0) {
+    const rows: Record<string, unknown>[] = [];
+    for (const sheet of salesSheets) {
+      rows.push(...XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" }));
+    }
     const salesHeaders = headersOf(rows);
     // 合并原运营数据导入的独有字段：name(品名)、productUrl(产品链接)、competitorUrls(竞品链接)
     const c = buildColumnMap(
@@ -605,6 +625,54 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
     }
   }
 
+  // ── Step 8: 组合款成本自动累加（组合公式: 组件A×数量+组件B×数量）──
+  // 公式语法：组件用 SKU 编码（如 "BFEXA72-51-A×1"），也支持数字字面量直接写固定成本
+  // （如 "25.64" = 组件固定 FOB，无需为组件单独建 SKU）。
+  // 覆盖规则：
+  //   - FOB：公式完整解析时以公式计算值为准（组合款 = 组件采购成本之和，用户明确要求）。
+  //   - 头程/尾程：仅缺省填充（手填值优先），避免组件缺头程数据时把手填值清成 0。
+  // 多遍处理，支持"组装款里再含组装款"的层级链。
+  if (composeMap.size > 0) {
+    const bySku = new Map(skuMaster.map((m) => [m.sku, m]));
+    const numOr0 = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : 0);
+    const isNumLiteral = (s: string) => /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(s);
+    for (let pass = 0; pass < 6; pass++) {
+      let changed = false;
+      for (const master of skuMaster) {
+        const formula = composeMap.get(master.sku);
+        if (!formula) continue;
+        const terms = formula.split(/[＋+]/).map((t) => t.trim()).filter(Boolean);
+        let fob = 0, ship = 0, deliv = 0, allResolved = true;
+        for (const term of terms) {
+          const sep = term.search(/[×*]/);
+          let compSku = term, qty = 1;
+          if (sep >= 0) {
+            compSku = term.slice(0, sep).trim();
+            const q = parseFloat(term.slice(sep + 1));
+            if (isFinite(q) && q > 0) qty = q;
+          }
+          // 数字字面量：直接作为固定 FOB 成本
+          if (isNumLiteral(compSku)) {
+            fob += parseFloat(compSku) * qty;
+            continue;
+          }
+          const comp = bySku.get(compSku);
+          if (!comp) { allResolved = false; continue; }
+          fob += numOr0(comp.costFob) * qty;
+          ship += numOr0(comp.costShipping) * qty;
+          deliv += numOr0(comp.costDelivery) * qty;
+        }
+        // 公式未完整解析（有组件缺失）→ 保留手填值，不写入部分和
+        if (!allResolved) continue;
+        master.composeFormula = formula;
+        if (master.costFob !== fob) { changed = true; master.costFob = fob; }
+        if (!(numOr0(master.costShipping) > 0) && master.costShipping !== ship) { changed = changed || master.costShipping !== ship; master.costShipping = ship; }
+        if (!(numOr0(master.costDelivery) > 0) && master.costDelivery !== deliv) { changed = changed || master.costDelivery !== deliv; master.costDelivery = deliv; }
+      }
+      if (!changed) break;
+    }
+  }
+
   // ── Step 9: Build inventoryLayer by merging FBA + FBM + transit + factory ──
   const allSkus = new Set<string>();
   for (const sku of fbaMap.keys()) allSkus.add(sku);
@@ -642,6 +710,30 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
     if (tb && tb.length > 0) layer.transitBatches = tb;
     if (fb && fb.length > 0) layer.factoryBatches = fb;
     inventoryLayer.push(layer);
+  }
+
+  // ── Step 9.5: 把库存回填到 dailySnapshot ──
+  // 快照的 stockOnHand/stockInTransit 之前恒为 0（导入时未关联库存），
+  // 导致历史页「总库存」指标恒 0。这里按 SKU 关联 inventoryLayer：
+  //   stockOnHand = FBA + FBM（仓库明细之和），stockInTransit = 在途批次件数之和。
+  if (dailySnapshot.length > 0 && inventoryLayer.length > 0) {
+    const layerBySku = new Map(inventoryLayer.map((l) => [l.sku, l]));
+    for (const snap of dailySnapshot) {
+      const layer = layerBySku.get(snap.sku);
+      if (!layer) continue;
+      const fba = num(layer.fbaStock);
+      const fbm = layer.warehouseBreakdown
+        ? layer.warehouseBreakdown.reduce((s, w) => s + num(w.qty), 0)
+        : num(layer.fbmStock);
+      const onHand = fba + fbm;
+      const inTransit = layer.transitBatches
+        ? layer.transitBatches.reduce((s, b) => s + num(b.qty), 0)
+        : 0;
+      snap.stockOnHand = onHand;
+      snap.stockInTransit = inTransit;
+      snap.daysOfCoverOnHand = snap.dailySales7d > 0 ? Number((onHand / snap.dailySales7d).toFixed(1)) : Infinity;
+      snap.daysOfCoverWithTransit = snap.dailySales7d > 0 ? Number(((onHand + inTransit) / snap.dailySales7d).toFixed(1)) : Infinity;
+    }
   }
 
   // ── 关键字段缺失判定（规则 H：未识别到 SKU / 销量则阻断导入）──

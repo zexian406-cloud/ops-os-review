@@ -52,6 +52,8 @@ export interface SkuMaster {
   leadTimeDays?: number;       // 工厂→FBA 天数（默认 40）
   safetyStockDays?: number;    // 安全库存天数（默认 30）
   moq?: number;                // 最小起订量
+  /** 组合款公式，如 "BFB052×2+BFB053"。导入时自动累加组件 FOB / 头程费 / 配送费填入本 SKU */
+  composeFormula?: string;
   // 运营表扩展字段
   upc?: string;                // UPC
   parentAsin?: string;         // 父体 ASIN

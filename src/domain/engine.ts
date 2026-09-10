@@ -121,6 +121,14 @@ export function computeWowDeltas(input: {
   const { skuMaster, latestSnapshot, latestInventory, previousSnapshot, config, defaultCommissionRate } = input;
   const deltas: WowDelta[] = [];
 
+  /** 快照库存兜底：快照自带库存时直接用；为 0 时回退到分仓库存（与历史页 snapStock 口径一致） */
+  const snapshotStock = (snap: DailySnapshot, inv?: InventoryLayer): number => {
+    const oh = snap.stockOnHand ?? 0;
+    const it = snap.stockInTransit ?? 0;
+    if (oh > 0 || it > 0) return oh + it;
+    return inv ? computeWarehouseTotals(inv).total : 0;
+  };
+
   for (const sku of skuMaster) {
     const key = snapKey(sku.sku, sku.siteId);
     const cur = latestSnapshot.get(key);
@@ -135,11 +143,14 @@ export function computeWowDeltas(input: {
       defaultCommissionRate,
     });
     const prevCalc = computeAll({
-      sku, snap: prev, inv,
+      sku, snap: prev,
       defaultLeadTime: config.defaultLeadTime,
       defaultSafetyStockDays: config.defaultSafetyStockDays,
       defaultCommissionRate,
     });
+    // 上一期没有对应的 InventoryLayer 数据，库存环比只能用快照自身的库存字段
+    const curStock = snapshotStock(cur, inv);
+    const prevStock = snapshotStock(prev);
 
     deltas.push({
       sku: sku.sku,
@@ -147,9 +158,9 @@ export function computeWowDeltas(input: {
       dailySalesCurrent: cur.dailySales7d,
       dailySalesPrev: prev.dailySales7d,
       dailySalesDelta: cur.dailySales7d - prev.dailySales7d,
-      stockCurrent: curCalc.totalStock,
-      stockPrev: prevCalc.totalStock,
-      stockDelta: curCalc.totalStock - prevCalc.totalStock,
+      stockCurrent: curStock,
+      stockPrev: prevStock,
+      stockDelta: curStock - prevStock,
       profitMarginCurrent: curCalc.grossMargin,
       profitMarginPrev: prevCalc.grossMargin,
       profitMarginDelta: curCalc.grossMargin - prevCalc.grossMargin,

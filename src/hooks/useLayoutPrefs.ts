@@ -350,6 +350,26 @@ const DEFAULT_SKU_VISIBLE: SkuDetailSectionKey[] = [
 
 const STORAGE_KEY = "aos-layout-prefs-v13";
 
+/**
+ * 清洗可见模块列表：剔除不存在的过期 key（版本升级后旧布局里可能残留已删除/重命名的
+ * 区块，直接渲染会在 0,0 处生成 12 宽幽灵卡片，把下方内容推下去造成大面积留空），
+ * 去重，并补回缺失的默认项。
+ */
+function sanitizeVisible<T extends string>(visible: T[] | undefined, all: T[]): T[] {
+  if (!Array.isArray(visible)) return [...all];
+  const allSet = new Set<string>(all);
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const k of visible) {
+    if (allSet.has(k) && !seen.has(k)) {
+      seen.add(k);
+      out.push(k);
+    }
+  }
+  for (const k of all) if (!seen.has(k)) out.push(k);
+  return out;
+}
+
 function loadPrefs(): LayoutPrefs {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -366,12 +386,12 @@ function loadPrefs(): LayoutPrefs {
       );
       return {
         dashboard: {
-          visible: parsed.dashboard?.visible ?? DEFAULT_DASHBOARD_VISIBLE,
+          visible: sanitizeVisible(parsed.dashboard?.visible, DEFAULT_DASHBOARD_VISIBLE),
           kpiSlots: parsed.dashboard?.kpiSlots ?? [...DEFAULT_KPI_SLOTS],
           gridLayout: dashboardGrid,
         },
         skuDetail: {
-          visible: parsed.skuDetail?.visible ?? DEFAULT_SKU_VISIBLE,
+          visible: sanitizeVisible(parsed.skuDetail?.visible, DEFAULT_SKU_VISIBLE),
           gridLayout: skuGrid,
         },
         shipment: {

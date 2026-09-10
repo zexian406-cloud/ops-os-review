@@ -52,6 +52,12 @@ const num = (v: unknown, fallback = 0): number => {
 };
 /** 判断单元格是否有显式值（区分"空单元格"与"真实的 0 值"，避免 0 被误当成空） */
 const hasCellValue = (v: unknown): boolean => v != null && v !== "";
+/** 读取百分比值：Excel 百分比格式存为小数（7.23%→0.0723），自动转成整数（7.23）；与 excel.ts 的 pct 口径一致 */
+const pct = (v: unknown, fallback = 0): number => {
+  const n = num(v, fallback);
+  if (n > 0 && n < 1) return Math.round(n * 10000) / 100;
+  return n;
+};
 const str = (v: unknown, fallback = ""): string =>
   v == null ? fallback : String(v).trim();
 
@@ -136,9 +142,9 @@ const tmplBundle = () => {
   s7["!cols"] = autoCols(["SKU", "头程费", "配送费"]);
   XLSX.utils.book_append_sheet(wb, s7, "头程尾程更新");
 
-  // Sheet 7: SKU标识符(一次性迁移)（含产品链接 + 竞品链接）
-  const s8Headers = ["店铺", "SKU", "品名", "MSKU", "ASIN", "UPC", "品类", "上架日期", "售价", "运费", "FOB", "仓租", "发货方式", "包裹长cm", "包裹宽cm", "包裹高cm", "包裹重kg", "单箱数", "产品链接", "竞品链接"];
-  const s8 = XLSX.utils.aoa_to_sheet([s8Headers, ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", "4901234567890", "户外炉具", "2026-01-15", 39.99, 0, 28.5, 0.8, "FBA", 30, 25, 20, 1.2, 10, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX\nhttps://www.amazon.com/dp/B0YYYYYYYY"]]);
+  // Sheet 7: SKU标识符(一次性迁移)（含产品链接 + 竞品链接 + 组合公式）
+  const s8Headers = ["店铺", "SKU", "品名", "MSKU", "ASIN", "UPC", "品类", "上架日期", "售价", "运费", "FOB", "仓租", "发货方式", "包裹长cm", "包裹宽cm", "包裹高cm", "包裹重kg", "单箱数", "产品链接", "竞品链接", "组合公式"];
+  const s8 = XLSX.utils.aoa_to_sheet([s8Headers, ["BIFULISAN Store", "BFRS258", "BF卡式炉", "BFRS258-GM", "B0GC3HFWHP", "4901234567890", "户外炉具", "2026-01-15", 39.99, 0, 28.5, 0.8, "FBA", 30, 25, 20, 1.2, 10, "https://www.amazon.com/dp/B0GC3HFWHP", "https://www.amazon.com/dp/B0XXXXXXXX\nhttps://www.amazon.com/dp/B0YYYYYYYY", "BFB052×1+BFB053×1"]]);
   s8["!dataValidations"] = [{ type: "list", formula1: '"FBA,FBM,混发"', sqref: "M2:M101" }];
   s8["!cols"] = autoCols(s8Headers);
   XLSX.utils.book_append_sheet(wb, s8, "SKU标识符");
@@ -735,11 +741,11 @@ export default function ImportPage() {
         const rawReturnRate = pickCell(row, cm.returnRate);
         const rawRefundRate = pickCell(row, cm.refundRate);
 
-        const adRatio = hasCellValue(rawAdRatio) ? num(rawAdRatio) : (prevSnapshot?.adRatio ?? 0);
+        const adRatio = hasCellValue(rawAdRatio) ? pct(rawAdRatio) : (prevSnapshot?.adRatio ?? 0);
         const rating = hasCellValue(rawRating) ? num(rawRating) : (prevSnapshot?.rating ?? 0);
         const reviewCount = hasCellValue(rawReviewCount) ? num(rawReviewCount) : (prevSnapshot?.reviewCount ?? 0);
-        const returnRate = hasCellValue(rawReturnRate) ? num(rawReturnRate) : (prevSnapshot?.returnRate ?? 0);
-        const refundRate = hasCellValue(rawRefundRate) ? num(rawRefundRate) : (prevSnapshot?.refundRate ?? 0);
+        const returnRate = hasCellValue(rawReturnRate) ? pct(rawReturnRate) : (prevSnapshot?.returnRate ?? 0);
+        const refundRate = hasCellValue(rawRefundRate) ? pct(rawRefundRate) : (prevSnapshot?.refundRate ?? 0);
 
         const snap: Omit<DailySnapshot, "id"> = {
           date: today,

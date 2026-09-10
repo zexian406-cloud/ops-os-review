@@ -4,9 +4,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { useOpsData } from "@/domain/store";
-import { db, getCurrentSiteId } from "@/domain/db";
-import { computeAll } from "@/domain/calculator";
-import type { DailySnapshot, SkuMaster } from "@/domain/types";
+import { computeAll, computeWarehouseTotals } from "@/domain/calculator";
+import type { DailySnapshot, SkuMaster, InventoryLayer } from "@/domain/types";
 
 /* ────────── 工具函数 ────────── */
 const safeNum = (v: number | undefined | null): number =>
@@ -120,7 +119,20 @@ function aggregateSnapshots(
   return result;
 }
 
-function aggregate(snapMap: Map<string, DailySnapshot>, skuMap?: Map<string, SkuMaster>, defaultCommissionRate?: number): AggMetrics {
+/**
+ * 快照库存兜底：快照自带库存时直接用；为 0 时回退到该 SKU/日期的 inventoryLayer
+ * （旧导入未回填库存字段，历史页须从分仓库存表关联，否则「总库存」恒为 0）。
+ */
+function snapStock(r: DailySnapshot, invByDate?: Map<string, InventoryLayer>): number {
+  const oh = safeNum(r.stockOnHand);
+  const it = safeNum(r.stockInTransit);
+  if (oh > 0 || it > 0 || !invByDate) return oh + it;
+  const layer = invByDate.get(`${r.sku}__${r.date}`);
+  if (!layer) return 0;
+  return computeWarehouseTotals(layer).total;
+}
+
+function aggregate(snapMap: Map<string, DailySnapshot>, skuMap?: Map<string, SkuMaster>, defaultCommissionRate?: number, invByDate?: Map<string, InventoryLayer>): AggMetrics {
   const vals = Array.from(snapMap.values());
   if (vals.length === 0) {
     return { salesSum: 0, salesCount: 0, avgAdRatio: 0, avgRating: 0, avgReturnRate: 0, avgProfitMargin: 0, totalStock: 0, totalAdSpend: 0, skuCount: 0 };
@@ -148,7 +160,7 @@ function aggregate(snapMap: Map<string, DailySnapshot>, skuMap?: Map<string, Sku
     }
   }
   const avgProfitMargin = marginVals.length > 0 ? marginVals.reduce((s, v) => s + v, 0) / marginVals.length : 0;
-  const totalStock = vals.reduce((s, r) => s + safeNum(r.stockOnHand) + safeNum(r.stockInTransit), 0);
+  const totalStock = vals.reduce((s, r) => s + snapStock(r, invByDate), 0);
   const totalAdSpend = vals.reduce((s, r) => s + safeNum(r.adSpend), 0);
   return { salesSum, salesCount, avgAdRatio, avgRating, avgReturnRate, avgProfitMargin, totalStock, totalAdSpend, skuCount: vals.length };
 }
@@ -194,7 +206,7 @@ function MetricCard({
 
 /* ────────── 主页面 ────────── */
 export default function HistoryPage() {
-  const { snapshots, skuMaster, currentSite, loading, reload } = useOpsData();
+  const { snapshots, inventory, skuMaster, currentSite, loading, reload } = useOpsData();
 
   // 时间维度：单日 / 按周 / 按月
   const [dimension, setDimension] = useState<Dimension>("date");
@@ -222,8 +234,6 @@ export default function HistoryPage() {
   // 选中的两个周期
   const [curPeriod, setCurPeriod] = useState<string>("");
   const [prevPeriod, setPrevPeriod] = useState<string>("");
-  // SKU查找表
-  const [skuMap, setSkuMap] = useState<Map<string, SkuMaster>>(new Map());
   // 搜索关键词
   const [search, setSearch] = useState("");
 
@@ -243,14 +253,8 @@ export default function HistoryPage() {
     }
   }, [periods, curPeriod, prevPeriod]);
 
-  // 加载SKU主档
-  useEffect(() => {
-    (async () => {
-      const siteId = await getCurrentSiteId();
-      const all = await db.skuMaster.toArray();
-      setSkuMap(new Map(all.filter(s => (s.siteId ?? "site_us") === siteId).map((s) => [s.sku, s])));
-    })();
-  }, []);
+  // 加载SKU主档：直接用 useOpsData 提供的站点过滤数据，随站点切换/重新导入自动刷新
+  const skuMap = useMemo(() => new Map(skuMaster.map((s) => [s.sku, s])), [skuMaster]);
 
   // 当前周期和上期的日期列表
   const curDates = useMemo(() => periods.find(([k]) => k === curPeriod)?.[1] ?? [], [periods, curPeriod]);
@@ -260,9 +264,16 @@ export default function HistoryPage() {
   const curSnapshots = useMemo(() => aggregateSnapshots(snapshots, curDates), [snapshots, curDates]);
   const prevSnapshots = useMemo(() => aggregateSnapshots(snapshots, prevDates), [snapshots, prevDates]);
 
+  // 分仓库存按 SKU+日期 索引（快照库存为 0 时兜底）
+  const invByDate = useMemo(() => {
+    const map = new Map<string, InventoryLayer>();
+    for (const layer of inventory) map.set(`${layer.sku}__${layer.date}`, layer);
+    return map;
+  }, [inventory]);
+
   // 聚合指标
-  const curAgg = useMemo(() => aggregate(curSnapshots, skuMap, currentSite?.commissionRate), [curSnapshots, skuMap, currentSite]);
-  const prevAgg = useMemo(() => aggregate(prevSnapshots, skuMap, currentSite?.commissionRate), [prevSnapshots, skuMap, currentSite]);
+  const curAgg = useMemo(() => aggregate(curSnapshots, skuMap, currentSite?.commissionRate, invByDate), [curSnapshots, skuMap, currentSite, invByDate]);
+  const prevAgg = useMemo(() => aggregate(prevSnapshots, skuMap, currentSite?.commissionRate, invByDate), [prevSnapshots, skuMap, currentSite, invByDate]);
 
   // 图表数据
   const chartData = useMemo(() => {
@@ -318,15 +329,15 @@ export default function HistoryPage() {
         prevRating: safeNum(prev?.rating),
         curMargin: calcMargin(cur),
         prevMargin: calcMargin(prev),
-        curStock: safeNum(cur?.stockOnHand) + safeNum(cur?.stockInTransit),
-        prevStock: safeNum(prev?.stockOnHand) + safeNum(prev?.stockInTransit),
+        curStock: cur ? snapStock(cur, invByDate) : 0,
+        prevStock: prev ? snapStock(prev, invByDate) : 0,
         salesDelta: curSales - prevSales,
       });
     }
     // 按销量变化绝对值降序
     rows.sort((a, b) => Math.abs(b.salesDelta) - Math.abs(a.salesDelta));
     return rows;
-  }, [curSnapshots, prevSnapshots, skuMap]);
+  }, [curSnapshots, prevSnapshots, skuMap, invByDate]);
 
   // 过滤搜索
   const filteredRows = useMemo(() => {
