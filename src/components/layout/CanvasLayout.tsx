@@ -153,12 +153,6 @@ export default function CanvasLayout({
   // 仅在外部布局变化（重置/显隐模块）时清空，切换浏览/编辑模式不清空。
   const manuallyResizedRef = useRef<Set<string>>(new Set());
 
-  // ── 测高标志 ──
-  // measureAndAdjust 修改 h 后，压缩器会修改 y → onLayoutChange 触发。
-  // 此时 isMeasuringRef=true，handleLayoutChange 忽略 y 防止循环。
-  // 用户拖拽/缩放时 isMeasuringRef=false，handleLayoutChange 包含 y 让压缩生效。
-  const isMeasuringRef = useRef(false);
-
   // ── 外部布局变更版本号 ──
   // 用于触发测高 effect，但不形成 internalLayout → measureAndAdjust → internalLayout 的反馈环
   const [layoutVersion, setLayoutVersion] = useState(0);
@@ -181,37 +175,20 @@ export default function CanvasLayout({
   // 如果 layout 未实际变化则返回 prev（相同引用不触发重渲染）
   //
   // 【垂直压缩修复】
-  // 之前为修复抖动而忽略所有 y 变化，导致拖拽后压缩器的 y 值未同步到 internalLayout，
-  // 卡片原位置留空、下方卡片不上移。
-  // 现在区分两种场景：
-  // 1. 测高引发（isMeasuringRef=true）：忽略 y，仅更新 x/w/h，打破 measureAndAdjust 循环
-  // 2. 用户拖拽/缩放引发（isMeasuringRef=false）：包含 y，让垂直压缩生效
+  // 统一接受压缩器的结果（含 y），让垂直压缩在测高/拖拽后都生效：
+  // 测高把卡片高度改小后，压缩器会把下方卡片上移填补空隙，不再残留空白。
+  // 循环由单次延时重测（300ms）打破：测高是确定性计算（h 取整），
+  // 一旦 h 稳定，后续测量不再改变布局，压缩随之停止。
   const handleLayoutChange = useCallback((newLayout: Layout) => {
     setInternalLayout((prev) => {
-      const measuring = isMeasuringRef.current;
-      if (measuring) isMeasuringRef.current = false;
-
       if (prev.length === newLayout.length) {
         const same = prev.every((item, i) => {
           const n = newLayout[i];
-          if (measuring) {
-            return n.i === item.i && n.x === item.x && n.w === item.w && n.h === item.h;
-          }
           return n.i === item.i && n.x === item.x && n.y === item.y && n.w === item.w && n.h === item.h;
         });
         if (same) return prev;
       }
 
-      if (measuring) {
-        // 测高引发：保留 prev 的 y，仅更新 x/w/h
-        return prev.map((item, i) => {
-          const n = newLayout[i];
-          return n && (n.x !== item.x || n.w !== item.w || n.h !== item.h)
-            ? { ...item, x: n.x, w: n.w, h: n.h }
-            : item;
-        });
-      }
-      // 用户拖拽/缩放引发：包含 y，让压缩器的结果生效
       return prev.map((item, i) => {
         const n = newLayout[i];
         if (!n) return item;
@@ -313,7 +290,6 @@ export default function CanvasLayout({
     });
 
     if (changed) {
-      isMeasuringRef.current = true;
       setInternalLayout(nextLayout);
     }
   }, [canRender, containerRef]);
