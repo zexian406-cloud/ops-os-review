@@ -249,6 +249,10 @@ export default function CanvasLayout({
     const nextLayout = currentLayout.map((it) => ({ ...it }));
     const nextByI = new Map(nextLayout.map((it) => [it.i, it]));
 
+    // 收集每张卡片测得的自然所需行数（key → { y, neededH }），
+    // 全部测完后按行统一对齐，避免循环中相互覆盖。
+    const measured = new Map<string, { y: number; neededH: number }>();
+
     gridItems.forEach((gridItem) => {
       // GridLayout v2 通过 cloneElement 把 "react-grid-item" 类名注入到 CanvasItem，
       // 因此 .react-grid-item 与 .canvas-item-wrapper 通常是同一个元素；
@@ -280,14 +284,26 @@ export default function CanvasLayout({
       if (naturalHeight <= 0) return;
 
       const neededH = Math.max(2, Math.ceil((naturalHeight + 12) / 52));
-      if (neededH !== layoutItem.h) {
-        const target = nextByI.get(key);
-        if (target) {
-          target.h = neededH;
-          changed = true;
-        }
-      }
+      const item = layoutByI.get(key);
+      if (item) measured.set(key, { y: item.y, neededH });
     });
+
+    // 按行对齐：同一 y 的卡片，若高度差 ≤1 行则拉齐到该行最大值，
+    // 使同排卡片底边齐平；差超过 1 行（如空态卡）不强拉，避免留白。
+    const rowMax = new Map<number, number>();
+    for (const { y, neededH } of measured.values()) {
+      rowMax.set(y, Math.max(rowMax.get(y) ?? 0, neededH));
+    }
+    for (const [key, { y, neededH }] of measured) {
+      const target = nextByI.get(key);
+      if (!target) continue;
+      const max = rowMax.get(y) ?? neededH;
+      const alignedH = max - neededH <= 1 ? max : neededH;
+      if (alignedH !== target.h) {
+        target.h = alignedH;
+        changed = true;
+      }
+    }
 
     if (changed) {
       setInternalLayout(nextLayout);
