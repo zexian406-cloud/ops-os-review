@@ -5,6 +5,7 @@ import i18n from "./i18n";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ensureDatabaseOpen, ensureDefaultSites } from "./domain/db";
+import { ensureSeedData } from "./domain/seed";
 
 function App() {
   const [ready, setReady] = useState(false);
@@ -25,6 +26,8 @@ function App() {
         await ensureDatabaseOpen();
         // 确保默认站点在组件渲染前初始化
         await ensureDefaultSites();
+        // 空库时种入通用演示数据（有真实数据则跳过）
+        await ensureSeedData();
 
         setReady(true);
       } catch (err) {

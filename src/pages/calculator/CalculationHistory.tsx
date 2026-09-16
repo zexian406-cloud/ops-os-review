@@ -7,13 +7,14 @@ import { db } from "@/domain/db";
 interface Props {
   records: CalculationRecord[];
   onRefresh: () => void;
+  onEdit: (rec: CalculationRecord) => void;
 }
 
 const CURRENCY: Record<string, string> = {
   US: "$", UK: "£", DE: "€", JP: "¥", CA: "C$", AU: "A$",
 };
 
-export default function CalculationHistory({ records, onRefresh }: Props) {
+export default function CalculationHistory({ records, onRefresh, onEdit }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -138,6 +139,14 @@ export default function CalculationHistory({ records, onRefresh }: Props) {
                 </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  title="重新编辑并重新测算"
+                  onClick={(e) => { e.stopPropagation(); onEdit(rec); }}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-[14px] text-foreground-400 hover:bg-primary-50 hover:text-primary-600 cursor-pointer"
+                >
+                  <i className="ri-edit-line" aria-hidden />
+                </button>
                 <i className={`${isOpen ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"} text-foreground-400 text-[16px]`} aria-hidden />
                 <button
                   type="button"

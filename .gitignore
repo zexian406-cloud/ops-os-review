@@ -1,6 +1,9 @@
 node_modules/
 dist/
 out/
+.next/
+next-env.d.ts
+*.xlsx
 .env
 *.local
 project.tar.gz

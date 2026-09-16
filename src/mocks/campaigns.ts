@@ -3,6 +3,7 @@ import type { Campaign } from "@/domain/types";
 export const mockCampaigns: Campaign[] = [
   {
     id: "prime-day-2026",
+    siteId: "site_demo",
     name: "Prime Day 2026",
     startDate: "2026-10-08",
     endDate: "2026-10-09",
@@ -11,6 +12,7 @@ export const mockCampaigns: Campaign[] = [
   },
   {
     id: "black-friday-2026",
+    siteId: "site_demo",
     name: "Black Friday",
     startDate: "2026-11-24",
     endDate: "2026-11-28",
@@ -19,6 +21,7 @@ export const mockCampaigns: Campaign[] = [
   },
   {
     id: "christmas-2026",
+    siteId: "site_demo",
     name: "Christmas",
     startDate: "2026-12-15",
     endDate: "2026-12-25",

@@ -106,6 +106,22 @@ export default function CalculatorPage() {
   const [returnRate, setReturnRate] = useState("5");
   const [storageDays, setStorageDays] = useState("30");
 
+  // ── 单位系统：公制(cm/kg) ↔ 英制(in/lb)；内部一律以 cm/kg 存储与计算 ──
+  const [unitMode, setUnitMode] = useState<"metric" | "imperial">("metric");
+  const isImperial = unitMode === "imperial";
+  const CM_PER_INCH = 2.54;
+  const KG_PER_LB = 0.45359237;
+  const unitLabel = isImperial
+    ? { len: "in", lenHint: "cm", wt: "lb", wtHint: "kg" }
+    : { len: "cm", lenHint: "in", wt: "kg", wtHint: "lb" };
+  const fmtNum = (v: number) => Number(v.toFixed(2));
+  // 输入 → 内部 cm/kg
+  const toCm = (raw: string) => raw === "" ? "" : String(Number((isImperial ? n(raw) * CM_PER_INCH : n(raw)).toFixed(3)));
+  const toKg = (raw: string) => raw === "" ? "" : String(Number((isImperial ? n(raw) * KG_PER_LB : n(raw)).toFixed(4)));
+  // 内部 cm/kg → 当前单位显示
+  const fromCm = (v: string) => v === "" ? "" : String(fmtNum(isImperial ? n(v) / CM_PER_INCH : n(v)));
+  const fromKg = (v: string) => v === "" ? "" : String(fmtNum(isImperial ? n(v) / KG_PER_LB : n(v)));
+
   // ── 产品列表 ──
   const [products, setProducts] = useState<ProductRow[]>([emptyProduct()]);
 
@@ -133,6 +149,44 @@ export default function CalculatorPage() {
   };
 
   const currency = CURRENCY[marketplace] ?? "$";
+
+  // ── 重新编辑：把已保存的测算记录回填到表单，便于修改后重新测算 ──
+  const handleEdit = (rec: CalculationRecord) => {
+    const rateN = rec.exchangeRate ?? n(rate);
+    setMarketplace(rec.marketplace || "US");
+    setRate(String(rateN));
+    setCommRate(String(rec.commissionRate ?? SITE_COMMISSION[rec.marketplace] ?? 15));
+    setAdRate(String(rec.adRate ?? 10));
+    setReturnRate(String(rec.returnRate ?? 5));
+    setStorageDays(String(rec.storageDays ?? 30));
+
+    const fobCny = rec.costFob * rateN;
+    const isFbm = rec.deliveryMode === "FBM";
+    const row: ProductRow = {
+      id: uid(),
+      name: rec.name || "",
+      asin: rec.asin || "",
+      length: "", width: "", height: "", weight: "",
+      unitsPerBox: "1",
+      fobCny: String(Number(fobCny.toFixed(2))),
+      headFreight: String(rec.costShipping),
+      headFreightManual: true, // 保留已保存的头程，避免因缺少尺寸被自动重算覆盖
+      price: String(rec.price),
+      deliveryMode: rec.deliveryMode,
+      fbaDelivery: isFbm ? "" : String(rec.fbaDelivery ?? rec.costDelivery),
+      fbaStorage: isFbm ? "" : String(rec.fbaStorage ?? rec.costStorage),
+      fbmCarriers:
+        isFbm && rec.schemeName && rec.schemeName !== "（无方案）"
+          ? [{ id: uid(), name: rec.schemeName, deliveryFee: String(rec.costDelivery) }]
+          : [],
+      selectedProviders: [],
+      providerShipFees: {},
+    };
+    setProducts([row]);
+    setSaveMode("record_only");
+    setSaveNotes(rec.notes || "");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   useEffect(() => {
     db.warehouseProviders.toArray().then((all) => {
@@ -446,12 +500,28 @@ export default function CalculatorPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-primary-700">Profit Calculator</div>
-        <h1 className="font-heading text-[26px] font-bold text-foreground-950">新品测算</h1>
-        <p className="text-[13px] text-foreground-500">
-          支持 FBA / FBM 二模式 · 站点切换自动联动货币与费率 · 自动计算净利/净利率/ROI
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:justify-between">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-primary-700">Profit Calculator</div>
+          <h1 className="font-heading text-[26px] font-bold text-foreground-950">新品测算</h1>
+          <p className="text-[13px] text-foreground-500">
+            支持 FBA / FBM 二模式 · 站点切换自动联动货币与费率 · 自动计算净利/净利率/ROI
+          </p>
+        </div>
+        {/* 单位切换 */}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[11px] font-medium text-foreground-500">尺寸/重量单位</span>
+          <div className="flex rounded-md border border-background-200 bg-background-100/70 p-0.5">
+            <button type="button" onClick={() => setUnitMode("metric")}
+              className={`rounded px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap cursor-pointer transition-colors ${unitMode === "metric" ? "bg-primary-500 text-background-50" : "text-foreground-500 hover:text-foreground-800"}`}>
+              cm / kg
+            </button>
+            <button type="button" onClick={() => setUnitMode("imperial")}
+              className={`rounded px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap cursor-pointer transition-colors ${unitMode === "imperial" ? "bg-primary-500 text-background-50" : "text-foreground-500 hover:text-foreground-800"}`}>
+              in / lb
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* ── 全局参数 ── */}
@@ -544,10 +614,10 @@ export default function CalculatorPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
               <div><label className={labelCls}>品名</label><input className={inputCls} value={p.name} onChange={(e) => updateProduct(p.id, { name: e.target.value })} placeholder="选填" /></div>
               <div><label className={labelCls}>ASIN</label><input className={inputCls} value={p.asin} onChange={(e) => updateProduct(p.id, { asin: e.target.value })} placeholder="选填" /></div>
-              <div><label className={labelCls}>长 (cm)</label><input type="number" step="0.1" className={inputCls} value={p.length} onChange={(e) => updateProduct(p.id, { length: e.target.value })} placeholder="0" />{n(p.length) > 0 && <span className="mt-0.5 block text-[10px] text-foreground-500 mono-num">≈ {(n(p.length) / 2.54).toFixed(2)} in</span>}</div>
-              <div><label className={labelCls}>宽 (cm)</label><input type="number" step="0.1" className={inputCls} value={p.width} onChange={(e) => updateProduct(p.id, { width: e.target.value })} placeholder="0" />{n(p.width) > 0 && <span className="mt-0.5 block text-[10px] text-foreground-500 mono-num">≈ {(n(p.width) / 2.54).toFixed(2)} in</span>}</div>
-              <div><label className={labelCls}>高 (cm)</label><input type="number" step="0.1" className={inputCls} value={p.height} onChange={(e) => updateProduct(p.id, { height: e.target.value })} placeholder="0" />{n(p.height) > 0 && <span className="mt-0.5 block text-[10px] text-foreground-500 mono-num">≈ {(n(p.height) / 2.54).toFixed(2)} in</span>}</div>
-              <div><label className={labelCls}>重量 (kg)</label><input type="number" step="0.01" className={inputCls} value={p.weight} onChange={(e) => updateProduct(p.id, { weight: e.target.value })} placeholder="0" />{n(p.weight) > 0 && <span className="mt-0.5 block text-[10px] text-foreground-500 mono-num">≈ {(n(p.weight) * 2.20462).toFixed(2)} lb</span>}</div>
+              <div><label className={labelCls}>长 ({unitLabel.len})</label><input type="number" step="0.1" className={inputCls} value={fromCm(p.length)} onChange={(e) => updateProduct(p.id, { length: toCm(e.target.value) })} placeholder="0" />{n(p.length) > 0 && <span className="mt-0.5 block text-[10px] text-foreground-500 mono-num">≈ {fmtNum(isImperial ? n(p.length) : n(p.length) / 2.54)} {unitLabel.lenHint}</span>}</div>
+              <div><label className={labelCls}>宽 ({unitLabel.len})</label><input type="number" step="0.1" className={inputCls} value={fromCm(p.width)} onChange={(e) => updateProduct(p.id, { width: toCm(e.target.value) })} placeholder="0" />{n(p.width) > 0 && <span className="mt-0.5 block text-[10px] text-foreground-500 mono-num">≈ {fmtNum(isImperial ? n(p.width) : n(p.width) / 2.54)} {unitLabel.lenHint}</span>}</div>
+              <div><label className={labelCls}>高 ({unitLabel.len})</label><input type="number" step="0.1" className={inputCls} value={fromCm(p.height)} onChange={(e) => updateProduct(p.id, { height: toCm(e.target.value) })} placeholder="0" />{n(p.height) > 0 && <span className="mt-0.5 block text-[10px] text-foreground-500 mono-num">≈ {fmtNum(isImperial ? n(p.height) : n(p.height) / 2.54)} {unitLabel.lenHint}</span>}</div>
+              <div><label className={labelCls}>重量 ({unitLabel.wt})</label><input type="number" step="0.01" className={inputCls} value={fromKg(p.weight)} onChange={(e) => updateProduct(p.id, { weight: toKg(e.target.value) })} placeholder="0" />{n(p.weight) > 0 && <span className="mt-0.5 block text-[10px] text-foreground-500 mono-num">≈ {fmtNum(isImperial ? n(p.weight) : n(p.weight) / KG_PER_LB)} {unitLabel.wtHint}</span>}</div>
             </div>
 
             {result && result.cbm > 0 && (
@@ -1117,7 +1187,7 @@ export default function CalculatorPage() {
         }
       >
         {showHistory && (
-          <CalculationHistory records={calcRecords} onRefresh={loadRecords} />
+          <CalculationHistory records={calcRecords} onRefresh={loadRecords} onEdit={handleEdit} />
         )}
         {!showHistory && calcRecords.length > 0 && (
           <div className="text-[12px] text-foreground-500">最近保存：{calcRecords[0].name || "未命名"} • {new Date(calcRecords[0].createdAt).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
