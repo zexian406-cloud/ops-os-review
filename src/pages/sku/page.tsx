@@ -9,6 +9,7 @@ import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import type { SkuMaster, DailySnapshot, Promotion, InventoryLayer, Shop, Site } from "@/domain/types";
 import { SITE_CHANGE_EVENT } from "@/components/layout/SiteSwitcher";
+import { useCurrency } from "@/hooks/useCurrency";
 
 const lifecycleLabel: Record<string, string> = {
   new: "新品",
@@ -803,6 +804,7 @@ export default function SkuList() {
   const [fobInRmb, setFobInRmb] = useState(false);
   const [fobRmb, setFobRmb] = useState<string>("");
   const currentSite = sites.find(s => s.id === currentSiteId);
+  const { fobCurrency, convert: convertViaRates } = useCurrency();
 
   if (loading)
     return <div className="text-sm text-foreground-500">加载中...</div>;
@@ -811,14 +813,20 @@ export default function SkuList() {
     "w-full rounded-md border border-background-200 bg-background-50 px-3 py-2 text-sm text-foreground-800 placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200/50";
   const labelCls = "mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-500";
 
-  const cnyRate = currentSite?.cnyToUsdRate ?? 7.25;
-  const siteRate = currentSite?.exchangeRateToUsd ?? 1.0;
+  const fobCur = fobCurrency || "CNY";
+  const siteCurrencyCode = currentSite?.currency ?? "USD";
 
-  const convertFobRmb = (rmb: number) => {
-    const usd = rmb / cnyRate;
-    const siteCurrency = usd / siteRate;
-    return Math.round(siteCurrency * 100) / 100;
+  const convertFobRmb = (amount: number) => {
+    // 优先走全局汇率图（任意货币对、支持中转）；无路径时回退站点旧字段的两级换算
+    const viaGraph = convertViaRates(amount, fobCur, siteCurrencyCode);
+    if (viaGraph != null) return Math.round(viaGraph * 100) / 100;
+    const cnyRate = currentSite?.cnyToUsdRate ?? 7.25;
+    const siteRate = currentSite?.exchangeRateToUsd ?? 1.0;
+    const usd = amount / cnyRate;
+    return Math.round((usd / siteRate) * 100) / 100;
   };
+
+  const fobRateHint = convertViaRates(1, fobCur, siteCurrencyCode);
 
   const handleFobRmbChange = (val: string) => {
     setFobRmb(val);
@@ -1378,7 +1386,7 @@ export default function SkuList() {
                         }}
                         className="w-3.5 h-3.5 accent-primary-500"
                       />
-                      <span className="font-medium">FOB以人民币输入</span>
+                      <span className="font-medium">{fobCur === "CNY" ? "FOB以人民币输入" : `FOB以${fobCur}输入`}</span>
                     </label>
                     {fobInRmb && (
                       <div className="flex items-center gap-2">
@@ -1387,17 +1395,19 @@ export default function SkuList() {
                           step="0.01"
                           value={fobRmb}
                           onChange={(e) => handleFobRmbChange(e.target.value)}
-                          placeholder="人民币金额"
+                          placeholder={fobCur === "CNY" ? "人民币金额" : `${fobCur} 金额`}
                           className="w-32 rounded-md border border-background-300 bg-white px-2 py-1 text-sm text-foreground-700 focus:border-primary-400 focus:outline-none"
                         />
-                        <span className="text-xs text-foreground-500">RMB</span>
+                        <span className="text-xs text-foreground-500">{fobCur}</span>
                         {fobRmb && !isNaN(parseFloat(fobRmb)) && (
                           <span className="text-xs text-primary-600 font-medium">
                             = {convertFobRmb(parseFloat(fobRmb))} {currentCurrency}
                           </span>
                         )}
                         <span className="text-[10px] text-foreground-400">
-                          (汇率: 1USD = {cnyRate}RMB)
+                          {fobRateHint != null
+                            ? `(汇率: 1${fobCur} = ${Number(fobRateHint.toPrecision(8))} ${siteCurrencyCode})`
+                            : "(汇率图中无可用路径，已按站点旧汇率换算)"}
                         </span>
                       </div>
                     )}

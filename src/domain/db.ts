@@ -17,7 +17,7 @@ import type {
   Shop,
   OpsLog,
 } from "./types";
-import type { Site, SiteConfig, CrossSiteSummary, CrossSiteReport } from "./types";
+import type { Site, SiteConfig, CrossSiteSummary, CrossSiteReport, ExchangeRate } from "./types";
 
 /**
  * Amazon Operation OS — Local storage layer (IndexedDB via Dexie).
@@ -40,6 +40,7 @@ export class AmzOpsDB extends Dexie {
   shops!: Table<Shop, string>;
   opsLogs!: Table<OpsLog, string>;
   sites!: Table<Site, string>;
+  exchangeRates!: Table<ExchangeRate, string>;
 
   constructor() {
     super("amazon-ops-os");
@@ -184,6 +185,35 @@ export class AmzOpsDB extends Dexie {
         const fixed = needsFix.map((r: any) => ({ ...r, siteId: "site_us" }));
         await tx.table(table).bulkPut(fixed);
       }
+    });
+
+    // Step 6: 全局多币种汇率表（任意货币对，用户自定义）。
+    // 已有站点级汇率（exchangeRateToUsd / cnyToUsdRate）迁移为全局货币对，避免用户已改的汇率丢失；
+    // 全新数据库（无站点数据）的默认汇率由 ensureDefaultExchangeRates 在 UI 挂载时懒填充。
+    this.version(15).stores({
+      exchangeRates: "id, from, to",
+    }).upgrade(async (tx) => {
+      let siteRows: Array<Record<string, unknown>> = [];
+      try {
+        siteRows = await tx.table("sites").toArray();
+      } catch {
+        siteRows = [];
+      }
+      if (siteRows.length === 0) return;
+      const rateMap = new Map<string, { from: string; to: string; rate: number }>();
+      for (const s of siteRows) {
+        const cur = normalizeCurrencyCode(String(s?.currency ?? ""));
+        const r2u = Number(s?.exchangeRateToUsd);
+        if (cur && cur !== "USD" && Number.isFinite(r2u) && r2u > 0) {
+          rateMap.set(`${cur}_USD`, { from: cur, to: "USD", rate: r2u });
+        }
+      }
+      const usSite = siteRows.find((s) => normalizeCurrencyCode(String(s?.currency ?? "")) === "USD") ?? siteRows[0];
+      const cnyRate = Number(usSite?.cnyToUsdRate) > 0 ? Number(usSite.cnyToUsdRate) : 7.25;
+      rateMap.set("USD_CNY", { from: "USD", to: "CNY", rate: cnyRate });
+      const now = new Date().toISOString();
+      const rows = [...rateMap.values()].map((r) => ({ id: `${r.from}_${r.to}`, ...r, updatedAt: now }));
+      await tx.table("exchangeRates").bulkPut(rows);
     });
   }
 }
@@ -832,9 +862,10 @@ export async function exportSnapshot(): Promise<{
   shops: Shop[];
   opsLogs: OpsLog[];
   warehouseMappings: WarehouseMapping[];
+  exchangeRates: ExchangeRate[];
   exportedAt: string;
 }> {
-  const [skuMaster, dailySnapshot, inventoryLayer, campaigns, promotions, manualPromotions, alerts, config, shops, opsLogs, warehouseMappings] =
+  const [skuMaster, dailySnapshot, inventoryLayer, campaigns, promotions, manualPromotions, alerts, config, shops, opsLogs, warehouseMappings, exchangeRates] =
     await Promise.all([
       db.skuMaster.toArray(),
       db.dailySnapshot.toArray(),
@@ -847,6 +878,7 @@ export async function exportSnapshot(): Promise<{
       db.shops.toArray(),
       db.opsLogs.toArray(),
       db.warehouseMappings.toArray(),
+      db.exchangeRates.toArray(),
     ]);
   return {
     skuMaster,
@@ -860,6 +892,7 @@ export async function exportSnapshot(): Promise<{
     shops,
     opsLogs,
     warehouseMappings,
+    exchangeRates,
     exportedAt: new Date().toISOString(),
   };
 }
@@ -877,6 +910,7 @@ export async function importSnapshot(payload: {
   shops?: Shop[];
   opsLogs?: OpsLog[];
   warehouseMappings?: WarehouseMapping[];
+  exchangeRates?: ExchangeRate[];
 }): Promise<void> {
   await db.transaction(
     "rw",
@@ -896,6 +930,7 @@ export async function importSnapshot(payload: {
       db.shops,
       db.opsLogs,
       db.warehouseMappings,
+      db.exchangeRates,
     ],
     async () => {
       if (payload.skuMaster) {
@@ -944,8 +979,13 @@ export async function importSnapshot(payload: {
         await db.warehouseMappings.clear();
         await db.warehouseMappings.bulkPut(payload.warehouseMappings);
       }
+      if (payload.exchangeRates) {
+        await db.exchangeRates.clear();
+        await db.exchangeRates.bulkPut(payload.exchangeRates);
+      }
     }
   );
+  window.dispatchEvent(new CustomEvent(EXCHANGE_RATES_EVENT));
 }
 // ==================== OpsLog CRUD ====================
 export async function getOpsLogs(sku?: string, siteId?: string): Promise<OpsLog[]> {
@@ -1251,6 +1291,118 @@ export async function getSiteConfig(siteId: string): Promise<SiteConfig> {
 
 export async function setSiteConfig(cfg: SiteConfig): Promise<void> {
   await db.config.put({ key: `siteConfig_${cfg.siteId}`, value: cfg });
+}
+
+// ==================== 多币种汇率（任意货币对，用户自定义） ====================
+export const EXCHANGE_RATES_EVENT = "ops-rates-change";
+export const DEFAULT_FOB_CURRENCY = "CNY";
+
+export function normalizeCurrencyCode(code: string): string {
+  return String(code ?? "").trim().toUpperCase().slice(0, 8);
+}
+
+export const DEFAULT_EXCHANGE_RATES: ExchangeRate[] = [
+  { id: "USD_CNY", from: "USD", to: "CNY", rate: 7.25, updatedAt: "" },
+  { id: "GBP_USD", from: "GBP", to: "USD", rate: 1.27, updatedAt: "" },
+  { id: "EUR_USD", from: "EUR", to: "USD", rate: 1.08, updatedAt: "" },
+  { id: "JPY_USD", from: "JPY", to: "USD", rate: 0.0067, updatedAt: "" },
+  { id: "CAD_USD", from: "CAD", to: "USD", rate: 0.73, updatedAt: "" },
+];
+
+/** 全新数据库时填充默认汇率（已有数据则不覆盖，尊重用户自定义） */
+export async function ensureDefaultExchangeRates(): Promise<void> {
+  const count = await db.exchangeRates.count();
+  if (count > 0) return;
+  const now = new Date().toISOString();
+  await db.exchangeRates.bulkPut(DEFAULT_EXCHANGE_RATES.map((r) => ({ ...r, updatedAt: now })));
+}
+
+export async function getAllExchangeRates(): Promise<ExchangeRate[]> {
+  const rows = await db.exchangeRates.toArray();
+  return rows.sort((a, b) =>
+    a.from === b.from ? a.to.localeCompare(b.to) : a.from.localeCompare(b.from)
+  );
+}
+
+export async function upsertExchangeRate(from: string, to: string, rate: number): Promise<void> {
+  const f = normalizeCurrencyCode(from);
+  const t = normalizeCurrencyCode(to);
+  if (!f || !t) throw new Error("货币代码不能为空");
+  if (f === t) throw new Error("源货币与目标货币相同");
+  if (!(Number.isFinite(rate) && rate > 0)) throw new Error("汇率必须为正数");
+  const row: ExchangeRate = {
+    id: `${f}_${t}`,
+    from: f,
+    to: t,
+    rate,
+    updatedAt: new Date().toISOString(),
+  };
+  await db.exchangeRates.put(row);
+  window.dispatchEvent(new CustomEvent(EXCHANGE_RATES_EVENT));
+}
+
+export async function deleteExchangeRate(id: string): Promise<void> {
+  await db.exchangeRates.delete(id);
+  window.dispatchEvent(new CustomEvent(EXCHANGE_RATES_EVENT));
+}
+
+export type RateGraph = Map<string, Array<[string, number]>>;
+
+/** 把汇率对列表构建为无向图：A→B 为 rate，则 B→A 自动取 1/rate */
+export function buildRateGraph(rows: ExchangeRate[]): RateGraph {
+  const graph: RateGraph = new Map();
+  for (const r of rows) {
+    const f = normalizeCurrencyCode(r.from);
+    const t = normalizeCurrencyCode(r.to);
+    const rate = Number(r.rate);
+    if (!f || !t || f === t || !(rate > 0)) continue;
+    if (!graph.has(f)) graph.set(f, []);
+    if (!graph.has(t)) graph.set(t, []);
+    graph.get(f)!.push([t, rate]);
+    graph.get(t)!.push([f, 1 / rate]);
+  }
+  return graph;
+}
+
+/** 沿汇率图寻找路径换算（支持任意中转，如 GBP→USD→CNY）；无路径返回 null */
+export function convertWithGraph(amount: number, from: string, to: string, graph: RateGraph): number | null {
+  const f = normalizeCurrencyCode(from);
+  const t = normalizeCurrencyCode(to);
+  if (!f || !t || !Number.isFinite(amount)) return null;
+  if (f === t) return amount;
+  const queue: Array<[string, number]> = [[f, 1]];
+  const visited = new Set<string>([f]);
+  while (queue.length > 0) {
+    const [cur, factor] = queue.shift()!;
+    const edges = graph.get(cur);
+    if (!edges) continue;
+    for (const [next, rate] of edges) {
+      if (next === t) return amount * factor * rate;
+      if (visited.has(next)) continue;
+      visited.add(next);
+      queue.push([next, factor * rate]);
+    }
+  }
+  return null;
+}
+
+export async function convertCurrency(amount: number, from: string, to: string): Promise<number | null> {
+  const rows = await db.exchangeRates.toArray();
+  return convertWithGraph(amount, from, to, buildRateGraph(rows));
+}
+
+/** FOB 成本录入币种（默认人民币），SKU 页据此换算到站点货币 */
+export async function getFobSourceCurrency(): Promise<string> {
+  const row = await db.config.get("fobSourceCurrency");
+  const v = normalizeCurrencyCode(String(row?.value ?? ""));
+  return v || DEFAULT_FOB_CURRENCY;
+}
+
+export async function setFobSourceCurrency(code: string): Promise<void> {
+  const v = normalizeCurrencyCode(code);
+  if (!v) throw new Error("货币代码不能为空");
+  await db.config.put({ key: "fobSourceCurrency", value: v });
+  window.dispatchEvent(new CustomEvent(EXCHANGE_RATES_EVENT));
 }
 
 export async function getCrossSiteSummary(): Promise<CrossSiteReport> {

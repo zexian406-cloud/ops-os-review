@@ -523,6 +523,15 @@ export interface OpsLog {
   createdAt: string;       // 记录创建时间
 }
 
+// ==================== 多币种汇率（任意货币对，用户自定义） ====================
+export interface ExchangeRate {
+  id: string;              // `${from}_${to}`，如 USD_CNY
+  from: string;            // 源货币代码（自定义，如 USD / GBP / CNY）
+  to: string;              // 目标货币代码
+  rate: number;            // 1 from = rate to
+  updatedAt: string;
+}
+
 // ==================== 多站点架构 ====================
 export interface Site {
   id: string;

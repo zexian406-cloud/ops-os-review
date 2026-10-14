@@ -1,17 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { getAllSites, getCurrentSiteId, setCurrentSiteId, updateSite, ensureDefaultSites } from "@/domain/db";
+import { getAllSites, getCurrentSiteId, setCurrentSiteId, ensureDefaultSites } from "@/domain/db";
 import type { Site } from "@/domain/types";
+import { useCurrency } from "@/hooks/useCurrency";
+import ExchangeRateManager from "./ExchangeRateManager";
 
 export const SITE_CHANGE_EVENT = "ops-site-change";
 
 export default function SiteSwitcher() {
   const [open, setOpen] = useState(false);
-  const [editMode, setEditMode] = useState(false);
+  const [managerOpen, setManagerOpen] = useState(false);
   const [sites, setSites] = useState<Site[]>([]);
   const [currentSiteId, setCurrentSiteIdState] = useState<string>("site_us");
-  const [editingRates, setEditingRates] = useState<Record<string, string>>({});
-  const [editingCnyRates, setEditingCnyRates] = useState<Record<string, string>>({});
   const ref = useRef<HTMLDivElement>(null);
+  const { convert } = useCurrency();
 
   const loadSites = useCallback(async () => {
     await ensureDefaultSites();
@@ -31,7 +32,6 @@ export default function SiteSwitcher() {
     function handleClickOutside(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
-        setEditMode(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -39,48 +39,17 @@ export default function SiteSwitcher() {
   }, []);
 
   const handleSelect = useCallback(async (siteId: string) => {
-    if (editMode) return;
     await setCurrentSiteId(siteId);
     setCurrentSiteIdState(siteId);
     window.dispatchEvent(new CustomEvent(SITE_CHANGE_EVENT, { detail: { siteId } }));
     setOpen(false);
-  }, [editMode]);
-
-  const handleRateChange = useCallback((siteId: string, value: string) => {
-    setEditingRates(prev => ({ ...prev, [siteId]: value }));
   }, []);
 
-  const handleRateSave = useCallback(async (siteId: string) => {
-    const rateStr = editingRates[siteId];
-    if (!rateStr) return;
-    const rate = parseFloat(rateStr);
-    if (isNaN(rate) || rate <= 0) return;
-    await updateSite(siteId, { exchangeRateToUsd: rate });
-    await loadSites();
-    setEditingRates(prev => {
-      const next = { ...prev };
-      delete next[siteId];
-      return next;
-    });
-  }, [editingRates, loadSites]);
-
-  const handleCnyRateChange = useCallback((siteId: string, value: string) => {
-    setEditingCnyRates(prev => ({ ...prev, [siteId]: value }));
-  }, []);
-
-  const handleCnyRateSave = useCallback(async (siteId: string) => {
-    const rateStr = editingCnyRates[siteId];
-    if (!rateStr) return;
-    const rate = parseFloat(rateStr);
-    if (isNaN(rate) || rate <= 0) return;
-    await updateSite(siteId, { cnyToUsdRate: rate });
-    await loadSites();
-    setEditingCnyRates(prev => {
-      const next = { ...prev };
-      delete next[siteId];
-      return next;
-    });
-  }, [editingCnyRates, loadSites]);
+  /** 站点货币 → USD 汇率：优先走全局汇率图（支持任意中转），无路径时回退站点旧字段 */
+  const rateToUsd = useCallback(
+    (site: Site) => convert(1, site.currency, "USD") ?? site.exchangeRateToUsd,
+    [convert]
+  );
 
   const current = sites.find((s) => s.id === currentSiteId);
 
@@ -94,90 +63,55 @@ export default function SiteSwitcher() {
         <i className="ri-global-line text-[15px] text-primary-600" aria-hidden />
         <span className="font-medium">{current?.name ?? "选择站点"}</span>
         <span className="text-[11px] font-mono text-foreground-500">{current?.currency}</span>
-        <span className="text-[10px] text-foreground-400">1={current?.exchangeRateToUsd}$</span>
+        {current && <span className="text-[10px] text-foreground-400">1={rateToUsd(current)}$</span>}
         <i className={`ri-arrow-down-s-line text-[13px] text-foreground-400 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
       </button>
 
       {open && (
         <div className="absolute left-0 top-full z-50 mt-1 min-w-[300px] rounded-xl border border-background-200 bg-background-50 py-1 shadow-lg">
           <div className="flex items-center justify-between border-b border-background-200 px-3 py-1.5">
-            <span className="text-[11px] font-medium text-foreground-500">
-              {editMode ? "汇率设置（本站货币 = ? USD）" : "站点切换"}
-            </span>
+            <span className="text-[11px] font-medium text-foreground-500">站点切换</span>
             <button
               type="button"
-              onClick={() => setEditMode(!editMode)}
+              onClick={() => {
+                setOpen(false);
+                setManagerOpen(true);
+              }}
               className="flex items-center gap-1 text-[11px] text-primary-600 hover:text-primary-700 cursor-pointer"
             >
-              <i className={editMode ? "ri-check-line" : "ri-settings-3-line"} style={{ fontSize: "13px" }} aria-hidden />
-              {editMode ? "完成" : "汇率设置"}
+              <i className="ri-settings-3-line" style={{ fontSize: "13px" }} aria-hidden />
+              汇率管理
             </button>
           </div>
 
           {sites.map((site) => (
             <div
               key={site.id}
-              onClick={() => !editMode && handleSelect(site.id)}
-              className={`flex w-full items-center justify-between px-3 py-2 text-[13px] ${
-                editMode ? "cursor-default" : "hover:bg-background-100 cursor-pointer"
-              } ${site.id === currentSiteId && !editMode ? "bg-primary-50 text-primary-700 font-medium" : "text-foreground-700"}`}
+              onClick={() => handleSelect(site.id)}
+              className="flex w-full cursor-pointer items-center justify-between px-3 py-2 text-[13px] hover:bg-background-100"
             >
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-mono text-foreground-400 w-8">{site.marketplace}</span>
-                <span>{site.name}</span>
+                <span className={site.id === currentSiteId ? "text-primary-700 font-medium" : "text-foreground-700"}>{site.name}</span>
                 {!site.isActive && <span className="text-[10px] text-foreground-300">(未启用)</span>}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-mono text-foreground-500">{site.currency}</span>
-                {editMode ? (
-                  <>
-                    <div className="flex items-center gap-1">
-                      <span className="text-[10px] text-foreground-400">1=</span>
-                      <input
-                        type="number"
-                        step="0.0001"
-                        value={editingRates[site.id] ?? site.exchangeRateToUsd}
-                        onChange={(e) => handleRateChange(site.id, e.target.value)}
-                        onBlur={() => handleRateSave(site.id)}
-                        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                        className="w-16 rounded border border-background-300 bg-background-50 px-1.5 py-0.5 text-[11px] text-foreground-700 focus:border-primary-400 focus:outline-none"
-                      />
-                      <span className="text-[10px] text-foreground-400">USD</span>
-                    </div>
-                    {editMode && (
-                      <div className="flex items-center gap-1 ml-2">
-                        <span className="text-[10px] text-foreground-400">CNY:</span>
-                        <span className="text-[10px] text-foreground-400">1USD=</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={editingCnyRates[site.id] ?? site.cnyToUsdRate ?? 7.25}
-                          onChange={(e) => handleCnyRateChange(site.id, e.target.value)}
-                          onBlur={() => handleCnyRateSave(site.id)}
-                          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                          className="w-12 rounded border border-background-300 bg-background-50 px-1 py-0.5 text-[11px] text-foreground-700 focus:border-primary-400 focus:outline-none"
-                        />
-                        <span className="text-[10px] text-foreground-400">RMB</span>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <span className="text-[10px] text-foreground-400">1={site.exchangeRateToUsd}$</span>
-                    {site.id === currentSiteId && (
-                      <i className="ri-check-line text-[14px] text-primary-600" aria-hidden />
-                    )}
-                  </>
+                <span className="text-[10px] text-foreground-400">1={rateToUsd(site)}$</span>
+                {site.id === currentSiteId && (
+                  <i className="ri-check-line text-[14px] text-primary-600" aria-hidden />
                 )}
               </div>
             </div>
           ))}
 
           <div className="border-t border-background-200 px-3 py-1.5 text-[11px] text-foreground-400">
-            {editMode ? "修改汇率后按 Enter 或点击其他位置自动保存" : "点击「汇率设置」可修改各站汇率（本站货币 → USD）"}
+            点击「汇率管理」可自定义任意货币对汇率（支持非 USD 中转换算）
           </div>
         </div>
       )}
+
+      <ExchangeRateManager open={managerOpen} onClose={() => setManagerOpen(false)} />
     </div>
   );
 }
