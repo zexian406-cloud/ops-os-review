@@ -330,9 +330,10 @@ export default function GuidePage() {
         <SubTitle>可自定义内容</SubTitle>
         <ul className="list-disc pl-5 space-y-1">
           <li><strong>成本项计入开关</strong>：9 个成本项（FOB / 头程运费 / 配送费 / 佣金 / 仓储费 / 广告费 / 退货损失 / 促销成本 / 优惠券）任意开关。关闭后该项按 0 计，全站所有利润数字（运营一览、SKU 详情、新品测算等）实时联动。</li>
+          <li><strong>默认佣金率</strong>：SKU 未填佣金且未填佣金率时按此比例估算，默认 15%，可按类目实际佣金比例修改。</li>
           <li><strong>折扣预估上浮率</strong>：折扣价场景下广告费与退款费的预估上浮比例，默认 10%（即 ×1.1），可按实际促销力度调整。</li>
         </ul>
-        <p className="text-[12px] text-foreground-500">说明：佣金取值优先级为 显式填写 → 佣金率 × 售价 → 默认 15% 估算；广告费缺失时按费比 × 售价反推。点「恢复默认」还原全部配置，保存后无需刷新立即生效。</p>
+        <p className="text-[12px] text-foreground-500">说明：佣金取值优先级为 显式填写 → SKU 佣金率 × 售价 → 默认佣金率估算（比例可在下方修改）；广告费缺失时按费比 × 售价反推。点「恢复默认」还原全部配置，保存后无需刷新立即生效。</p>
       </GuideSection>
       {/* 九、GitHub 云端同步 */}
       <GuideSection num="九" title="GitHub 云端同步（手动保存）">

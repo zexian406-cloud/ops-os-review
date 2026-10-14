@@ -591,7 +591,7 @@ export default function Settings() {
                 <div>折扣广告费(估) = 正常广告费 × (1 + 上浮率)；折扣退款费(估) 同理</div>
               </div>
               <div className="mt-2 text-[11px] leading-relaxed text-foreground-500">
-                佣金：显式填写的佣金优先 → 无则按佣金率 × 售价 → 再无则按默认 15% 估算；
+                佣金：显式填写的佣金优先 → 无则按佣金率 × 售价 → 再无则按默认佣金率（当前 {profitFormula.defaultCommissionRate}%，下方可修改）估算；
                 广告费缺失时按费比 × 售价反推。下方开关可把任一成本项从总成本中排除（按 0 计），全站所有利润数字实时联动。
               </div>
             </div>
@@ -621,6 +621,18 @@ export default function Settings() {
                     {label}
                   </label>
                 ))}
+              </div>
+            </div>
+
+            {/* 默认佣金率 */}
+            <div>
+              <div className="mb-2 text-[13px] font-semibold text-foreground-900">默认佣金率（%）</div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <NumField
+                  label="SKU 未填佣金且未填佣金率时按此估算（默认 15）"
+                  value={profitFormula.defaultCommissionRate}
+                  onChange={(v) => setProfitFormula((p) => ({ ...p, defaultCommissionRate: v }))}
+                />
               </div>
             </div>
 

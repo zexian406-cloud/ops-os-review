@@ -18,6 +18,11 @@ function gated(k: keyof ProfitFormulaConfig["costItems"], v: number): number {
   return profitFormulaCache.costItems[k] ? v : 0;
 }
 
+/** 默认佣金率：显式传入优先 → 配置缓存 → 兜底 15% */
+function effCommissionRate(param?: number): number {
+  return param ?? profitFormulaCache.defaultCommissionRate ?? 15;
+}
+
 // =========================================================
 // 自动计算引擎 — 纯函数，14条规则，仅在目标字段为空时触发
 // =========================================================
@@ -144,9 +149,10 @@ export function computeTotalCost(
   snap?: DailySnapshot,
   discountPrice?: number,
   promoCost = 0,
-  defaultCommissionRate = 15,
+  defaultCommissionRate?: number,
 ): { total: number; detail: CostDetail; inferred: InferredFlags } {
   const price = discountPrice ?? sku.price;
+  const commissionRateFallback = effCommissionRate(defaultCommissionRate);
 
   const fob = n(sku.costFob);
   const shipping = n(sku.costShipping);
@@ -154,14 +160,14 @@ export function computeTotalCost(
   const storage = n(sku.costStorage);
   const coupon = n(sku.coupon);
 
-  // 佣金：costCommission 显式有值（含 0）时采用；为 null/undefined 时用费率×售价，否则 15% 估算
+  // 佣金：costCommission 显式有值（含 0）时采用；为 null/undefined 时用费率×售价，否则默认佣金率估算
   let commission = n(sku.costCommission);
   let isCommissionInferred = false;
   if (sku.costCommission == null && price > 0) {
     if (sku.commissionRate && sku.commissionRate > 0) {
       commission = (sku.commissionRate / 100) * price;
     } else {
-      commission = (defaultCommissionRate / 100) * price;
+      commission = (commissionRateFallback / 100) * price;
       isCommissionInferred = true;
     }
   }
@@ -245,7 +251,7 @@ export function computeDiscountTotalCost(
   discountPrice?: number,
   normalDetail?: CostDetail,
   promoCost = 0,
-  defaultCommissionRate = 15,
+  defaultCommissionRate?: number,
 ): { total: number; detail: CostDetail; inferred: InferredFlags } {
   const dp = discountPrice ?? sku.discountPrice ?? sku.price;
   const nd = normalDetail ?? computeTotalCost(sku, snap, dp, promoCost, defaultCommissionRate).detail;
@@ -257,7 +263,7 @@ export function computeDiscountTotalCost(
   const storage = sku.discountStorage != null ? n(sku.discountStorage) : nd.storage;
   const coupon = sku.discountCoupon != null ? n(sku.discountCoupon) : nd.coupon;
 
-  // 佣金：折扣佣金为空 → 按比例缩放 或 用 15%×折扣价
+  // 佣金：折扣佣金为空 → 按比例缩放 或 默认佣金率×折扣价
   let commission: number;
   let isCommissionInferred = false;
   if (sku.discountCommission != null) {
@@ -266,7 +272,8 @@ export function computeDiscountTotalCost(
     commission = nd.commission * (dp / sku.price);
     isCommissionInferred = nd.commission === 0 || sku.costCommission == null;
   } else {
-    commission = dp * (sku.commissionRate && sku.commissionRate > 0 ? sku.commissionRate / 100 : defaultCommissionRate / 100);
+    const commissionRateFallback = effCommissionRate(defaultCommissionRate);
+    commission = dp * (sku.commissionRate && sku.commissionRate > 0 ? sku.commissionRate / 100 : commissionRateFallback / 100);
     isCommissionInferred = true;
   }
 
@@ -531,17 +538,18 @@ export function computeAll(params: {
   promoCost?: number;
   defaultCommissionRate?: number;
 }): CalcResult {
-  const { sku, snap, inv, activePromo, defaultLeadTime = 40, defaultSafetyStockDays = 30, promoCost = 0, defaultCommissionRate = 15 } = params;
+  const { sku, snap, inv, activePromo, defaultLeadTime = 40, defaultSafetyStockDays = 30, promoCost = 0, defaultCommissionRate } = params;
+  const commissionRateFallback = effCommissionRate(defaultCommissionRate);
 
   const discountPrice = activePromo?.discountPrice ?? sku.discountPrice ?? undefined;
   const effectivePrice = discountPrice ?? sku.price;
 
   // Step 1: 正常列总成本
-  const normal = computeTotalCost(sku, snap, undefined, promoCost, defaultCommissionRate);
+  const normal = computeTotalCost(sku, snap, undefined, promoCost, commissionRateFallback);
   const totalCost = normal.total;
 
   // Step 2: 折扣列总成本
-  const discount = computeDiscountTotalCost(sku, snap, discountPrice, normal.detail, promoCost, defaultCommissionRate);
+  const discount = computeDiscountTotalCost(sku, snap, discountPrice, normal.detail, promoCost, commissionRateFallback);
   const disTotalCost = discount.total;
 
   // Step 3: 单件净利

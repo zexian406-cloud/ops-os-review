@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import {
   DEFAULT_FOB_CURRENCY,
   deleteExchangeRate,
+  getCurrentSiteId,
+  getSite,
   normalizeCurrencyCode,
   setFobSourceCurrency,
   upsertExchangeRate,
@@ -36,12 +38,17 @@ export default function ExchangeRateManager({ open, onClose }: Props) {
   const [convAmount, setConvAmount] = useState("100");
   const [convFrom, setConvFrom] = useState("USD");
   const [convTo, setConvTo] = useState(DEFAULT_FOB_CURRENCY);
+  const [siteCurrency, setSiteCurrency] = useState("USD");
 
   useEffect(() => {
     if (open) {
       setRateDrafts({});
       setRowError({});
       setFobDraft(fobCurrency);
+      getCurrentSiteId()
+        .then((id) => getSite(id))
+        .then((site) => setSiteCurrency(site?.currency || "USD"))
+        .catch(() => setSiteCurrency("USD"));
     }
   }, [open, fobCurrency]);
 
@@ -65,7 +72,7 @@ export default function ExchangeRateManager({ open, onClose }: Props) {
     return convert(amount, convFrom, convTo);
   }, [convAmount, convFrom, convTo, convert]);
 
-  const fobRateToCurrent = useMemo(() => convert(1, fobCurrency, "USD"), [convert, fobCurrency]);
+  const fobRateToSite = useMemo(() => convert(1, fobCurrency, siteCurrency), [convert, fobCurrency, siteCurrency]);
 
   if (!open) return null;
 
@@ -307,10 +314,16 @@ export default function ExchangeRateManager({ open, onClose }: Props) {
                 onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                 className={`${inputCls} w-24 font-mono uppercase`}
               />
-              <span className="text-[12px] text-foreground-600">录入，自动换算为站点货币</span>
-              {fobRateToCurrent != null && (
+              <span className="text-[12px] text-foreground-600">录入，自动换算为站点货币（当前 {siteCurrency}）</span>
+              {fobCurrency === siteCurrency ? (
+                <span className="text-[11px] text-foreground-500">（与站点货币相同，无需换算）</span>
+              ) : fobRateToSite != null ? (
                 <span className="text-[11px] text-primary-600 font-medium">
-                  （当前 1 {fobCurrency} = {Number(fobRateToCurrent.toPrecision(8))} USD）
+                  （当前 1 {fobCurrency} = {Number(fobRateToSite.toPrecision(8))} {siteCurrency}）
+                </span>
+              ) : (
+                <span className="text-[11px] text-amber-600">
+                  （暂无 {fobCurrency} → {siteCurrency} 换算路径，可在上方添加货币对）
                 </span>
               )}
             </div>

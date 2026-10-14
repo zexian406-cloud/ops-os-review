@@ -348,15 +348,10 @@ export default function ImportPage() {
   }, [importing, loadExistingDates]);
 
   /* ────────── 通用 Excel 解析 ────────── */
-  const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
-
   const validImportFile = (file: File): string | null => {
     const ext = (file.name.split(".").pop() ?? "").toLowerCase();
     if (![".xlsx", ".xls", ".csv"].includes(`.${ext}`)) {
       return `不支持的文件类型「${file.name}」（仅支持 .xlsx / .xls / .csv）`;
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      return `文件过大（超过 20MB）：${file.name}`;
     }
     return null;
   };

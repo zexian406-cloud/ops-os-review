@@ -369,6 +369,7 @@ export interface ProfitFormulaConfig {
   };
   discountAdUplift: number;     // 折扣广告费预估上浮 %（默认 10 = ×1.1）
   discountReturnUplift: number; // 折扣退款费预估上浮 %（默认 10 = ×1.1）
+  defaultCommissionRate: number; // 默认佣金率 %（无显式佣金/佣金率时按此估算，默认 15）
 }
 
 export const DEFAULT_PROFIT_FORMULA: ProfitFormulaConfig = {
@@ -378,6 +379,7 @@ export const DEFAULT_PROFIT_FORMULA: ProfitFormulaConfig = {
   },
   discountAdUplift: 10,
   discountReturnUplift: 10,
+  defaultCommissionRate: 15,
 };
 
 /** 云端同步配置（GitHub） */
