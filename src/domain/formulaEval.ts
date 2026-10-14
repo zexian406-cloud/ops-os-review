@@ -150,8 +150,13 @@ function evalNode(nd: Node, vars: Record<string, number>): number {
   switch (nd.k) {
     case "num": return nd.v;
     case "var": {
-      if (!(nd.v in vars)) throw new FormulaEvalError(`未知变量「${nd.v}」`);
-      return vars[nd.v];
+      if (nd.v in vars) return vars[nd.v];
+      // 英文变量名大小写不敏感（如 FOB / fob 均可）
+      const lower = nd.v.toLowerCase();
+      for (const k of Object.keys(vars)) {
+        if (k.toLowerCase() === lower) return vars[k];
+      }
+      throw new FormulaEvalError(`未知变量「${nd.v}」`);
     }
     case "neg": return -evalNode(nd.e, vars);
     case "bin": {

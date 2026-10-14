@@ -329,11 +329,82 @@ export default function GuidePage() {
         </div>
         <SubTitle>可自定义内容</SubTitle>
         <ul className="list-disc pl-5 space-y-1">
-          <li><strong>公式表达式完全自定义（高级）</strong>：8 条公式（总成本、折扣总成本、单件净利、净利率、广告费比、退货率、折扣广告费估、折扣退款费估）都能用中文变量名（售价、FOB、佣金、广告费…）加四则运算、括号和 min/max/round/floor/ceil/abs 函数改写，如「净利 = 售价 × 0.95 − 总成本」。留空即用内置默认公式；表达式写错会标红提示，计算时若出错自动回退默认公式，不会算崩。</li>
+          <li><strong>公式表达式完全自定义（高级）</strong>：8 条公式（总成本、折扣总成本、单件净利、净利率、广告费比、退货率、折扣广告费估、折扣退款费估）都能用中文变量名加四则运算、括号和 min/max/round/floor/ceil/abs 函数改写。留空即用内置默认公式；表达式写错会标红提示，计算时若出错自动回退默认公式，不会算崩。</li>
           <li><strong>成本项计入开关</strong>：9 个成本项（FOB / 头程运费 / 配送费 / 佣金 / 仓储费 / 广告费 / 退货损失 / 促销成本 / 优惠券）任意开关。关闭后该项按 0 计，全站所有利润数字（运营一览、SKU 详情、新品测算等）实时联动。</li>
           <li><strong>默认佣金率</strong>：SKU 未填佣金且未填佣金率时按此比例估算，默认 15%，可按类目实际佣金比例修改。</li>
           <li><strong>折扣预估上浮率</strong>：折扣价场景下广告费与退款费的预估上浮比例，默认 10%（即 ×1.1），可按实际促销力度调整。</li>
         </ul>
+        <SubTitle>自定义公式：变量列表</SubTitle>
+        <p className="text-[12px] text-foreground-500">运算符支持 + − × ÷（也可写 * /）、括号、小数；函数支持 min(a,b)、max(a,b)、round(x)、floor(x)、ceil(x)、abs(x)。除以 0 或表达式无效时自动回退默认公式。</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px] border border-background-200 rounded-lg">
+            <thead className="bg-background-100">
+              <tr>
+                <th className="px-3 py-2 text-left">公式</th>
+                <th className="px-3 py-2 text-left">可用变量</th>
+                <th className="px-3 py-2 text-left">默认表达式</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-background-200">
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">总成本</td>
+                <td className="px-3 py-2">售价、FOB、头程运费、配送费、佣金、仓储费、广告费、退货费、退款损失、促销成本、优惠券<br /><span className="text-[11px] text-foreground-400">各项已按成本项开关处理，关闭项为 0；「退货费」仅诊断用，默认不计入</span></td>
+                <td className="px-3 py-2 font-mono text-[11px]">FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退款损失 + 促销成本 + 优惠券</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">折扣总成本</td>
+                <td className="px-3 py-2">同总成本（变量值为折扣口径，「售价」为折扣售价）</td>
+                <td className="px-3 py-2 font-mono text-[11px]">与总成本相同</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">单件净利</td>
+                <td className="px-3 py-2">售价、总成本</td>
+                <td className="px-3 py-2 font-mono text-[11px]">售价 − 总成本</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">净利率</td>
+                <td className="px-3 py-2">净利、售价、总成本</td>
+                <td className="px-3 py-2 font-mono text-[11px]">净利 ÷ 售价 × 100</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">广告费比</td>
+                <td className="px-3 py-2">广告费、售价</td>
+                <td className="px-3 py-2 font-mono text-[11px]">广告费 ÷ 售价 × 100</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">退货率</td>
+                <td className="px-3 py-2">退货费、售价</td>
+                <td className="px-3 py-2 font-mono text-[11px]">退货费 ÷ 售价 × 100</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">折扣广告费(估)</td>
+                <td className="px-3 py-2">正常广告费、上浮率<br /><span className="text-[11px] text-foreground-400">上浮率 = 设置值 ÷ 100，如设置 10 则变量值为 0.1</span></td>
+                <td className="px-3 py-2 font-mono text-[11px]">正常广告费 × (1 + 上浮率)</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">折扣退款费(估)</td>
+                <td className="px-3 py-2">正常退款费、上浮率</td>
+                <td className="px-3 py-2 font-mono text-[11px]">正常退款费 × (1 + 上浮率)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <SubTitle>自定义公式：常用示例</SubTitle>
+        <div className="rounded-lg bg-background-100/60 p-3 font-mono text-[12px] leading-relaxed text-foreground-700">
+          <div>// 「单件净利」先扣 5% 杂费再减成本</div>
+          <div>售价 * 0.95 - 总成本</div>
+          <div className="mt-1.5">// 「总成本」不算促销成本和优惠券（也可直接用上方开关关闭）</div>
+          <div>FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退款损失</div>
+          <div className="mt-1.5">// 「总成本」每件额外加 2 元包材费</div>
+          <div>FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退款损失 + 促销成本 + 优惠券 + 2</div>
+          <div className="mt-1.5">// 「净利率」封顶 60%，避免极端值</div>
+          <div>min(净利 ÷ 售价 × 100, 60)</div>
+          <div className="mt-1.5">// 「净利率」亏损时按 -5% 兜底展示</div>
+          <div>max(净利 ÷ 售价 × 100, -5)</div>
+          <div className="mt-1.5">// 「折扣广告费(估)」固定按 1.2 倍估（不随上浮率设置变化）</div>
+          <div>正常广告费 * 1.2</div>
+        </div>
+        <p className="text-[12px] text-foreground-500">说明：示例中「// …」行仅标注该表达式应填在哪条公式下，输入框中只需粘贴它下一行的表达式本身（不要带公式名和等号，等号不是合法字符）；净利率 / 广告费比 / 退货率的结果为百分数（15 表示 15%）；变量名需与表中完全一致（不区分大小写英文字母，如 FOB 也可写 fob）。</p>
         <p className="text-[12px] text-foreground-500">说明：佣金取值优先级为 显式填写 → SKU 佣金率 × 售价 → 默认佣金率估算（比例可在下方修改）；广告费缺失时按费比 × 售价反推。点「恢复默认」还原全部配置，保存后无需刷新立即生效。</p>
       </GuideSection>
       {/* 九、GitHub 云端同步 */}
