@@ -105,6 +105,18 @@ export default function GuidePage() {
             </tbody>
           </table>
         </div>
+        <ExampleBox>
+          <p><strong>首次体验（约 10 分钟）</strong>：系统内置演示数据（演示产品001~011），不用导入任何文件即可走完全流程：</p>
+          <p>① 运营一览看「今日需要处理的事」，点一条 CRITICAL 告警的「去诊断」，看利润/广告/退货的原因拆解；</p>
+          <p>② 发货决策页看 3 个待补货 SKU 的建议件数与最晚发货日；</p>
+          <p>③ SKU 详情展开「演示产品003」，对比各 MSKU 的独立评分与利润；</p>
+          <p>④ 首页点「自定义布局」把最常用的 KPI 卡片拖到最上面。熟悉后再按第五章导入真实数据。</p>
+        </ExampleBox>
+        <NoteBox items={[
+          <>数据只存在当前浏览器 IndexedDB，换浏览器/电脑不会自动跟随；顶栏「导出数据」可随时手动导出备份文件，与第六章 GitHub 云端同步互为双保险</>,
+          <>导入真实数据前，先到「店铺管理」建好店铺与站点，避免数据挂错店铺</>,
+          <>全站默认按演示汇率运行（如 USD1=1$），正式使用前在顶栏站点切换器 →「汇率管理」配置真实汇率</>,
+        ]} />
       </GuideSection>
 
       {/* 二、决策 */}
@@ -195,6 +207,21 @@ export default function GuidePage() {
         <Module title="2.5 风险中心（/risk）">
           <p>查看所有风险 SKU，按类型筛选（库存/利润/广告/评分/退货/Listing），按严重程度排序。</p>
         </Module>
+        <ExampleBox>
+          <p><strong>每日 15 分钟决策流</strong>：</p>
+          <p>① 运营一览看到「库存风险 13 条」→ 点卡片进风险中心，按严重程度排序；</p>
+          <p>② 对断货的演示产品007（总库存 0、日销 5.2）点「去诊断」→ 跳转发货决策，列表按紧急优先，它排第一；</p>
+          <p>③ 向工厂下单后，把「已下单 500 件」记录到操作记录；</p>
+          <p>④ 回到诊断页处理利润异常 sku001（单件利润 -5.16），记录调价动作。</p>
+          <p><strong>发货建议数字算例</strong>（可在 2.4.2 计算器直接复现）：日均 10 件、在库 80、在途 40 → 综合覆盖 (80+40)÷10 = 12 天，低于阈值 25 天（LT 15 + 安全库存 10）触发补货；建议量 = (45+15+10−12)×10 = <strong>580 件</strong>（向上取整）；最晚发货日 = 今天 + (25−12) = 13 天后；13 天落在 11~30 区间 → <strong>常规</strong>优先级。</p>
+        </ExampleBox>
+        <NoteBox items={[
+          <>日均为 0 或已停售的 SKU 不出建议，这不是遗漏</>,
+          <>「综合覆盖」已把在途库存算进去，不要按在库再单独估一遍</>,
+          <>「最晚发货日」是库存烧到阈值的那天；Lead Time 已含在公式内，下单时勿再重复加天数</>,
+          <>SKU 级单独设置过的 Lead Time / 安全库存优先于全局系数</>,
+          <>列表可按优先级 / 紧急度 / 覆盖天数 / 建议量等 6 种方式切换排序</>,
+        ]} />
       </GuideSection>
 
       {/* 三、运营 */}
@@ -229,6 +256,18 @@ export default function GuidePage() {
           <p>输入尺寸、重量、FOB、头程、售价等参数，自动计算体积、总成本、毛利、毛利率、ROI。</p>
           <p className="text-[12px] text-foreground-500">利润数字与全站共用一套公式，可在「参数中心 → 利润公式」自定义（见 5.4）。</p>
         </Module>
+        <ExampleBox>
+          <p><strong>SKU 详情排查</strong>：展开「演示产品003」→ 每个 MSKU 行显示各自的评分/广告费比/利润 → 发现 SHOP2-B 评分跌到 4.2 而其他 MSKU 正常 → 点进该 MSKU 详情看退货率变化 → 用「记录操作」留痕「排查差评链接」。</p>
+          <p><strong>促销三合一</strong>：Prime Day 前 2 周在「活动管理」建 BD（8 折，10-20 ~ 10-27）→「促销成本」自动估算活动开销 →「时间线」甘特图确认与 LD 不撞期 → 活动期间发货决策自动按活动倍率放大建议量并追加备货天数。</p>
+          <p><strong>旺季模拟</strong>：选 Black Friday 场景按 3 倍销量推演 → 看哪些 SKU 出现库存缺口 → 把缺口 SKU 加进补货计划。</p>
+          <p><strong>新品测算</strong>：选品会上输入 21×15×10cm / 500g / FOB 8 / 售价 35，实时得到体积重、总成本与毛利率，快速过滤不达标品。</p>
+        </ExampleBox>
+        <NoteBox items={[
+          <>MSKU 指标按行独立存储，展开看的是各自数值，不会取平均（导入口径见 5.1.3）</>,
+          <>促销时间线要看促销销量，需先导入销量数据</>,
+          <>旺季模拟是按倍率推演的沙盘，不是销量预测，结果用于备货弹性参考</>,
+          <>促销活动成本会汇入利润公式的「促销成本」「优惠券」变量；若在 5.4 关闭这两项成本开关，利润中将不再扣减</>,
+        ]} />
       </GuideSection>
 
       {/* 四、工具 */}
@@ -239,6 +278,14 @@ export default function GuidePage() {
         <Module title="4.2 操作记录（/ops-logs）">
           <p>运营操作日志，按日期分组展示。记录价格调整、广告开关、补货、Listing 优化等操作。</p>
         </Module>
+        <ExampleBox>
+          <p><strong>我的待办</strong>：诊断完 sku001 后建一条待办「观察提价后转化率」，关联 sku001、截止周五 → 首页「我的待办」卡片实时显示剩余数量，周五逐条勾销。</p>
+          <p><strong>操作记录</strong>：周五回顾——按日期分组查看本周 8 条操作（调价、开广告、补货），对照 2.3 历史对比的环比变化，判断哪些动作真正带来了改善。</p>
+        </ExampleBox>
+        <NoteBox items={[
+          <>待办是本地轻量记录，不会弹系统提醒，关键节点需要自己回看</>,
+          <>操作记录来自你在各页主动点「记录操作」，不会自动同步亚马逊后台的变动</>,
+        ]} />
       </GuideSection>
 
       {/* 五、数据 */}
@@ -407,6 +454,17 @@ export default function GuidePage() {
         </div>
         <p className="text-[12px] text-foreground-500">说明：示例中注释仅标注该表达式应填在哪条公式下，输入框中只需粘贴表达式本身（不要带公式名和等号，等号不是合法字符）；净利率 / 广告费比 / 退货率的结果为百分数（15 表示 15%）；变量名需与表中完全一致（不区分大小写英文字母，如 FOB 也可写 fob）。</p>
         <p className="text-[12px] text-foreground-500">说明：佣金取值优先级为 显式填写 → SKU 佣金率 × 售价 → 默认佣金率估算（比例可在下方修改）；广告费缺失时按费比 × 售价反推。点「恢复默认」还原全部配置，保存后无需刷新立即生效。</p>
+        <ExampleBox>
+          <p><strong>首次导入全流程</strong>：① 店铺管理建好 3 个店铺 → ② 数据导入下载「综合运营表」模板 → ③「SKU 标识符」Sheet 填 5 个 SKU（每个 MSKU 一行，含 ASIN/MSKU 对应关系）→ ④「销量导入」按 MSKU 填销量 + 评分 + 广告费比 → ⑤ 填 FBA 库存 / 仓库明细(FBM) / 在途明细 → ⑥ 上传一个文件，8 个 Sheet 自动识别导入 → ⑦ 数据健康检查字段完整度 → ⑧ 发货决策立即出建议。</p>
+          <p><strong>仓库映射</strong>：领星导出的仓库名「AMER-WEST-LG1」→ 设别名「美西 LG1」、区域美西；美国站配一份，加拿大站再配一份，同名仓库互不影响。</p>
+          <p><strong>利润公式算例</strong>（可在 5.4.2 试算器直接复现）：售价 35、FOB 8、头程运费 3、配送费 4.2、佣金 5.25、仓储费 0.6、广告费 3.5、退款损失 1.05、促销成本 0.35、优惠券 0.7 → 总成本 26.65 → 单件净利 8.35 → 净利率 ≈ 23.9%。</p>
+        </ExampleBox>
+        <NoteBox items={[
+          <>以 ASIN 为口径的导入（销量 / FBA 库存明细 / 运营数据）必须先导入「SKU 标识符」建立 ASIN→SKU 映射，否则数据挂不上</>,
+          <>导入仓库明细前先配好「仓库映射」（5.1.2），否则会汇总到错误区域；映射保存后对历史数据也重新生效</>,
+          <>列名中英文 / 大小写均可识别（refund_rate、Refund Rate、退款率等），列留空不影响导入，缺失字段会在数据健康中标出</>,
+          <>汇率与 FOB 成本录入币种在顶栏站点切换器 →「汇率管理」弹窗内配置，换算走全局汇率图，无路径时回退旧两级换算</>,
+        ]} />
       </GuideSection>
 
       {/* 六、GitHub 云端同步 */}
@@ -428,6 +486,10 @@ export default function GuidePage() {
         <Step n="5" title="备份 / 恢复">
           点「保存到 GitHub 云端」上传全部数据；换设备或数据丢失时，配置好同一仓库后点「从 GitHub 拉取」恢复。按钮旁会显示上次同步时间。
         </Step>
+        <ExampleBox>
+          <p><strong>日常备份</strong>：每周五下班前打开「数据导入」页 → GitHub 云端同步 → 点「保存到 GitHub 云端」→ 看到按钮旁「上次同步时间」更新即可关机。</p>
+          <p><strong>换机迁移</strong>：新电脑登录后配置同一个仓库（Token + owner/repo + 分支 + 文件路径）→ 点「保存并校验配置」→ 点「从 GitHub 拉取」→ SKU 主档、库存、促销、参数全部恢复，无缝继续工作。</p>
+        </ExampleBox>
         <SubTitle>注意事项</SubTitle>
         <ul className="list-disc pl-5 space-y-1">
           <li><strong>手动备份</strong>：建议每周或每次大批量导入数据后点一次「保存到 GitHub 云端」。</li>
@@ -464,6 +526,12 @@ export default function GuidePage() {
         <Faq q="补货建议不想用系统默认公式？">
           进入「发货决策」页点「补货公式」，可自定义日均销量口径（7天/30天）、触发阈值方式、目标天数/Lead Time/安全库存系数、活动倍率与取整方式（见 2.4）。利润计算同理，可在「参数中心 → 利润公式」自定义成本项计入（见 5.4）。
         </Faq>
+        <NoteBox items={[
+          <>页面空白 / 数据缺失 → 先到「数据健康」（5.2）看字段完整度，再检查导入文件列名</>,
+          <>数字对不上 → 查「参数中心 → 利润公式」（5.4）与发货决策「补货公式」（2.4）是否改过配置或写错表达式</>,
+          <>换设备数据丢了 → 按第六章从 GitHub 拉取恢复；平时没备份则无法找回</>,
+          <>找不到功能入口 → 按第一章导览表对照侧边栏分组，各模块详细说明见第二~五章</>,
+        ]} />
       </GuideSection>
 
       {/* 底部 */}
@@ -497,6 +565,31 @@ function GuideSection({ num, title, open, onToggle, children }: {
 
 function SubTitle({ children }: { children: React.ReactNode }) {
   return <h3 className="text-[14px] font-semibold text-foreground-800 mt-3 mb-1">{children}</h3>;
+}
+
+/* ── 章节使用示例 / 注意事项 ── */
+function ExampleBox({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-[10px] border border-primary-200 bg-primary-50/40 px-4 py-3">
+      <div className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-primary-700">
+        <i className="ri-play-circle-line" aria-hidden />使用示例
+      </div>
+      <div className="space-y-1.5 text-[13px] text-foreground-700 leading-relaxed">{children}</div>
+    </div>
+  );
+}
+
+function NoteBox({ items }: { items: React.ReactNode[] }) {
+  return (
+    <div className="rounded-[10px] border border-amber-200 bg-amber-50/50 px-4 py-3">
+      <div className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-amber-700">
+        <i className="ri-error-warning-line" aria-hidden />注意事项
+      </div>
+      <ul className="list-disc pl-5 space-y-1 text-[12.5px] text-foreground-700 leading-relaxed">
+        {items.map((t, i) => <li key={i}>{t}</li>)}
+      </ul>
+    </div>
+  );
 }
 
 function Step({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
