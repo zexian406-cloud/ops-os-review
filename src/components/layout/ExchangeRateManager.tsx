@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   DEFAULT_FOB_CURRENCY,
   deleteExchangeRate,
@@ -127,7 +128,9 @@ export default function ExchangeRateManager({ open, onClose }: Props) {
     }
   };
 
-  return (
+  // Topbar 有 backdrop-blur，会让 fixed 后代的包含块变成 52px 高的顶栏而非视口，
+  // 导致弹窗标题栏被截出屏幕；必须用 Portal 渲染到 body 才能真正相对视口定位
+  return createPortal(
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="relative flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-background-200 bg-background-50 shadow-xl">
@@ -318,6 +321,7 @@ export default function ExchangeRateManager({ open, onClose }: Props) {
           汇率按货币对存储，换算沿最短路径自动中转；删除货币对可能中断部分换算
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
