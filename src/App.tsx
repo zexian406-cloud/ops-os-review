@@ -4,7 +4,8 @@ import { I18nextProvider } from "react-i18next";
 import i18n from "./i18n";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { ensureDatabaseOpen, ensureDefaultSites } from "./domain/db";
+import { ensureDatabaseOpen, ensureDefaultSites, getProfitFormulaConfig } from "./domain/db";
+import { setProfitFormulaCache } from "./domain/calculator";
 import { ensureSeedData } from "./domain/seed";
 
 function App() {
@@ -28,6 +29,8 @@ function App() {
         await ensureDefaultSites();
         // 空库时种入通用演示数据（有真实数据则跳过）
         await ensureSeedData();
+        // 注入利润公式配置（模块级缓存，供全站同步计算消费）
+        setProfitFormulaCache(await getProfitFormulaConfig());
 
         setReady(true);
       } catch (err) {

@@ -18,6 +18,12 @@ import type {
   OpsLog,
 } from "./types";
 import type { Site, SiteConfig, CrossSiteSummary, CrossSiteReport, ExchangeRate } from "./types";
+import type { ShipmentFormulaConfig, ProfitFormulaConfig } from "./types";
+import {
+  DEFAULT_WAREHOUSE_REGIONS,
+  DEFAULT_SHIPMENT_FORMULA,
+  DEFAULT_PROFIT_FORMULA,
+} from "./types";
 
 /**
  * Amazon Operation OS — Local storage layer (IndexedDB via Dexie).
@@ -325,6 +331,34 @@ export async function getCloudConfig(): Promise<CloudConfig | null> {
 
 export async function setCloudConfig(cfg: CloudConfig): Promise<void> {
   await db.config.put({ key: "cloud", value: cfg });
+}
+
+// ==================== 发货建议公式 & 利润公式配置 ====================
+
+/** 发货建议公式配置（config key "shipmentFormula"），字段缺失时用默认值补齐 */
+export async function getShipmentFormulaConfig(): Promise<ShipmentFormulaConfig> {
+  const row = await db.config.get("shipmentFormula");
+  const value = row?.value as Partial<ShipmentFormulaConfig> | undefined;
+  return { ...DEFAULT_SHIPMENT_FORMULA, ...(value ?? {}) };
+}
+
+export async function setShipmentFormulaConfig(cfg: ShipmentFormulaConfig): Promise<void> {
+  await db.config.put({ key: "shipmentFormula", value: cfg });
+}
+
+/** 利润计算公式配置（config key "profitFormula"），字段缺失时用默认值补齐 */
+export async function getProfitFormulaConfig(): Promise<ProfitFormulaConfig> {
+  const row = await db.config.get("profitFormula");
+  const value = row?.value as Partial<ProfitFormulaConfig> | undefined;
+  const merged = { ...DEFAULT_PROFIT_FORMULA, ...(value ?? {}) };
+  return {
+    ...merged,
+    costItems: { ...DEFAULT_PROFIT_FORMULA.costItems, ...(value?.costItems ?? {}) },
+  };
+}
+
+export async function setProfitFormulaConfig(cfg: ProfitFormulaConfig): Promise<void> {
+  await db.config.put({ key: "profitFormula", value: cfg });
 }
 
 // ==================== 数据健康报告（最近一次导入） ====================
@@ -1028,6 +1062,13 @@ export async function deleteOpsLog(id: string): Promise<void> {
 
 // ==================== Warehouse Mapping helpers ====================
 
+/** 仓库映射/区域变更事件：映射面板保存后广播，展示页监听刷新别名/区域 */
+export const WAREHOUSE_MAPPING_EVENT = "ops-warehouse-mapping-change";
+
+function dispatchWarehouseMappingEvent() {
+  window.dispatchEvent(new CustomEvent(WAREHOUSE_MAPPING_EVENT));
+}
+
 /** 智能猜测仓库名对应的区域 */
 export function guessRegion(warehouseName: string): import("./types").WarehouseRegion | null {
   const name = warehouseName.toLowerCase();
@@ -1047,50 +1088,137 @@ export async function getAllWarehouseMappings(): Promise<import("./types").Wareh
   return db.warehouseMappings.toArray();
 }
 
-/** 根据仓库名获取映射的区域 */
-export async function getWarehouseRegion(warehouseName: string): Promise<import("./types").WarehouseRegion | null> {
-  const mapping = await db.warehouseMappings.where("warehouseName").equals(warehouseName).first();
-  return mapping?.region ?? null;
+/**
+ * 自定义仓库区域列表（预置美东/美西/东南/中南四仓，可增删自定义区域）。
+ * 存 config key "warehouseRegions"。
+ */
+export async function getWarehouseRegions(): Promise<import("./types").WarehouseRegionOption[]> {
+  const row = await db.config.get("warehouseRegions");
+  const list = row?.value as import("./types").WarehouseRegionOption[] | undefined;
+  if (!Array.isArray(list) || list.length === 0) return [...DEFAULT_WAREHOUSE_REGIONS];
+  // 预置四仓始终保留在前，防止旧版本升级后丢区域
+  const codes = new Set(list.map((r) => r.code));
+  const defaults = DEFAULT_WAREHOUSE_REGIONS.filter((d) => !codes.has(d.code));
+  return [...defaults, ...list];
 }
 
-/** 批量获取仓库名→区域映射 */
-export async function getWarehouseRegionMap(): Promise<Map<string, import("./types").WarehouseRegion>> {
+export async function setWarehouseRegions(list: import("./types").WarehouseRegionOption[]): Promise<void> {
+  await db.config.put({ key: "warehouseRegions", value: list });
+  dispatchWarehouseMappingEvent();
+}
+
+/**
+ * 站点感知的仓库名→区域映射表。
+ * 同一仓库名可按站点分别映射（如 US 站与 CA 站各有一套），
+ * 站点专属映射优先于通用映射（siteId 为空视为通用）。
+ */
+export async function resolveRegionMap(siteId?: string): Promise<Map<string, import("./types").WarehouseRegion>> {
   const all = await db.warehouseMappings.toArray();
-  return new Map(all.map(m => [m.warehouseName, m.region]));
+  const map = new Map<string, import("./types").WarehouseRegion>();
+  for (const m of all) {
+    if (m.siteId) continue; // 通用映射先入
+    map.set(m.warehouseName, m.region);
+  }
+  if (siteId) {
+    for (const m of all) {
+      if (m.siteId === siteId) map.set(m.warehouseName, m.region);
+    }
+  }
+  return map;
 }
 
-/** 保存或更新单条仓库映射，并自动重算已有库存数据的区域字段 */
-export async function upsertWarehouseMapping(warehouseName: string, region: import("./types").WarehouseRegion): Promise<void> {
-  const existing = await db.warehouseMappings.where("warehouseName").equals(warehouseName).first();
+/** 批量获取仓库名→区域映射（不区分站点，兼容旧调用） */
+export async function getWarehouseRegionMap(): Promise<Map<string, import("./types").WarehouseRegion>> {
+  return resolveRegionMap(undefined);
+}
+
+/** 仓库名→自定义别名映射（站点专属优先于通用） */
+export async function getWarehouseAliasMap(siteId?: string): Promise<Map<string, string>> {
+  const all = await db.warehouseMappings.toArray();
+  const map = new Map<string, string>();
+  for (const m of all) {
+    if (!m.alias?.trim()) continue;
+    if (m.siteId) continue;
+    map.set(m.warehouseName, m.alias.trim());
+  }
+  if (siteId) {
+    for (const m of all) {
+      if (m.siteId !== siteId || !m.alias?.trim()) continue;
+      map.set(m.warehouseName, m.alias.trim());
+    }
+  }
+  return map;
+}
+
+/** 保存或更新单条仓库映射（按 仓库名+站点 唯一），并自动重算已有库存数据的区域字段 */
+export async function upsertWarehouseMapping(
+  warehouseName: string,
+  region: import("./types").WarehouseRegion,
+  opts?: { siteId?: string | null; alias?: string | null },
+): Promise<void> {
+  const siteId = opts?.siteId?.trim() || undefined;
+  const alias = opts?.alias != null ? (opts.alias.trim() || undefined) : undefined;
+  const all = await db.warehouseMappings.where("warehouseName").equals(warehouseName).toArray();
+  const existing = all.find((m) => (m.siteId ?? undefined) === siteId);
   if (existing) {
-    await db.warehouseMappings.update(existing.id!, { region });
+    await db.warehouseMappings.update(existing.id!, {
+      region,
+      ...(opts?.siteId !== undefined ? { siteId } : {}),
+      ...(opts?.alias !== undefined ? { alias } : {}),
+    });
   } else {
     await db.warehouseMappings.add({
       warehouseName,
       region,
+      siteId,
+      alias,
       createdAt: new Date().toISOString(),
     });
   }
   await reapplyWarehouseMappings();
+  dispatchWarehouseMappingEvent();
+}
+
+/** 更新单条映射的部分字段（站点/别名），不动区域 */
+export async function patchWarehouseMapping(
+  id: number,
+  patch: { siteId?: string | null; alias?: string | null },
+): Promise<void> {
+  const value: Record<string, string | undefined> = {};
+  if (patch.siteId !== undefined) value.siteId = patch.siteId?.trim() || undefined;
+  if (patch.alias !== undefined) value.alias = patch.alias?.trim() || undefined;
+  await db.warehouseMappings.update(id, value);
+  await reapplyWarehouseMappings();
+  dispatchWarehouseMappingEvent();
 }
 
 /** 删除仓库映射，并自动重算已有库存数据的区域字段 */
 export async function deleteWarehouseMapping(id: number): Promise<void> {
   await db.warehouseMappings.delete(id);
   await reapplyWarehouseMappings();
+  dispatchWarehouseMappingEvent();
 }
 
 /**
  * 重新应用仓库映射：遍历所有 inventoryLayer 记录，
- * 根据 warehouseBreakdown 中的仓库名 + 当前映射重算四仓区域字段。
+ * 根据 warehouseBreakdown 中的仓库名 + 当前映射（按该层站点解析）重算四仓区域字段。
+ * 自定义区域不写入四仓硬编码字段，仅体现在仓库明细与总库存汇总中。
  * 在映射变更后自动调用，无需重新导入数据。
  */
 export async function reapplyWarehouseMappings(): Promise<number> {
-  const regionMap = await getWarehouseRegionMap();
   const allInv = await db.inventoryLayer.toArray();
+  if (!allInv.some((inv) => inv.warehouseBreakdown?.length)) return 0;
+  const genericMap = await resolveRegionMap(undefined);
+  const siteMaps = new Map<string, Map<string, import("./types").WarehouseRegion>>();
   let updated = 0;
   for (const inv of allInv) {
     if (!inv.warehouseBreakdown?.length) continue;
+    const sid = inv.siteId ?? "";
+    let regionMap = siteMaps.get(sid);
+    if (!regionMap) {
+      regionMap = sid ? await resolveRegionMap(sid) : genericMap;
+      siteMaps.set(sid, regionMap);
+    }
     let eastStock = 0, westStock = 0, southeastStock = 0, southcentralStock = 0;
     for (const wb of inv.warehouseBreakdown) {
       const region = regionMap.get(wb.warehouse);

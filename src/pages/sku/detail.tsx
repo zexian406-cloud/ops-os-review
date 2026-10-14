@@ -12,7 +12,7 @@ import {
 import { computeAll, computeWeeklyPromoCost, isCostFullyMissing, isReturnRateMissing, formatCoverDays, COVER_NO_SALES_SUB } from "@/domain/calculator";
 import { useOpsData } from "@/domain/store";
 import { computeDiagnosis, type DiagnosisResult } from "@/domain/diagnosis";
-import { upsertSnapshots, db, addOpsLog, deleteOpsLog, getAllShops, ensureDefaultShops, getCurrentSiteId } from "@/domain/db";
+import { upsertSnapshots, db, addOpsLog, deleteOpsLog, getAllShops, ensureDefaultShops, getCurrentSiteId, getWarehouseAliasMap, WAREHOUSE_MAPPING_EVENT } from "@/domain/db";
 import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
@@ -97,6 +97,15 @@ export default function SkuDetail() {
 
   const sku = useMemo(() => skuMaster.find((s) => s.sku === skuId), [skuMaster, skuId]);
   const parentSkuId = sku?.groupSku;
+
+  // 海外仓自定义别名（仓库名 → 显示名）
+  const [whAliasMap, setWhAliasMap] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    const load = () => getWarehouseAliasMap(currentSiteId).then(setWhAliasMap);
+    load();
+    window.addEventListener(WAREHOUSE_MAPPING_EVENT, load);
+    return () => window.removeEventListener(WAREHOUSE_MAPPING_EVENT, load);
+  }, [currentSiteId]);
 
   // ── focus=MSKU 时（从列表点击 MSKU 跳转而来）自动滚动并高亮对应 MSKU ──
   // 向后兼容：无 focus 参数时完全不触发，详情页默认行为不变。
@@ -1658,6 +1667,23 @@ export default function SkuDetail() {
             <div className="text-[11px] text-foreground-500">在库{allStock} + 在途{allTransit}</div>
           </div>
         </div>
+        {/* 仓库明细（含别名与自定义区域，映射在导入页维护） */}
+        {inv?.warehouseBreakdown?.length ? (
+          <div className="mt-3 rounded-lg border border-background-200/70 bg-background-50/60 p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-foreground-700">
+              <i className="ri-archive-drawer-line text-primary-600" aria-hidden />
+              仓库明细（共 {inv.warehouseBreakdown.length} 个仓库 · {inv.warehouseBreakdown.reduce((s, w) => s + (w.qty || 0), 0).toLocaleString()} 件）
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {inv.warehouseBreakdown.map((w) => (
+                <span key={w.warehouse} className="mono-num rounded-md border border-background-200 bg-white px-2 py-0.5 text-[11px] text-foreground-700">
+                  {whAliasMap.get(w.warehouse) ?? w.warehouse}
+                  <b className="ml-1 text-foreground-950">{(w.qty || 0).toLocaleString()}</b>
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {latest && (
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <DataTile label="7天销量" value={(latest.dailySales7d ?? 0).toFixed(1)} sub="日均" />

@@ -10,7 +10,9 @@ import type {
   GlobalConfig,
   HealthFactor,
   HealthScore,
+  ShipmentFormulaConfig,
 } from "./types";
+import { DEFAULT_SHIPMENT_FORMULA } from "./types";
 import { computeAll, computeWarehouseTotals, computeWeeklyPromoCost } from "./calculator";
 
 /**
@@ -433,6 +435,14 @@ export function computeAlerts(input: {
 }
 
 // -------- Shipment engine --------
+
+/** 按取整方式取整 */
+function applyRounding(v: number, mode: ShipmentFormulaConfig["rounding"]): number {
+  if (mode === "floor") return Math.floor(v);
+  if (mode === "round") return Math.round(v);
+  return Math.ceil(v);
+}
+
 export function computeShipmentSuggestions(input: {
   skuMaster: SkuMaster[];
   latestSnapshot: Map<string, DailySnapshot>;
@@ -442,6 +452,7 @@ export function computeShipmentSuggestions(input: {
   today: string;
   salesBasis?: "7d" | "30d";
   defaultCommissionRate?: number;
+  formula?: ShipmentFormulaConfig;
 }): ShipmentSuggestion[] {
   const {
     skuMaster,
@@ -452,6 +463,7 @@ export function computeShipmentSuggestions(input: {
     today,
     salesBasis = "7d",
     defaultCommissionRate,
+    formula = DEFAULT_SHIPMENT_FORMULA,
   } = input;
 
   const suggestions: ShipmentSuggestion[] = [];
@@ -500,21 +512,24 @@ export function computeShipmentSuggestions(input: {
       }
     }
     const boostedDaily = dailySales * multiplier;
-    if (multiplier > 1) targetDays += 30;
+    if (formula.promoMultiplierEnabled && multiplier > 1) targetDays += formula.promoExtraDays;
 
-    // Dynamic threshold: trigger when coverage < leadTime + safetyStock (Q3 fix)
-    const dynamicThreshold = leadTime + safety;
+    // 触发阈值：LeadTime+安全库存 / 仅LT / 仅安全库存 / 自定义天数
+    const dynamicThreshold = formula.thresholdMode === "lt_only" ? leadTime
+      : formula.thresholdMode === "safety_only" ? safety
+      : formula.thresholdMode === "custom_days" ? formula.customThresholdDays
+      : leadTime + safety;
     const currentCoverWithTransit = coverWithTransit;
     if (currentCoverWithTransit >= dynamicThreshold) continue;
 
     // Replenish formula: (targetCoverDays + leadTime + safety - coverWithTransit) × daily (Q1 page version, using 综合覆盖)
     const gapDays = targetDays + leadTime + safety - coverWithTransit;
-    const suggestQty = Math.ceil(gapDays * boostedDaily);
+    const suggestQty = applyRounding(gapDays * boostedDaily, formula.rounding);
     if (suggestQty <= 0) continue;
 
     const daysUntilLatest = Math.max(
       0,
-      currentCoverWithTransit - leadTime - safety
+      currentCoverWithTransit - dynamicThreshold
     );
     const latestShip = new Date(now);
     latestShip.setDate(now.getDate() + daysUntilLatest);

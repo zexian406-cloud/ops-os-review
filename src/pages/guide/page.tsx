@@ -7,7 +7,7 @@ export default function GuidePage() {
       <div>
         <h1 className="text-[24px] font-semibold text-foreground-900">使用说明书</h1>
         <p className="text-[13px] text-foreground-500 mt-1">
-          Amazon Ops OS · v2 · 2026-08-04
+          Amazon Ops OS · v2 · 2026-10-14
         </p>
       </div>
       {/* 一、系统简介 */}
@@ -142,6 +142,7 @@ export default function GuidePage() {
         </Module>
         <Module title="4.5 发货决策（/shipment）">
           <p>自动补货建议，按优先级排序（紧急/高/中/低），展示当前库存、在途、建议发货量、最晚发货日。</p>
+          <p className="text-[12px] text-foreground-500">点击右上角「补货公式」可自定义日均销量口径、触发阈值、目标天数/Lead Time/安全库存系数、活动倍率与取整方式，详见第七节。</p>
         </Module>
         <Module title="4.6 风险中心（/risk）">
           <p>查看所有风险 SKU，按类型筛选（库存/利润/广告/评分/退货/Listing），按严重程度排序。</p>
@@ -183,13 +184,14 @@ export default function GuidePage() {
         </Module>
         <Module title="4.14 数据导入（/import）">
           <p>支持综合运营表一次性多 Sheet 导入，自动识别列名。包含 9 个导入 Tab。模板已含 MSKU 级指标列（评分/评论数/广告费比/退货率/退款率）和产品链接/竞品链接列，按 MSKU 行填写即可展示独立指标和自然/广告订单占比。</p>
-          <p className="text-[12px] text-foreground-500">主要入口：「综合运营表」下载模板 → 填充数据 → 上传自动识别多 Sheet。新增列均为可选，留空不影响导入。</p>
+          <p className="text-[12px] text-foreground-500">主要入口：「综合运营表」下载模板 → 填充数据 → 上传自动识别多 Sheet。新增列均为可选，留空不影响导入。页面底部提供「GitHub 云端同步（手动保存）」备份区，详见第九节。</p>
         </Module>
         <Module title="4.15 店铺管理（/shop-management）">
           <p>新增、编辑、删除店铺，查看各店铺数据量。</p>
         </Module>
         <Module title="4.16 参数中心（/settings）">
           <p>供应链参数（Lead Time、安全库存、目标库存）、活动参数、利润率/广告费比/退货率阈值。</p>
+          <p className="text-[12px] text-foreground-500">「利润公式」Tab 可查看默认利润计算公式，并自定义成本项计入与折扣预估上浮率，详见第八节。</p>
         </Module>
       </GuideSection>
       {/* 五、数据导入指南 */}
@@ -216,6 +218,14 @@ export default function GuidePage() {
             </tbody>
           </table>
         </div>
+        <SubTitle>仓库区域映射（多站点 · 别名 · 自定义区域）</SubTitle>
+        <p>入口：「数据导入」页 →「仓库映射」Tab。将领星等工具下载的仓库名称映射到区域，导入仓库明细时自动匹配并汇总。</p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>按站点区分</strong>：映射跟随店铺（站点）保存。同一仓库名在美国站映射为美东、在加拿大站映射为其他区域，互不影响；做多个站点时海外仓的销量和库存天然分开。导入时系统自动按当前站点创建映射；未配置站点专属映射时回退到通用映射。</li>
+          <li><strong>别名</strong>：可为仓库设置显示名（如「美西 LG1 仓」），发货决策页和 SKU 详情页的仓库明细会优先展示别名，原始仓库名保持不变。</li>
+          <li><strong>自定义区域</strong>：除美东/美西/东南/中南四个预置区域外，可添加自定义区域名（如「加拿大东仓」）。自定义区域在仓库明细中独立展示；预置四仓的汇总统计不受影响。预置四仓不可删除。</li>
+          <li><strong>生效范围</strong>：映射保存后对所有历史数据重新生效；变更后发货建议、SKU 详情会自动刷新。</li>
+        </ul>
         <SubTitle>多 MSKU 数据独立性</SubTitle>
         <p>销量表和运营数据表中，同一 SKU 的不同 MSKU 各占一行，填写各自的评分/评论数/广告费比/退货率/退款率。系统自动按 MSKU 独立存储到 mskuMetrics 字段，列表展开和详情页均展示各 MSKU 自身的值，不会取平均覆盖。</p>
         <SubTitle>产品链接 / 竞品链接</SubTitle>
@@ -272,8 +282,84 @@ export default function GuidePage() {
           已合并为「促销运营中心」（<code className="font-mono bg-background-100 px-1 rounded">/promo-center</code>），包含三个 Tab：活动管理、促销成本、促销时间线。旧书签链接会自动跳转到对应 Tab。
         </Faq>
         <Faq q="数据存储在哪里？">
-          数据存储在浏览器本地的 IndexedDB 中，不上传服务器。清除浏览器数据会丢失数据，建议定期导出备份。
+          数据存储在浏览器本地的 IndexedDB 中，不上传服务器。清除浏览器数据会丢失数据，建议定期使用「GitHub 云端同步」手动备份（见第九节）。
         </Faq>
+        <Faq q="换了电脑或浏览器，数据怎么迁移？">
+          在旧设备上进入「数据导入」→「GitHub 云端同步」点「保存到 GitHub 云端」；在新设备上配置同一个仓库后点「从 GitHub 拉取」即可完整恢复（见第九节）。
+        </Faq>
+        <Faq q="补货建议不想用系统默认公式？">
+          进入「发货决策」页点「补货公式」，可自定义日均销量口径（7天/30天）、触发阈值方式、目标天数/Lead Time/安全库存系数、活动倍率与取整方式（见第七节）。利润计算同理，可在「参数中心 → 利润公式」自定义成本项计入（见第八节）。
+        </Faq>
+      </GuideSection>
+      {/* 七、补货公式自定义 */}
+      <GuideSection num="七" title="补货公式自定义（/shipment）">
+        <p>入口：「发货决策」页右上角「补货公式」按钮。系统默认按以下公式计算补货建议，所有参数均可修改：</p>
+        <div className="rounded-lg bg-background-100/60 p-3 font-mono text-[12px] leading-relaxed text-foreground-700">
+          <div>建议发货量 = (目标天数 + Lead Time + 安全库存 − 含在途覆盖天数) × 日均销量 × 活动倍率</div>
+          <div>触发条件：含在途覆盖天数 &lt; 触发阈值（默认 Lead Time + 安全库存）</div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px] border border-background-200 rounded-lg">
+            <thead className="bg-background-100">
+              <tr>
+                <th className="px-3 py-2 text-left">配置项</th>
+                <th className="px-3 py-2 text-left">可选值</th>
+                <th className="px-3 py-2 text-left">默认</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-background-200">
+              <tr><td className="px-3 py-2">日均销量口径</td><td className="px-3 py-2">近 7 天平均 / 近 30 天平均</td><td className="px-3 py-2">近 7 天</td></tr>
+              <tr><td className="px-3 py-2">触发阈值方式</td><td className="px-3 py-2">Lead Time + 安全库存 / 仅 Lead Time / 仅安全库存 / 自定义天数</td><td className="px-3 py-2">LT + 安全库存</td></tr>
+              <tr><td className="px-3 py-2">三个系数（天）</td><td className="px-3 py-2">目标天数、Lead Time、安全库存</td><td className="px-3 py-2">与「参数中心 → 全局阈值」共用</td></tr>
+              <tr><td className="px-3 py-2">活动倍率</td><td className="px-3 py-2">开关 + 活动额外天数（活动期间按最高活动倍率放大销量并追加备货天数）</td><td className="px-3 py-2">开启，额外 30 天</td></tr>
+              <tr><td className="px-3 py-2">取整方式</td><td className="px-3 py-2">向上取整（补足）/ 向下取整（保守）/ 四舍五入</td><td className="px-3 py-2">向上取整</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[12px] text-foreground-500">说明：SKU 级单独设置过的 Lead Time / 安全库存优先于这里的全局系数；保存后立即重新计算发货建议列表，弹窗内附实时公式预览。</p>
+      </GuideSection>
+      {/* 八、利润公式自定义 */}
+      <GuideSection num="八" title="利润公式自定义（/settings）">
+        <p>入口：「参数中心」→「利润公式」Tab。系统默认公式如下，页面顶部实时展示当前生效的公式文本：</p>
+        <div className="rounded-lg bg-background-100/60 p-3 font-mono text-[12px] leading-relaxed text-foreground-700">
+          <div>总成本 = FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退货损失 + 促销成本 + 优惠券</div>
+          <div>单件净利 = 售价 − 总成本；净利率 = 净利 ÷ 售价 × 100%</div>
+          <div>广告费比 = 广告费 ÷ 售价 × 100%</div>
+          <div>折扣广告费(估) = 正常广告费 × (1 + 上浮率)；折扣退款费(估) 同理</div>
+        </div>
+        <SubTitle>可自定义内容</SubTitle>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>成本项计入开关</strong>：9 个成本项（FOB / 头程运费 / 配送费 / 佣金 / 仓储费 / 广告费 / 退货损失 / 促销成本 / 优惠券）任意开关。关闭后该项按 0 计，全站所有利润数字（运营一览、SKU 详情、新品测算等）实时联动。</li>
+          <li><strong>折扣预估上浮率</strong>：折扣价场景下广告费与退款费的预估上浮比例，默认 10%（即 ×1.1），可按实际促销力度调整。</li>
+        </ul>
+        <p className="text-[12px] text-foreground-500">说明：佣金取值优先级为 显式填写 → 佣金率 × 售价 → 默认 15% 估算；广告费缺失时按费比 × 售价反推。点「恢复默认」还原全部配置，保存后无需刷新立即生效。</p>
+      </GuideSection>
+      {/* 九、GitHub 云端同步 */}
+      <GuideSection num="九" title="GitHub 云端同步（手动保存）">
+        <p>数据默认只存在当前浏览器的 IndexedDB 中，换设备或清除浏览器数据会丢失。「GitHub 云端同步」把全部数据（SKU 主档、快照、分仓库存、促销、参数等）导出为一个 JSON 文件，备份到<strong>你自己的 GitHub 私有仓库</strong>，需要时一键恢复。全程手动触发，不会自动上传。</p>
+        <SubTitle>首次配置（约 5 分钟）</SubTitle>
+        <Step n="1" title="新建私有仓库">
+          登录 GitHub → 右上角「+」→ New repository → 命名（如 ops-backup）→ 勾选 Private → Create。
+        </Step>
+        <Step n="2" title="创建 Personal Access Token">
+          GitHub → Settings → Developer settings → Personal access tokens → Generate new token，勾选 repo（仓库读写）权限。建议只为该备份仓库授权，用完可随时撤销。
+        </Step>
+        <Step n="3" title="填写配置">
+          进入「数据导入」页底部「GitHub 云端同步（手动保存）」区：粘贴 Token，填仓库路径（owner / repo）、分支（默认 main）、文件路径（如 backup/ops-snapshot.json）。
+        </Step>
+        <Step n="4" title="保存并校验">
+          点「保存并校验配置」，提示校验通过后配置会保存到本地，下次无需重复填写。
+        </Step>
+        <Step n="5" title="备份 / 恢复">
+          点「保存到 GitHub 云端」上传全部数据；换设备或数据丢失时，配置好同一仓库后点「从 GitHub 拉取」恢复。按钮旁会显示上次同步时间。
+        </Step>
+        <SubTitle>注意事项</SubTitle>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>手动备份</strong>：建议每周或每次大批量导入数据后点一次「保存到 GitHub 云端」。</li>
+          <li><strong>Token 安全</strong>：Token 只保存在本地 IndexedDB，请求直接从浏览器发往 GitHub，不经任何服务器中转。</li>
+          <li><strong>拉取会覆盖</strong>：「从 GitHub 拉取」会整库覆盖本地当前数据，执行前请确认本地没有未备份的新数据。</li>
+          <li><strong>多设备</strong>：多台设备可共用同一备份仓库；建议养成「先拉取 → 编辑 → 再保存」的习惯，避免互相覆盖。</li>
+        </ul>
       </GuideSection>
       {/* 底部 */}
       <div className="border-t border-background-200 pt-6 text-center">

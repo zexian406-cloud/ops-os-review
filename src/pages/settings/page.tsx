@@ -1,8 +1,10 @@
 import { useEffect, useState, useRef } from "react";
-import { db, DEFAULT_GLOBAL_CONFIG, getGlobalConfig, setGlobalConfig, getCurrentSiteId } from "@/domain/db";
+import { db, DEFAULT_GLOBAL_CONFIG, getGlobalConfig, setGlobalConfig, getCurrentSiteId, getProfitFormulaConfig, setProfitFormulaConfig } from "@/domain/db";
+import { setProfitFormulaCache } from "@/domain/calculator";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
-import type { GlobalConfig, SkuMaster, WarehouseProvider, RateTier } from "@/domain/types";
+import type { GlobalConfig, SkuMaster, WarehouseProvider, RateTier, ProfitFormulaConfig } from "@/domain/types";
+import { DEFAULT_PROFIT_FORMULA } from "@/domain/types";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -91,10 +93,27 @@ export default function Settings() {
   const [cfg, setCfg] = useState<GlobalConfig>(DEFAULT_GLOBAL_CONFIG);
   const [skus, setSkus] = useState<SkuMaster[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
-  const [tab, setTab] = useState<"global" | "sku" | "warehouse">("global");
+  const [tab, setTab] = useState<"global" | "sku" | "warehouse" | "profit">("global");
 
   // ── 海外仓费率 ──
   const [providers, setProviders] = useState<WarehouseProvider[]>([]);
+
+  // ── 利润公式 ──
+  const [profitFormula, setProfitFormula] = useState<ProfitFormulaConfig>(DEFAULT_PROFIT_FORMULA);
+  const [profitMsg, setProfitMsg] = useState<string | null>(null);
+
+  useEffect(() => { getProfitFormulaConfig().then(setProfitFormula); }, []);
+
+  const saveProfitFormula = async () => {
+    await setProfitFormulaConfig(profitFormula);
+    setProfitFormulaCache(profitFormula);
+    setProfitMsg("利润公式已保存，全站生效");
+    setTimeout(() => setProfitMsg(null), 2600);
+  };
+
+  const toggleCostItem = (key: keyof ProfitFormulaConfig["costItems"], on: boolean) => {
+    setProfitFormula((p) => ({ ...p, costItems: { ...p.costItems, [key]: on } }));
+  };
 
   useEffect(() => {
     (async () => {
@@ -192,6 +211,7 @@ export default function Settings() {
     { key: "global" as const, label: "全局阈值", icon: "ri-tools-line" },
     { key: "sku" as const, label: "SKU 参数", icon: "ri-truck-line" },
     { key: "warehouse" as const, label: "海外仓费率", icon: "ri-building-2-line" },
+    { key: "profit" as const, label: "利润公式", icon: "ri-funds-line" },
   ];
 
   return (
@@ -549,6 +569,96 @@ export default function Settings() {
               </button>
             </div>
           )}
+        </Section>
+      )}
+
+      {/* 利润公式 */}
+      {tab === "profit" && (
+        <Section title="利润计算公式" icon="ri-funds-line" subtitle="查看默认公式 · 自定义成本项计入与折扣预估系数">
+          <div className="space-y-5">
+            {/* 默认公式展示 */}
+            <div className="rounded-xl bg-primary-50/60 p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <i className="ri-function-line text-[15px] text-primary-700" aria-hidden />
+                <span className="text-[13px] font-semibold text-primary-800">默认公式（当前生效）</span>
+              </div>
+              <div className="space-y-1 font-mono text-[12px] leading-relaxed text-foreground-700">
+                <div>总成本 = FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退货损失 + 促销成本 + 优惠券</div>
+                <div>单件净利 = 售价 − 总成本</div>
+                <div>净利率 = 净利 ÷ 售价 × 100%</div>
+                <div>广告费比 = 广告费 ÷ 售价 × 100%</div>
+                <div>退货率 = 退货费 ÷ 售价 × 100%（仅诊断展示，不计入成本）</div>
+                <div>折扣广告费(估) = 正常广告费 × (1 + 上浮率)；折扣退款费(估) 同理</div>
+              </div>
+              <div className="mt-2 text-[11px] leading-relaxed text-foreground-500">
+                佣金：显式填写的佣金优先 → 无则按佣金率 × 售价 → 再无则按默认 15% 估算；
+                广告费缺失时按费比 × 售价反推。下方开关可把任一成本项从总成本中排除（按 0 计），全站所有利润数字实时联动。
+              </div>
+            </div>
+
+            {/* 成本项开关 */}
+            <div>
+              <div className="mb-2 text-[13px] font-semibold text-foreground-900">成本项计入开关</div>
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                {([
+                  ["fob", "FOB 产品成本"],
+                  ["shipping", "头程运费"],
+                  ["delivery", "配送费"],
+                  ["commission", "佣金"],
+                  ["storage", "仓储费"],
+                  ["ad", "广告费"],
+                  ["refundLoss", "退货损失（退款率×售价）"],
+                  ["promoCost", "促销成本"],
+                  ["coupon", "优惠券"],
+                ] as Array<[keyof ProfitFormulaConfig["costItems"], string]>).map(([key, label]) => (
+                  <label key={key} className="flex cursor-pointer items-center gap-2 rounded-lg border border-background-200 bg-background-50 px-3 py-2 text-[12px] text-foreground-700 hover:border-primary-300">
+                    <input
+                      type="checkbox"
+                      checked={profitFormula.costItems[key]}
+                      onChange={(e) => toggleCostItem(key, e.target.checked)}
+                      className="accent-primary-600"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* 折扣预估上浮率 */}
+            <div>
+              <div className="mb-2 text-[13px] font-semibold text-foreground-900">折扣预估上浮率（%）</div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <NumField
+                  label="折扣广告费上浮率（默认 10 = ×1.1）"
+                  value={profitFormula.discountAdUplift}
+                  onChange={(v) => setProfitFormula((p) => ({ ...p, discountAdUplift: v }))}
+                />
+                <NumField
+                  label="折扣退款费上浮率（默认 10 = ×1.1）"
+                  value={profitFormula.discountReturnUplift}
+                  onChange={(v) => setProfitFormula((p) => ({ ...p, discountReturnUplift: v }))}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setProfitFormula(DEFAULT_PROFIT_FORMULA)}
+                className="rounded-md px-3 py-2 text-[13px] text-foreground-500 hover:text-foreground-800 cursor-pointer"
+              >
+                恢复默认
+              </button>
+              <button
+                type="button"
+                onClick={saveProfitFormula}
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary-500 px-4 py-2 text-[13px] font-semibold text-background-50 hover:bg-primary-600 cursor-pointer whitespace-nowrap"
+              >
+                <i className="ri-save-line" aria-hidden /> 保存利润公式
+              </button>
+              {profitMsg && <span className="text-[12px] text-accent-700">{profitMsg}</span>}
+            </div>
+          </div>
         </Section>
       )}
     </div>

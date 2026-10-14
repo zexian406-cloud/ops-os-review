@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
 import { computeWarehouseTotals } from "@/domain/calculator";
@@ -6,6 +6,10 @@ import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
+import ShipmentFormulaSettings from "@/components/layout/ShipmentFormulaSettings";
+import { getShipmentFormulaConfig, getWarehouseAliasMap, WAREHOUSE_MAPPING_EVENT } from "@/domain/db";
+import { DEFAULT_SHIPMENT_FORMULA } from "@/domain/types";
+import type { ShipmentFormulaConfig } from "@/domain/types";
 import {
   useShipmentKpiLayout,
   SHIPMENT_KPI_METRIC_LABELS,
@@ -33,8 +37,27 @@ export default function Shipment() {
   const { loading, currentSiteId, skuMaster, snapshots, activeCampaigns, config, latestSnapshot, latestInventory } = useOpsData();
   const [filter, setFilter] = useState<"all" | "urgent" | "high" | "normal" | "low">("all");
   const [keyword, setKeyword] = useState("");
+  const [formula, setFormula] = useState<ShipmentFormulaConfig>(DEFAULT_SHIPMENT_FORMULA);
   const [salesBasis, setSalesBasis] = useState<"7d" | "30d">("7d");
   const [sortMode, setSortMode] = useState<SortMode>("priority");
+  const [formulaOpen, setFormulaOpen] = useState(false);
+  const [aliasMap, setAliasMap] = useState<Map<string, string>>(new Map());
+
+  // 加载补货公式配置：默认口径作为 salesBasis 初始值（页面仍可临时切换）
+  useEffect(() => {
+    getShipmentFormulaConfig().then((f) => {
+      setFormula(f);
+      setSalesBasis(f.salesBasis);
+    });
+  }, []);
+
+  // 海外仓自定义别名（仓库名 → 显示名）
+  useEffect(() => {
+    const load = () => getWarehouseAliasMap(currentSiteId).then(setAliasMap);
+    load();
+    window.addEventListener(WAREHOUSE_MAPPING_EVENT, load);
+    return () => window.removeEventListener(WAREHOUSE_MAPPING_EVENT, load);
+  }, [currentSiteId]);
 
   const {
     customizingKpi, setCustomizingKpi, setKpiSlot, resetKpi, kpiSlots,
@@ -46,8 +69,8 @@ export default function Shipment() {
   }, [snapshots]);
 
   const shipmentSuggestions = useMemo(() => computeShipmentSuggestions({
-    skuMaster, latestSnapshot, latestInventory, activeCampaigns, config, today, salesBasis,
-  }), [skuMaster, latestSnapshot, latestInventory, activeCampaigns, config, today, salesBasis]);
+    skuMaster, latestSnapshot, latestInventory, activeCampaigns, config, today, salesBasis, formula,
+  }), [skuMaster, latestSnapshot, latestInventory, activeCampaigns, config, today, salesBasis, formula]);
 
   const skuSuggestions = useMemo(() => {
     const sugMap = new Map(shipmentSuggestions.map((s) => [s.sku, s]));
@@ -68,7 +91,10 @@ export default function Shipment() {
         const target = sug?.targetCoverDays ?? 60;
         const leadTime = sm.leadTimeDays ?? sug?.leadTimeDays ?? config.defaultLeadTime;
         const safetyDays = sm.safetyStockDays ?? sug?.safetyStockDays ?? config.defaultSafetyStockDays;
-        const dynamicThreshold = leadTime + safetyDays;
+        const dynamicThreshold = formula.thresholdMode === "lt_only" ? leadTime
+          : formula.thresholdMode === "safety_only" ? safetyDays
+          : formula.thresholdMode === "custom_days" ? formula.customThresholdDays
+          : leadTime + safetyDays;
         const needShip = coverWithTransit < dynamicThreshold && daily > 0;
         return { sku: sm, snap, inv, sug, totalStock, totalTransit, coverOnHand, coverWithTransit, target, needShip, daily, leadTime, safetyDays, dynamicThreshold };
       })
@@ -111,7 +137,7 @@ export default function Shipment() {
         break;
     }
     return sorted;
-  }, [skuMaster, latestSnapshot, latestInventory, shipmentSuggestions, filter, keyword, salesBasis, sortMode, config]);
+  }, [skuMaster, latestSnapshot, latestInventory, shipmentSuggestions, filter, keyword, salesBasis, sortMode, config, formula]);
 
   const urgentCount = shipmentSuggestions.filter((s) => s.priority === "urgent").length;
   const totalQty = shipmentSuggestions.reduce((s, r) => s + r.suggestQty, 0);
@@ -273,6 +299,12 @@ export default function Shipment() {
               </button>
             ))}
           </div>
+          <button type="button" onClick={() => setFormulaOpen(true)}
+            className="flex items-center gap-1 rounded-full border border-primary-200 bg-primary-50/70 px-3 py-1 text-[11px] font-medium text-primary-700 transition-colors hover:bg-primary-100 cursor-pointer"
+            title="自定义补货公式：口径 / 取整 / 阈值 / 系数 / 活动倍率">
+            <i className="ri-calculator-line text-[13px]" aria-hidden />
+            补货公式
+          </button>
           <select value={sortMode} onChange={(e) => setSortMode(e.target.value as SortMode)}
             className="rounded-full border border-background-300/70 bg-background-50 px-3 py-1 text-[11px] text-foreground-600 focus:border-primary-500 focus:outline-none cursor-pointer">
             {(Object.keys(SORT_LABELS) as SortMode[]).map((k) => (
@@ -301,10 +333,19 @@ export default function Shipment() {
             <EmptyState icon="ri-check-double-line" title="没有匹配的发货建议" desc="调整筛选条件或前往参数中心调整目标库存天数" />
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {skuSuggestions.map((item) => <ShipmentCard key={item.sku.sku} item={item} salesBasis={salesBasis} />)}
+              {skuSuggestions.map((item) => <ShipmentCard key={item.sku.sku} item={item} salesBasis={salesBasis} aliasMap={aliasMap} />)}
             </div>
           )}
         </Section>
+
+      <ShipmentFormulaSettings
+        open={formulaOpen}
+        onClose={() => setFormulaOpen(false)}
+        onSaved={(f) => {
+          setFormula(f);
+          setSalesBasis(f.salesBasis);
+        }}
+      />
     </div>
   );
 }
@@ -320,7 +361,7 @@ type ItemType = {
   leadTime: number; safetyDays: number; dynamicThreshold: number;
 };
 
-function ShipmentCard({ item, salesBasis }: { item: ItemType; salesBasis: "7d" | "30d" }) {
+function ShipmentCard({ item, salesBasis, aliasMap }: { item: ItemType; salesBasis: "7d" | "30d"; aliasMap: Map<string, string> }) {
   const sm = item.sku;
   const inv = item.inv;
   const targetProgress = Math.min((item.coverWithTransit / item.target) * 100, 100);
@@ -369,7 +410,7 @@ function ShipmentCard({ item, salesBasis }: { item: ItemType; salesBasis: "7d" |
             tagClass="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600"
             detailRows={inv?.warehouseBreakdown?.map((w) => {
               const dv = Number(w.daysOfCover);
-              return { left: w.warehouse, rightNum: w.qty, rightTag: `${Number.isFinite(dv) && dv > 0 ? String(Math.round(dv)) : "—"}天`, tagClass: "rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600" };
+              return { left: aliasMap.get(w.warehouse) ?? w.warehouse, rightNum: w.qty, rightTag: `${Number.isFinite(dv) && dv > 0 ? String(Math.round(dv)) : "—"}天`, tagClass: "rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600" };
             }) ?? []} />;
         })()}
         {(() => {

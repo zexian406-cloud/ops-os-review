@@ -1,4 +1,22 @@
 import type { SkuMaster, DailySnapshot, InventoryLayer, Promotion, ManualPromotion } from "./types";
+import { DEFAULT_PROFIT_FORMULA } from "./types";
+import type { ProfitFormulaConfig } from "./types";
+
+// ────────── 利润公式配置（模块级缓存，App 启动时注入，设置页保存时更新） ──────────
+let profitFormulaCache: ProfitFormulaConfig = DEFAULT_PROFIT_FORMULA;
+
+export function setProfitFormulaCache(cfg: ProfitFormulaConfig): void {
+  profitFormulaCache = cfg;
+}
+
+export function getProfitFormulaCache(): ProfitFormulaConfig {
+  return profitFormulaCache;
+}
+
+/** 成本项开关：关闭的项按 0 计入总成本 */
+function gated(k: keyof ProfitFormulaConfig["costItems"], v: number): number {
+  return profitFormulaCache.costItems[k] ? v : 0;
+}
 
 // =========================================================
 // 自动计算引擎 — 纯函数，14条规则，仅在目标字段为空时触发
@@ -171,11 +189,32 @@ export function computeTotalCost(
   const refundLoss = snap ? (snap.refundRate ?? 0) / 100 * price : 0;
 
   // 优惠券计入总成本（用户拍板：优惠券是真实支出，应纳入成本与净利）
-  const total = fob + shipping + delivery + commission + storage + ad + refundLoss + promoCost + coupon;
+  // 各成本项受利润公式开关控制（设置 → 利润公式），关闭的项按 0 计入
+  const total =
+    gated("fob", fob) +
+    gated("shipping", shipping) +
+    gated("delivery", delivery) +
+    gated("commission", commission) +
+    gated("storage", storage) +
+    gated("ad", ad) +
+    gated("refundLoss", refundLoss) +
+    gated("promoCost", promoCost) +
+    gated("coupon", coupon);
 
   return {
     total,
-    detail: { fob, shipping, delivery, commission, storage, ad, ret, refundLoss, coupon, promoCost },
+    detail: {
+      fob: gated("fob", fob),
+      shipping: gated("shipping", shipping),
+      delivery: gated("delivery", delivery),
+      commission: gated("commission", commission),
+      storage: gated("storage", storage),
+      ad: gated("ad", ad),
+      ret,
+      refundLoss: gated("refundLoss", refundLoss),
+      coupon: gated("coupon", coupon),
+      promoCost: gated("promoCost", promoCost),
+    },
     inferred: { isAdInferred, isReturnInferred, isCommissionInferred },
   };
 }
@@ -265,12 +304,32 @@ export function computeDiscountTotalCost(
   // 退货损失（计入折扣总成本）：退款率 × 折扣价，对所有履约方式生效
   const refundLoss = snap ? (snap.refundRate ?? 0) / 100 * dp : 0;
 
-  // 优惠券计入折扣总成本（与正常成本口径一致）
-  const total = fob + shipping + delivery + commission + storage + ad + refundLoss + promoCost + coupon;
+  // 优惠券计入折扣总成本（与正常成本口径一致）；各成本项受利润公式开关控制
+  const total =
+    gated("fob", fob) +
+    gated("shipping", shipping) +
+    gated("delivery", delivery) +
+    gated("commission", commission) +
+    gated("storage", storage) +
+    gated("ad", ad) +
+    gated("refundLoss", refundLoss) +
+    gated("promoCost", promoCost) +
+    gated("coupon", coupon);
 
   return {
     total,
-    detail: { fob, shipping, delivery, commission, storage, ad, ret, refundLoss, coupon, promoCost },
+    detail: {
+      fob: gated("fob", fob),
+      shipping: gated("shipping", shipping),
+      delivery: gated("delivery", delivery),
+      commission: gated("commission", commission),
+      storage: gated("storage", storage),
+      ad: gated("ad", ad),
+      ret,
+      refundLoss: gated("refundLoss", refundLoss),
+      coupon: gated("coupon", coupon),
+      promoCost: gated("promoCost", promoCost),
+    },
     inferred: { isAdInferred, isReturnInferred, isCommissionInferred },
   };
 }
@@ -308,13 +367,13 @@ export function computeReturnFee30d(price: number, returnRate: number, monthlySa
 // ────────── 规则7：折扣广告费(估) ──────────
 export function computeDiscountAdEstimated(normalAdFee: number, discountAdFee?: number): number {
   if (discountAdFee != null && discountAdFee > 0) return discountAdFee;
-  return normalAdFee * 1.1;
+  return normalAdFee * (1 + profitFormulaCache.discountAdUplift / 100);
 }
 
 // ────────── 规则8：折扣退款费(估) ──────────
 export function computeDiscountReturnFeeEstimated(normalReturnFee: number, discountReturnFee?: number): number {
   if (discountReturnFee != null && discountReturnFee > 0) return discountReturnFee;
-  return normalReturnFee * 1.1;
+  return normalReturnFee * (1 + profitFormulaCache.discountReturnUplift / 100);
 }
 
 // ────────── 规则9：仓库库存自动汇总 ──────────
@@ -449,8 +508,17 @@ export function computeFbmReplenishment(
 // 其他成本组件（FOB/头程/配送/佣金/仓储）齐全 → CALCULATED；有缺失 → ESTIMATED。
 // 注：退款损失(refundLoss) 允许为 0（退款率=0 属正常），不计入齐全判定。
 export function deriveProfitSource(detail: CostDetail): "CALCULATED" | "ESTIMATED" {
-  const core = [detail.fob, detail.shipping, detail.delivery, detail.commission, detail.storage];
-  return core.every((v) => v > 0) ? "CALCULATED" : "ESTIMATED";
+  const items = profitFormulaCache.costItems;
+  const core: Array<[boolean, number]> = [
+    [items.fob, detail.fob],
+    [items.shipping, detail.shipping],
+    [items.delivery, detail.delivery],
+    [items.commission, detail.commission],
+    [items.storage, detail.storage],
+  ];
+  const active = core.filter(([enabled]) => enabled);
+  if (active.length === 0) return "ESTIMATED";
+  return active.every(([, v]) => v > 0) ? "CALCULATED" : "ESTIMATED";
 }
 
 export function computeAll(params: {

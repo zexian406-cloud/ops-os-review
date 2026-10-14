@@ -328,6 +328,58 @@ export interface GlobalConfig {
   lifecycleGrowthDays: number;     // 成长期天数
 }
 
+/** 发货建议公式配置（存 config key "shipmentFormula"） */
+export type ShipmentRounding = "ceil" | "floor" | "round";
+export type ShipmentThresholdMode =
+  | "lt_safety"     // Lead Time + 安全库存
+  | "lt_only"       // 仅 Lead Time
+  | "safety_only"   // 仅安全库存
+  | "custom_days";  // 自定义天数
+
+export interface ShipmentFormulaConfig {
+  salesBasis: "7d" | "30d";             // 默认日均销量口径（发货页可临时切换）
+  rounding: ShipmentRounding;           // 建议量取整方式
+  thresholdMode: ShipmentThresholdMode; // 触发阈值方式
+  customThresholdDays: number;          // thresholdMode=custom_days 时的阈值天数
+  promoMultiplierEnabled: boolean;      // 活动倍率开关
+  promoExtraDays: number;               // 活动期间目标天数额外加的天数
+}
+
+export const DEFAULT_SHIPMENT_FORMULA: ShipmentFormulaConfig = {
+  salesBasis: "7d",
+  rounding: "ceil",
+  thresholdMode: "lt_safety",
+  customThresholdDays: 60,
+  promoMultiplierEnabled: true,
+  promoExtraDays: 30,
+};
+
+/** 利润计算公式配置（存 config key "profitFormula"） */
+export interface ProfitFormulaConfig {
+  costItems: {
+    fob: boolean;         // FOB 成本
+    shipping: boolean;    // 头程运费
+    delivery: boolean;    // 配送费
+    commission: boolean;  // 佣金
+    storage: boolean;     // 仓储费
+    ad: boolean;          // 广告费
+    refundLoss: boolean;  // 退货损失（退款率×售价）
+    promoCost: boolean;   // 促销成本
+    coupon: boolean;      // 优惠券
+  };
+  discountAdUplift: number;     // 折扣广告费预估上浮 %（默认 10 = ×1.1）
+  discountReturnUplift: number; // 折扣退款费预估上浮 %（默认 10 = ×1.1）
+}
+
+export const DEFAULT_PROFIT_FORMULA: ProfitFormulaConfig = {
+  costItems: {
+    fob: true, shipping: true, delivery: true, commission: true,
+    storage: true, ad: true, refundLoss: true, promoCost: true, coupon: true,
+  },
+  discountAdUplift: 10,
+  discountReturnUplift: 10,
+};
+
 /** 云端同步配置（GitHub） */
 export interface CloudConfig {
   provider: "github";
@@ -375,12 +427,30 @@ export interface RateTier {
   rate: number;       // USD 费率
 }
 
-export type WarehouseRegion = "east" | "west" | "southeast" | "southcentral";
+/**
+ * 仓库区域：预置美东/美西/东南/中南四仓，支持用户自定义区域
+ * （自定义区域 code = 用户输入名称，如 "加拿大东仓"）。
+ */
+export type WarehouseRegion = string;
+
+export interface WarehouseRegionOption {
+  code: string;   // 存储键；预置四仓用英文 code，自定义区域与 label 相同
+  label: string;  // 展示名
+}
+
+export const DEFAULT_WAREHOUSE_REGIONS: WarehouseRegionOption[] = [
+  { code: "east", label: "美东" },
+  { code: "west", label: "美西" },
+  { code: "southeast", label: "东南" },
+  { code: "southcentral", label: "中南" },
+];
 
 export interface WarehouseMapping {
   id?: number;
   warehouseName: string;   // 原始仓库名，如 "乐歌(新) CAP"
   region: WarehouseRegion; // 映射到的区域
+  siteId?: string;         // 适用站点；空 = 通用映射（所有站点生效）
+  alias?: string;          // 自定义显示名（可选，空 = 用原始仓库名）
   createdAt: string;
 }
 

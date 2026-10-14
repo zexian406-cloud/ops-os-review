@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from "react";
 import * as XLSX from "xlsx";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
@@ -22,7 +22,11 @@ import {
   upsertInventoryLayers,
   upsertInventoryLayersPartial,
   upsertSnapshots,
-  getWarehouseRegionMap,
+  getAllSites,
+  resolveRegionMap,
+  patchWarehouseMapping,
+  getWarehouseRegions,
+  setWarehouseRegions,
   guessRegion,
   upsertWarehouseMapping,
   getAllWarehouseMappings,
@@ -30,7 +34,7 @@ import {
   reapplyWarehouseMappings,
 } from "@/domain/db";
 import { pullFromGitHub, pushToGitHub, verifyGitHubConfig } from "@/domain/cloud";
-import type { CloudConfig, DailySnapshot, InventoryLayer, SkuMaster, Shop, TransitBatch, FactoryBatch, WarehouseMapping, WarehouseRegion } from "@/domain/types";
+import type { CloudConfig, DailySnapshot, InventoryLayer, SkuMaster, Shop, TransitBatch, FactoryBatch, WarehouseMapping, WarehouseRegion, WarehouseRegionOption, Site } from "@/domain/types";
 
 const APP_VERSION = "4958334";
 
@@ -493,15 +497,15 @@ export default function ImportPage() {
       // ── 合并批次数据到 inventoryLayer ──
       const today = parsed.today;
 
-      // 获取仓库映射并自动猜测未映射的仓库
-      const regionMap = await getWarehouseRegionMap();
+      // 获取仓库映射（站点感知：站点专属映射优先于通用映射）并自动猜测未映射的仓库
+      const regionMap = await resolveRegionMap(siteId);
       for (const layer of validInventory) {
         if (layer.warehouseBreakdown) {
           for (const wb of layer.warehouseBreakdown) {
             if (!regionMap.has(wb.warehouse)) {
               const guessed = guessRegion(wb.warehouse);
               if (guessed) {
-                await upsertWarehouseMapping(wb.warehouse, guessed);
+                await upsertWarehouseMapping(wb.warehouse, guessed, { siteId });
                 regionMap.set(wb.warehouse, guessed);
               }
             }
@@ -851,15 +855,15 @@ export default function ImportPage() {
         skuWarehouses.set(sku, list);
       }
 
-      // 获取仓库映射，并为未映射的仓库自动猜测并保存
-      const regionMap = await getWarehouseRegionMap();
+      // 获取仓库映射（站点感知），并为未映射的仓库自动猜测并保存
+      const regionMap = await resolveRegionMap(siteId);
       const unmapped = new Set<string>();
       for (const warehouses of skuWarehouses.values()) {
         for (const w of warehouses) {
           if (!regionMap.has(w.warehouse)) {
             const guessed = guessRegion(w.warehouse);
             if (guessed) {
-              await upsertWarehouseMapping(w.warehouse, guessed);
+              await upsertWarehouseMapping(w.warehouse, guessed, { siteId });
               regionMap.set(w.warehouse, guessed);
             } else {
               unmapped.add(w.warehouse);
@@ -2072,40 +2076,96 @@ function Field({
 // ────────── 仓库映射管理面板 ──────────
 function WarehouseMappingPanel() {
   const [mappings, setMappings] = useState<WarehouseMapping[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [regions, setRegions] = useState<WarehouseRegionOption[]>([]);
   const [newName, setNewName] = useState("");
   const [newRegion, setNewRegion] = useState<WarehouseRegion>("east");
+  const [newSiteId, setNewSiteId] = useState("");
+  const [newAlias, setNewAlias] = useState("");
+  const [newRegionName, setNewRegionName] = useState("");
+  const [aliasDrafts, setAliasDrafts] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
 
   const reload = async () => {
-    const all = await getAllWarehouseMappings();
+    const [all, regionList] = await Promise.all([getAllWarehouseMappings(), getWarehouseRegions()]);
     all.sort((a, b) => a.warehouseName.localeCompare(b.warehouseName));
     setMappings(all);
+    setRegions(regionList);
     setLoading(false);
   };
 
   useEffect(() => { reload(); }, []);
+  useEffect(() => { getAllSites().then(setSites); }, []);
 
-  const regionLabel: Record<WarehouseRegion, string> = {
-    east: "美东",
-    west: "美西",
-    southeast: "东南",
-    southcentral: "中南",
-  };
+  const regionLabel = useMemo(() => {
+    const m = new Map<string, string>();
+    regions.forEach((r) => m.set(r.code, r.label));
+    return m;
+  }, [regions]);
+
+  const siteLabel = useMemo(() => {
+    const m = new Map<string, string>();
+    sites.forEach((s) => m.set(s.id, s.name));
+    return m;
+  }, [sites]);
 
   const handleAdd = async () => {
     if (!newName.trim()) return;
-    await upsertWarehouseMapping(newName.trim(), newRegion);
+    await upsertWarehouseMapping(newName.trim(), newRegion, {
+      siteId: newSiteId || null,
+      alias: newAlias || null,
+    });
     setNewName("");
+    setNewAlias("");
     reload();
   };
 
-  const handleUpdate = async (name: string, region: WarehouseRegion) => {
-    await upsertWarehouseMapping(name, region);
+  const handleUpdate = async (m: WarehouseMapping, region: WarehouseRegion) => {
+    await upsertWarehouseMapping(m.warehouseName, region, {
+      siteId: m.siteId ?? null,
+      alias: m.alias ?? null,
+    });
+    reload();
+  };
+
+  const handleSiteChange = async (m: WarehouseMapping, siteId: string) => {
+    await patchWarehouseMapping(m.id!, { siteId: siteId || null });
+    reload();
+  };
+
+  const handleAliasSave = async (m: WarehouseMapping) => {
+    const draft = aliasDrafts[m.id!];
+    if (draft === undefined) return;
+    await patchWarehouseMapping(m.id!, { alias: draft });
+    setAliasDrafts((p) => {
+      const next = { ...p };
+      delete next[m.id!];
+      return next;
+    });
     reload();
   };
 
   const handleDelete = async (id: number) => {
     await deleteWarehouseMapping(id);
+    reload();
+  };
+
+  const handleAddRegion = async () => {
+    const name = newRegionName.trim();
+    if (!name) return;
+    if (regions.some((r) => r.code === name || r.label === name)) {
+      setNewRegionName("");
+      return;
+    }
+    await setWarehouseRegions([...regions, { code: name, label: name }]);
+    setNewRegionName("");
+    reload();
+  };
+
+  const handleDeleteRegion = async (code: string) => {
+    // 预置四仓不可删；已使用的自定义区域删除后映射保留原值但下拉中不再出现
+    if (["east", "west", "southeast", "southcentral"].includes(code)) return;
+    await setWarehouseRegions(regions.filter((r) => r.code !== code));
     reload();
   };
 
@@ -2131,16 +2191,19 @@ function WarehouseMappingPanel() {
 
   if (loading) return <div className="text-[13px] text-foreground-500">加载中...</div>;
 
+  const regionLabelOf = (code: string) => regionLabel.get(code) ?? code;
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg bg-primary-50/60 p-3 text-[12px] text-foreground-700">
         <i className="ri-information-line mr-1 text-primary-600" aria-hidden />
-        导入仓库明细时，系统会自动按仓库名匹配区域并填入美东/美西/东南/中南字段。
-        匹配不到的仓库名会在这里显示，你可以手动指定区域。仓库编码换了只需改这里。
+        导入仓库明细时，系统会按仓库名匹配区域（自动识别美东/美西/东南/中南）。匹配不到的仓库在这里手动指定。
+        <b>适用站点</b>可选「通用」或某个站点——同名仓库可按站点分别映射（如美国站和加拿大站各自的海外仓互不影响）；
+        <b>别名</b>用于在发货页等处替换显示原始仓库名；区域也可以自定义命名（如"加拿大东仓"）。
         修改映射后系统会自动重算已有库存数据的区域字段，无需重新导入。
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={handleReapply}
           className="rounded-[9px] bg-primary-600 px-3 py-1.5 text-[12px] text-white hover:bg-primary-700 cursor-pointer transition-colors"
@@ -2153,6 +2216,43 @@ function WarehouseMappingPanel() {
         )}
       </div>
 
+      {/* 区域管理 */}
+      <div className="rounded-lg border border-background-200 p-3">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[12px] font-medium text-foreground-700">区域管理（{regions.length} 个）</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {regions.map((r) => {
+            const isPreset = ["east", "west", "southeast", "southcentral"].includes(r.code);
+            return (
+              <span key={r.code} className="flex items-center gap-1 rounded-md bg-secondary-100 px-2 py-0.5 text-[11px] text-secondary-700">
+                {r.label}
+                {!isPreset && (
+                  <button type="button" onClick={() => handleDeleteRegion(r.code)}
+                    className="text-secondary-400 hover:text-red-500 cursor-pointer" aria-label={`删除区域 ${r.label}`}>
+                    <i className="ri-close-line text-[12px]" aria-hidden />
+                  </button>
+                )}
+              </span>
+            );
+          })}
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            type="text"
+            value={newRegionName}
+            onChange={(e) => setNewRegionName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleAddRegion(); }}
+            placeholder="添加自定义区域，如：加拿大东仓"
+            className="w-56 rounded-md border border-background-300 bg-white px-2.5 py-1.5 text-[12px] focus:border-primary-400 focus:outline-none"
+          />
+          <button onClick={handleAddRegion} disabled={!newRegionName.trim()}
+            className="rounded-md bg-secondary-600 px-3 py-1.5 text-[12px] text-white hover:bg-secondary-700 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed">
+            添加区域
+          </button>
+        </div>
+      </div>
+
       {/* 已有映射列表 */}
       {mappings.length > 0 ? (
         <div className="overflow-x-auto">
@@ -2160,6 +2260,8 @@ function WarehouseMappingPanel() {
             <thead>
               <tr className="border-b border-background-200 text-left text-[11px] text-foreground-500 uppercase tracking-wider">
                 <th className="py-2 pr-3 font-medium">仓库名称</th>
+                <th className="py-2 pr-3 font-medium">适用站点</th>
+                <th className="py-2 pr-3 font-medium">别名（显示名）</th>
                 <th className="py-2 pr-3 font-medium">映射区域</th>
                 <th className="py-2 pr-3 font-medium">操作</th>
               </tr>
@@ -2170,14 +2272,32 @@ function WarehouseMappingPanel() {
                   <td className="py-2 pr-3 font-mono text-[12px]">{m.warehouseName}</td>
                   <td className="py-2 pr-3">
                     <select
-                      value={m.region}
-                      onChange={(e) => handleUpdate(m.warehouseName, e.target.value as WarehouseRegion)}
+                      value={m.siteId ?? ""}
+                      onChange={(e) => handleSiteChange(m, e.target.value)}
                       className="rounded-md border border-background-300 bg-white px-2 py-1 text-[12px] text-foreground-800 focus:border-primary-400 focus:outline-none"
                     >
-                      <option value="east">美东</option>
-                      <option value="west">美西</option>
-                      <option value="southeast">东南</option>
-                      <option value="southcentral">中南</option>
+                      <option value="">通用（所有站点）</option>
+                      {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </td>
+                  <td className="py-2 pr-3">
+                    <input
+                      type="text"
+                      value={aliasDrafts[m.id!] ?? m.alias ?? ""}
+                      onChange={(e) => setAliasDrafts((p) => ({ ...p, [m.id!]: e.target.value }))}
+                      onBlur={() => handleAliasSave(m)}
+                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                      placeholder="留空用原名"
+                      className="w-32 rounded-md border border-background-300 bg-white px-2 py-1 text-[12px] focus:border-primary-400 focus:outline-none"
+                    />
+                  </td>
+                  <td className="py-2 pr-3">
+                    <select
+                      value={m.region}
+                      onChange={(e) => handleUpdate(m, e.target.value as WarehouseRegion)}
+                      className="rounded-md border border-background-300 bg-white px-2 py-1 text-[12px] text-foreground-800 focus:border-primary-400 focus:outline-none"
+                    >
+                      {regions.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
                     </select>
                   </td>
                   <td className="py-2 pr-3">
@@ -2207,16 +2327,19 @@ function WarehouseMappingPanel() {
           </div>
           <div className="flex flex-wrap gap-1.5">
             {knownWarehouses.map(name => {
-              const mapped = mappings.find(m => m.warehouseName === name);
+              const mapped = mappings.find(m => m.warehouseName === name && !m.siteId)
+                ?? mappings.find(m => m.warehouseName === name);
               return (
                 <span
                   key={name}
                   className={`mono-num rounded-md px-2 py-0.5 text-[11px] ${
                     mapped ? "bg-accent-100 text-accent-700" : "bg-secondary-100 text-secondary-700"
                   }`}
-                  title={mapped ? `已映射: ${regionLabel[mapped.region]}` : "未映射"}
+                  title={mapped
+                    ? `已映射: ${regionLabelOf(mapped.region)}${mapped.siteId ? `（${siteLabel.get(mapped.siteId) ?? mapped.siteId}）` : "（通用）"}`
+                    : "未映射"}
                 >
-                  {name} {mapped ? `→ ${regionLabel[mapped.region]}` : "⚠️ 未映射"}
+                  {name} {mapped ? `→ ${regionLabelOf(mapped.region)}` : "⚠️ 未映射"}
                 </span>
               );
             })}
@@ -2225,8 +2348,8 @@ function WarehouseMappingPanel() {
       )}
 
       {/* 手动添加映射 */}
-      <div className="flex items-end gap-2 rounded-lg border border-background-200 p-3">
-        <div className="flex-1">
+      <div className="flex flex-wrap items-end gap-2 rounded-lg border border-background-200 p-3">
+        <div className="min-w-40 flex-1">
           <label className="mb-1 block text-[11px] font-medium text-foreground-600">仓库名称</label>
           <input
             type="text"
@@ -2241,16 +2364,34 @@ function WarehouseMappingPanel() {
           </datalist>
         </div>
         <div>
+          <label className="mb-1 block text-[11px] font-medium text-foreground-600">适用站点</label>
+          <select
+            value={newSiteId}
+            onChange={(e) => setNewSiteId(e.target.value)}
+            className="rounded-md border border-background-300 bg-white px-2.5 py-1.5 text-[13px] focus:border-primary-400 focus:outline-none"
+          >
+            <option value="">通用</option>
+            {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-[11px] font-medium text-foreground-600">别名</label>
+          <input
+            type="text"
+            value={newAlias}
+            onChange={(e) => setNewAlias(e.target.value)}
+            placeholder="可选"
+            className="w-28 rounded-md border border-background-300 bg-white px-2.5 py-1.5 text-[13px] focus:border-primary-400 focus:outline-none"
+          />
+        </div>
+        <div>
           <label className="mb-1 block text-[11px] font-medium text-foreground-600">区域</label>
           <select
             value={newRegion}
             onChange={(e) => setNewRegion(e.target.value as WarehouseRegion)}
             className="rounded-md border border-background-300 bg-white px-2.5 py-1.5 text-[13px] focus:border-primary-400 focus:outline-none"
           >
-            <option value="east">美东</option>
-            <option value="west">美西</option>
-            <option value="southeast">东南</option>
-            <option value="southcentral">中南</option>
+            {regions.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
           </select>
         </div>
         <button
