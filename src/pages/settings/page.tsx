@@ -3,8 +3,9 @@ import { db, DEFAULT_GLOBAL_CONFIG, getGlobalConfig, setGlobalConfig, getCurrent
 import { setProfitFormulaCache } from "@/domain/calculator";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
-import type { GlobalConfig, SkuMaster, WarehouseProvider, RateTier, ProfitFormulaConfig } from "@/domain/types";
-import { DEFAULT_PROFIT_FORMULA } from "@/domain/types";
+import type { GlobalConfig, SkuMaster, WarehouseProvider, RateTier, ProfitFormulaConfig, ProfitFormulaKey } from "@/domain/types";
+import { DEFAULT_PROFIT_FORMULA, PROFIT_FORMULA_META } from "@/domain/types";
+import { compileFormula, FormulaEvalError } from "@/domain/formulaEval";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -101,10 +102,25 @@ export default function Settings() {
   // ── 利润公式 ──
   const [profitFormula, setProfitFormula] = useState<ProfitFormulaConfig>(DEFAULT_PROFIT_FORMULA);
   const [profitMsg, setProfitMsg] = useState<string | null>(null);
+  const [profitErr, setProfitErr] = useState<string | null>(null);
 
   useEffect(() => { getProfitFormulaConfig().then(setProfitFormula); }, []);
 
   const saveProfitFormula = async () => {
+    // 非法表达式不允许入库（引擎虽有默认公式兜底，但不留脏配置）
+    for (const [k, expr] of Object.entries(profitFormula.formulas)) {
+      if (!expr?.trim()) continue;
+      try {
+        compileFormula(expr);
+      } catch (e) {
+        const label = PROFIT_FORMULA_META[k as ProfitFormulaKey]?.label ?? k;
+        const reason = e instanceof FormulaEvalError ? e.message : "表达式错误";
+        setProfitErr(`「${label}」公式无效：${reason}，请修正后再保存`);
+        setTimeout(() => setProfitErr(null), 5000);
+        return;
+      }
+    }
+    setProfitErr(null);
     await setProfitFormulaConfig(profitFormula);
     setProfitFormulaCache(profitFormula);
     setProfitMsg("利润公式已保存，全站生效");
@@ -574,25 +590,35 @@ export default function Settings() {
 
       {/* 利润公式 */}
       {tab === "profit" && (
-        <Section title="利润计算公式" icon="ri-funds-line" subtitle="查看默认公式 · 自定义成本项计入与折扣预估系数">
+        <Section title="利润计算公式" icon="ri-funds-line" subtitle="查看默认公式 · 成本项/系数可调 · 公式表达式可完全自定义">
           <div className="space-y-5">
-            {/* 默认公式展示 */}
+            {/* 默认公式展示（含自定义生效标记） */}
             <div className="rounded-xl bg-primary-50/60 p-4">
               <div className="mb-2 flex items-center gap-2">
                 <i className="ri-function-line text-[15px] text-primary-700" aria-hidden />
-                <span className="text-[13px] font-semibold text-primary-800">默认公式（当前生效）</span>
+                <span className="text-[13px] font-semibold text-primary-800">当前生效公式</span>
               </div>
               <div className="space-y-1 font-mono text-[12px] leading-relaxed text-foreground-700">
-                <div>总成本 = FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退货损失 + 促销成本 + 优惠券</div>
-                <div>单件净利 = 售价 − 总成本</div>
-                <div>净利率 = 净利 ÷ 售价 × 100%</div>
-                <div>广告费比 = 广告费 ÷ 售价 × 100%</div>
-                <div>退货率 = 退货费 ÷ 售价 × 100%（仅诊断展示，不计入成本）</div>
-                <div>折扣广告费(估) = 正常广告费 × (1 + 上浮率)；折扣退款费(估) 同理</div>
+                {(Object.entries(PROFIT_FORMULA_META) as Array<[ProfitFormulaKey, (typeof PROFIT_FORMULA_META)[ProfitFormulaKey]]>)
+                  .filter(([key]) => key !== "discountTotalCost")
+                  .map(([key, meta]) => {
+                    const custom = profitFormula.formulas[key]?.trim();
+                    return (
+                      <div key={key}>
+                        {meta.label} = {custom || meta.defaultExpr}
+                        {custom && (
+                          <span className="ml-1.5 inline-block rounded bg-accent-100 px-1.5 py-0.5 align-middle font-sans text-[10px] font-semibold text-accent-700">
+                            已自定义
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
               </div>
               <div className="mt-2 text-[11px] leading-relaxed text-foreground-500">
                 佣金：显式填写的佣金优先 → 无则按佣金率 × 售价 → 再无则按默认佣金率（当前 {profitFormula.defaultCommissionRate}%，下方可修改）估算；
                 广告费缺失时按费比 × 售价反推。下方开关可把任一成本项从总成本中排除（按 0 计），全站所有利润数字实时联动。
+                公式可在下方「自定义公式」中改写，留空即恢复内置默认。
               </div>
             </div>
 
@@ -653,6 +679,31 @@ export default function Settings() {
               </div>
             </div>
 
+            {/* 自定义公式（高级） */}
+            <div>
+              <div className="mb-1 flex flex-wrap items-baseline gap-x-2">
+                <span className="text-[13px] font-semibold text-foreground-900">自定义公式（高级）</span>
+                <span className="text-[11px] text-foreground-400">每条留空 = 使用内置默认公式</span>
+              </div>
+              <div className="space-y-2.5">
+                {(Object.keys(PROFIT_FORMULA_META) as ProfitFormulaKey[]).map((key) => (
+                  <FormulaField
+                    key={key}
+                    metaKey={key}
+                    value={profitFormula.formulas[key] ?? ""}
+                    onChange={(v) =>
+                      setProfitFormula((p) => {
+                        const next = { ...p.formulas };
+                        if (v.trim()) next[key] = v.trim();
+                        else delete next[key];
+                        return { ...p, formulas: next };
+                      })
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -669,6 +720,7 @@ export default function Settings() {
                 <i className="ri-save-line" aria-hidden /> 保存利润公式
               </button>
               {profitMsg && <span className="text-[12px] text-accent-700">{profitMsg}</span>}
+              {profitErr && <span className="text-[12px] font-medium text-danger-600">{profitErr}</span>}
             </div>
           </div>
         </Section>
@@ -699,5 +751,60 @@ function NumField({
         className="rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-sm text-foreground-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
       />
     </label>
+  );
+}
+
+/** 单条自定义公式输入：实时语法校验 + 默认公式/可用变量提示 */
+function FormulaField({
+  metaKey,
+  value,
+  onChange,
+}: {
+  metaKey: ProfitFormulaKey;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const meta = PROFIT_FORMULA_META[metaKey];
+  const [local, setLocal] = useState(value);
+  const focused = useRef(false);
+
+  useEffect(() => {
+    if (!focused.current) setLocal(value);
+  }, [value]);
+
+  const trimmed = local.trim();
+  let checkOk = true;
+  let checkMsg = "留空 = 使用内置默认公式";
+  if (trimmed) {
+    try {
+      compileFormula(trimmed);
+      checkMsg = "✓ 语法正确，保存后全站生效";
+    } catch (e) {
+      checkOk = false;
+      checkMsg = e instanceof FormulaEvalError ? e.message : "表达式无效";
+    }
+  }
+
+  return (
+    <div className={`rounded-lg border p-3 ${checkOk ? "border-background-200 bg-background-50" : "border-danger-300 bg-danger-50/40"}`}>
+      <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="text-[12px] font-semibold text-foreground-800">{meta.label}</span>
+        <span className="font-mono text-[11px] text-foreground-400">默认：{meta.defaultExpr}</span>
+      </div>
+      <input
+        type="text"
+        value={local}
+        placeholder={`留空 = 默认（${meta.defaultExpr}）`}
+        onFocus={() => { focused.current = true; }}
+        onChange={(e) => { setLocal(e.target.value); onChange(e.target.value); }}
+        onBlur={() => { focused.current = false; }}
+        spellCheck={false}
+        className="w-full rounded-md border border-background-300/70 bg-white px-2.5 py-1.5 font-mono text-[12px] text-foreground-900 placeholder:font-sans placeholder:text-foreground-300 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
+      />
+      <div className={`mt-1 text-[11px] leading-relaxed ${checkOk ? "text-foreground-400" : "text-danger-600"}`}>
+        {checkMsg} · 可用变量：{meta.vars}
+        {meta.hint ? ` · ${meta.hint}` : ""}
+      </div>
+    </div>
   );
 }

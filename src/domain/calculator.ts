@@ -1,16 +1,42 @@
-import type { SkuMaster, DailySnapshot, InventoryLayer, Promotion, ManualPromotion } from "./types";
+import type { SkuMaster, DailySnapshot, InventoryLayer, Promotion, ManualPromotion, ProfitFormulaKey } from "./types";
 import { DEFAULT_PROFIT_FORMULA } from "./types";
 import type { ProfitFormulaConfig } from "./types";
+import { tryCompileFormula } from "./formulaEval";
 
 // ────────── 利润公式配置（模块级缓存，App 启动时注入，设置页保存时更新） ──────────
 let profitFormulaCache: ProfitFormulaConfig = DEFAULT_PROFIT_FORMULA;
 
+// 自定义表达式编译缓存：非法表达式不进入缓存（走默认公式）
+type CompiledFn = (vars: Record<string, number>) => number;
+let compiledFormulas: Partial<Record<ProfitFormulaKey, CompiledFn>> = {};
+
 export function setProfitFormulaCache(cfg: ProfitFormulaConfig): void {
   profitFormulaCache = cfg;
+  const next: Partial<Record<ProfitFormulaKey, CompiledFn>> = {};
+  for (const [k, expr] of Object.entries(cfg.formulas ?? {})) {
+    const compiled = tryCompileFormula(expr);
+    if (compiled) next[k as ProfitFormulaKey] = compiled;
+  }
+  compiledFormulas = next;
 }
 
 export function getProfitFormulaCache(): ProfitFormulaConfig {
   return profitFormulaCache;
+}
+
+/**
+ * 自定义公式求值：未自定义/编译失败/变量缺失/结果非有限数 → 回退内置默认公式。
+ * 保证任何情况下利润数字都能算出来。
+ */
+function evalCustom(key: ProfitFormulaKey, vars: Record<string, number>, fallback: () => number): number {
+  const fn = compiledFormulas[key];
+  if (!fn) return fallback();
+  try {
+    const v = fn(vars);
+    return Number.isFinite(v) ? v : fallback();
+  } catch {
+    return fallback();
+  }
 }
 
 /** 成本项开关：关闭的项按 0 计入总成本 */
@@ -196,30 +222,36 @@ export function computeTotalCost(
 
   // 优惠券计入总成本（用户拍板：优惠券是真实支出，应纳入成本与净利）
   // 各成本项受利润公式开关控制（设置 → 利润公式），关闭的项按 0 计入
-  const total =
-    gated("fob", fob) +
-    gated("shipping", shipping) +
-    gated("delivery", delivery) +
-    gated("commission", commission) +
-    gated("storage", storage) +
-    gated("ad", ad) +
-    gated("refundLoss", refundLoss) +
-    gated("promoCost", promoCost) +
-    gated("coupon", coupon);
+  const gv = {
+    售价: price,
+    FOB: gated("fob", fob),
+    头程运费: gated("shipping", shipping),
+    配送费: gated("delivery", delivery),
+    佣金: gated("commission", commission),
+    仓储费: gated("storage", storage),
+    广告费: gated("ad", ad),
+    退货费: ret,
+    退款损失: gated("refundLoss", refundLoss),
+    促销成本: gated("promoCost", promoCost),
+    优惠券: gated("coupon", coupon),
+  };
+  const total = evalCustom("totalCost", gv, () =>
+    gv.FOB + gv.头程运费 + gv.配送费 + gv.佣金 + gv.仓储费 + gv.广告费 + gv.退款损失 + gv.促销成本 + gv.优惠券
+  );
 
   return {
     total,
     detail: {
-      fob: gated("fob", fob),
-      shipping: gated("shipping", shipping),
-      delivery: gated("delivery", delivery),
-      commission: gated("commission", commission),
-      storage: gated("storage", storage),
-      ad: gated("ad", ad),
+      fob: gv.FOB,
+      shipping: gv.头程运费,
+      delivery: gv.配送费,
+      commission: gv.佣金,
+      storage: gv.仓储费,
+      ad: gv.广告费,
       ret,
-      refundLoss: gated("refundLoss", refundLoss),
-      coupon: gated("coupon", coupon),
-      promoCost: gated("promoCost", promoCost),
+      refundLoss: gv.退款损失,
+      coupon: gv.优惠券,
+      promoCost: gv.促销成本,
     },
     inferred: { isAdInferred, isReturnInferred, isCommissionInferred },
   };
@@ -312,30 +344,36 @@ export function computeDiscountTotalCost(
   const refundLoss = snap ? (snap.refundRate ?? 0) / 100 * dp : 0;
 
   // 优惠券计入折扣总成本（与正常成本口径一致）；各成本项受利润公式开关控制
-  const total =
-    gated("fob", fob) +
-    gated("shipping", shipping) +
-    gated("delivery", delivery) +
-    gated("commission", commission) +
-    gated("storage", storage) +
-    gated("ad", ad) +
-    gated("refundLoss", refundLoss) +
-    gated("promoCost", promoCost) +
-    gated("coupon", coupon);
+  const gv = {
+    售价: dp,
+    FOB: gated("fob", fob),
+    头程运费: gated("shipping", shipping),
+    配送费: gated("delivery", delivery),
+    佣金: gated("commission", commission),
+    仓储费: gated("storage", storage),
+    广告费: gated("ad", ad),
+    退货费: ret,
+    退款损失: gated("refundLoss", refundLoss),
+    促销成本: gated("promoCost", promoCost),
+    优惠券: gated("coupon", coupon),
+  };
+  const total = evalCustom("discountTotalCost", gv, () =>
+    gv.FOB + gv.头程运费 + gv.配送费 + gv.佣金 + gv.仓储费 + gv.广告费 + gv.退款损失 + gv.促销成本 + gv.优惠券
+  );
 
   return {
     total,
     detail: {
-      fob: gated("fob", fob),
-      shipping: gated("shipping", shipping),
-      delivery: gated("delivery", delivery),
-      commission: gated("commission", commission),
-      storage: gated("storage", storage),
-      ad: gated("ad", ad),
+      fob: gv.FOB,
+      shipping: gv.头程运费,
+      delivery: gv.配送费,
+      commission: gv.佣金,
+      storage: gv.仓储费,
+      ad: gv.广告费,
       ret,
-      refundLoss: gated("refundLoss", refundLoss),
-      coupon: gated("coupon", coupon),
-      promoCost: gated("promoCost", promoCost),
+      refundLoss: gv.退款损失,
+      coupon: gv.优惠券,
+      promoCost: gv.促销成本,
     },
     inferred: { isAdInferred, isReturnInferred, isCommissionInferred },
   };
@@ -343,26 +381,30 @@ export function computeDiscountTotalCost(
 
 // ────────── 规则2：单件净利 ──────────
 export function computeGrossProfit(price: number, totalCost: number): number {
-  if (price <= 0 || totalCost <= 0) return 0;
-  return price - totalCost;
+  return evalCustom("grossProfit", { 售价: price, 总成本: totalCost }, () =>
+    price <= 0 || totalCost <= 0 ? 0 : price - totalCost
+  );
 }
 
 // ────────── 规则3：净利率 ──────────
 export function computeGrossMargin(profit: number, price: number): number {
-  if (price <= 0) return 0;
-  return (profit / price) * 100;
+  return evalCustom("grossMargin", { 净利: profit, 售价: price, 总成本: price - profit }, () =>
+    price <= 0 ? 0 : (profit / price) * 100
+  );
 }
 
 // ────────── 规则4：广告费比 ──────────
 export function computeAdRatio(adFee: number, price: number): number {
-  if (price <= 0) return 0;
-  return (adFee / price) * 100;
+  return evalCustom("adRatio", { 广告费: adFee, 售价: price }, () =>
+    price <= 0 ? 0 : (adFee / price) * 100
+  );
 }
 
 // ────────── 规则5：退款率 ──────────
 export function computeReturnRate(returnFee: number, price: number): number {
-  if (price <= 0) return 0;
-  return (returnFee / price) * 100;
+  return evalCustom("returnRate", { 退货费: returnFee, 售价: price }, () =>
+    price <= 0 ? 0 : (returnFee / price) * 100
+  );
 }
 
 // ────────── 规则6：退款费(30天) ──────────
@@ -374,13 +416,19 @@ export function computeReturnFee30d(price: number, returnRate: number, monthlySa
 // ────────── 规则7：折扣广告费(估) ──────────
 export function computeDiscountAdEstimated(normalAdFee: number, discountAdFee?: number): number {
   if (discountAdFee != null && discountAdFee > 0) return discountAdFee;
-  return normalAdFee * (1 + profitFormulaCache.discountAdUplift / 100);
+  const uplift = profitFormulaCache.discountAdUplift / 100;
+  return evalCustom("discountAdEst", { 正常广告费: normalAdFee, 上浮率: uplift }, () =>
+    normalAdFee * (1 + uplift)
+  );
 }
 
 // ────────── 规则8：折扣退款费(估) ──────────
 export function computeDiscountReturnFeeEstimated(normalReturnFee: number, discountReturnFee?: number): number {
   if (discountReturnFee != null && discountReturnFee > 0) return discountReturnFee;
-  return normalReturnFee * (1 + profitFormulaCache.discountReturnUplift / 100);
+  const uplift = profitFormulaCache.discountReturnUplift / 100;
+  return evalCustom("discountReturnEst", { 正常退款费: normalReturnFee, 上浮率: uplift }, () =>
+    normalReturnFee * (1 + uplift)
+  );
 }
 
 // ────────── 规则9：仓库库存自动汇总 ──────────

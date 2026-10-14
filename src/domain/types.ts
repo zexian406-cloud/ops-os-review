@@ -354,6 +354,17 @@ export const DEFAULT_SHIPMENT_FORMULA: ShipmentFormulaConfig = {
   promoExtraDays: 30,
 };
 
+/** 利润公式可自定义的条目（值为表达式文本，留空/非法 = 用内置默认公式） */
+export type ProfitFormulaKey =
+  | "totalCost"          // 总成本
+  | "discountTotalCost"  // 折扣总成本
+  | "grossProfit"        // 单件净利
+  | "grossMargin"        // 净利率（百分数口径）
+  | "adRatio"            // 广告费比（百分数口径）
+  | "returnRate"         // 退货率（百分数口径）
+  | "discountAdEst"      // 折扣广告费(估)
+  | "discountReturnEst"; // 折扣退款费(估)
+
 /** 利润计算公式配置（存 config key "profitFormula"） */
 export interface ProfitFormulaConfig {
   costItems: {
@@ -370,6 +381,7 @@ export interface ProfitFormulaConfig {
   discountAdUplift: number;     // 折扣广告费预估上浮 %（默认 10 = ×1.1）
   discountReturnUplift: number; // 折扣退款费预估上浮 %（默认 10 = ×1.1）
   defaultCommissionRate: number; // 默认佣金率 %（无显式佣金/佣金率时按此估算，默认 15）
+  formulas: Partial<Record<ProfitFormulaKey, string>>; // 自定义表达式（空 = 默认公式）
 }
 
 export const DEFAULT_PROFIT_FORMULA: ProfitFormulaConfig = {
@@ -380,6 +392,54 @@ export const DEFAULT_PROFIT_FORMULA: ProfitFormulaConfig = {
   discountAdUplift: 10,
   discountReturnUplift: 10,
   defaultCommissionRate: 15,
+  formulas: {},
+};
+
+/** 各自定义公式的说明：展示名、默认表达式、可用变量 */
+export const PROFIT_FORMULA_META: Record<ProfitFormulaKey, { label: string; defaultExpr: string; vars: string; hint?: string }> = {
+  totalCost: {
+    label: "总成本",
+    defaultExpr: "FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退款损失 + 促销成本 + 优惠券",
+    vars: "售价、FOB、头程运费、配送费、佣金、仓储费、广告费、退货费、退款损失、促销成本、优惠券（各项已按上方开关处理，关闭项为 0）",
+  },
+  discountTotalCost: {
+    label: "折扣总成本",
+    defaultExpr: "与总成本相同（各项取折扣口径的值）",
+    vars: "同总成本（变量值为折扣口径；「售价」为折扣售价）",
+  },
+  grossProfit: {
+    label: "单件净利",
+    defaultExpr: "售价 − 总成本",
+    vars: "售价、总成本",
+  },
+  grossMargin: {
+    label: "净利率",
+    defaultExpr: "净利 ÷ 售价 × 100",
+    vars: "净利、售价、总成本",
+    hint: "结果为百分数（15 表示 15%）",
+  },
+  adRatio: {
+    label: "广告费比",
+    defaultExpr: "广告费 ÷ 售价 × 100",
+    vars: "广告费、售价",
+    hint: "结果为百分数",
+  },
+  returnRate: {
+    label: "退货率",
+    defaultExpr: "退货费 ÷ 售价 × 100",
+    vars: "退货费、售价",
+    hint: "仅诊断展示，不计入成本；结果为百分数",
+  },
+  discountAdEst: {
+    label: "折扣广告费(估)",
+    defaultExpr: "正常广告费 × (1 + 上浮率)",
+    vars: "正常广告费、上浮率（= 设置的上浮率 ÷ 100，如 10 表示 0.1）",
+  },
+  discountReturnEst: {
+    label: "折扣退款费(估)",
+    defaultExpr: "正常退款费 × (1 + 上浮率)",
+    vars: "正常退款费、上浮率（= 设置的上浮率 ÷ 100）",
+  },
 };
 
 /** 云端同步配置（GitHub） */

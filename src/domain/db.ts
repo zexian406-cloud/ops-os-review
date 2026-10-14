@@ -354,6 +354,7 @@ export async function getProfitFormulaConfig(): Promise<ProfitFormulaConfig> {
   return {
     ...merged,
     costItems: { ...DEFAULT_PROFIT_FORMULA.costItems, ...(value?.costItems ?? {}) },
+    formulas: { ...DEFAULT_PROFIT_FORMULA.formulas, ...(value?.formulas ?? {}) },
   };
 }
 
