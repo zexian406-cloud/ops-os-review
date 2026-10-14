@@ -1,17 +1,73 @@
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-/* 使用指南页面 — 17 项导航（促销管理+促销成本合并为促销运营中心） */
+import { compileFormula, FormulaEvalError } from "@/domain/formulaEval";
+import { PROFIT_FORMULA_META } from "@/domain/types";
+import type { ProfitFormulaKey } from "@/domain/types";
+
+/* 使用指南页面 — 折叠章节 + 吸顶导航 + 互动演示 */
+const CHAPTERS = [
+  { num: "一", label: "系统简介" },
+  { num: "二", label: "快速入门" },
+  { num: "三", label: "导航结构" },
+  { num: "四", label: "模块说明" },
+  { num: "五", label: "数据导入" },
+  { num: "六", label: "常见问题" },
+  { num: "七", label: "补货公式" },
+  { num: "八", label: "利润公式" },
+  { num: "九", label: "云端同步" },
+];
+
 export default function GuidePage() {
+  const [open, setOpen] = useState<Record<string, boolean>>({ 一: true });
+
+  const toggle = (num: string) => setOpen((s) => ({ ...s, [num]: !s[num] }));
+  const jump = (num: string) => {
+    setOpen((s) => ({ ...s, [num]: true }));
+    requestAnimationFrame(() =>
+      document.getElementById(`guide-${num}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  };
+  const allOpen = CHAPTERS.every((c) => open[c.num]);
+  const toggleAll = () => {
+    const next = !allOpen;
+    setOpen(Object.fromEntries(CHAPTERS.map((c) => [c.num, next])));
+  };
+
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-12">
+    <div className="max-w-4xl mx-auto space-y-3 pb-12">
       {/* 标题 */}
-      <div>
+      <div className="pt-1">
         <h1 className="text-[24px] font-semibold text-foreground-900">使用说明书</h1>
         <p className="text-[13px] text-foreground-500 mt-1">
-          Amazon Ops OS · v2 · 2026-10-14
+          Amazon Ops OS · v2 · 2026-10-14 · 点击章节标题展开，顶部导航可直达
         </p>
       </div>
+
+      {/* 吸顶章节导航 */}
+      <div className="sticky top-[52px] z-30 flex flex-wrap items-center gap-1.5 rounded-b-[14px] border-b border-background-200/60 bg-background-50/95 py-2 backdrop-blur">
+        {CHAPTERS.map((c) => (
+          <button
+            key={c.num}
+            onClick={() => jump(c.num)}
+            className={`rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors ${
+              open[c.num]
+                ? "border-primary-500 bg-primary-600 text-white"
+                : "border-background-300 bg-white text-foreground-600 hover:border-primary-400 hover:text-primary-600"
+            }`}
+          >
+            {c.num} {c.label}
+          </button>
+        ))}
+        <button
+          onClick={toggleAll}
+          className="ml-auto rounded-full border border-background-300 bg-white px-2.5 py-1 text-[12px] text-foreground-500 hover:text-primary-600"
+        >
+          {allOpen ? "收起全部" : "展开全部"}
+        </button>
+      </div>
+
       {/* 一、系统简介 */}
-      <GuideSection num="一" title="系统简介">
+      <GuideSection num="一" title="系统简介" open={open["一"]} onToggle={() => toggle("一")}>
         <p>Amazon Ops OS 是一款亚马逊运营管理工具，帮助运营人员完成决策、库存、风险、SKU、经营、促销、数据等管理工作。</p>
         <SubTitle>核心设计理念</SubTitle>
         <ul className="list-disc pl-5 space-y-1">
@@ -22,8 +78,9 @@ export default function GuidePage() {
           <li><strong>自定义布局</strong>：支持卡片拖拽排序、显示/隐藏，个性化运营视图</li>
         </ul>
       </GuideSection>
+
       {/* 二、快速入门 */}
-      <GuideSection num="二" title="快速入门">
+      <GuideSection num="二" title="快速入门" open={open["二"]} onToggle={() => toggle("二")}>
         <Step n="1" title="导入数据">
           进入「数据导入」上传 Excel 文件（支持综合运营表多 Sheet 一次性导入），系统自动识别列名。
         </Step>
@@ -34,99 +91,45 @@ export default function GuidePage() {
           库存问题→发货决策；异常分析→异常诊断；数据质量→数据健康；风险查看→风险中心。
         </Step>
       </GuideSection>
+
       {/* 三、导航结构 */}
-      <GuideSection num="三" title="导航结构">
+      <GuideSection num="三" title="导航结构" open={open["三"]} onToggle={() => toggle("三")}>
         <p>系统采用分组导航，共 17 个一级入口，按 5 组分类：</p>
-        <SubTitle>决策组（6 项）</SubTitle>
         <div className="overflow-x-auto">
           <table className="w-full text-[13px] border border-background-200 rounded-lg">
             <thead className="bg-background-100">
               <tr>
+                <th className="px-3 py-2 text-left">分组</th>
                 <th className="px-3 py-2 text-left">名称</th>
                 <th className="px-3 py-2 text-left">路径</th>
                 <th className="px-3 py-2 text-left">说明</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-background-200">
-              <tr><td className="px-3 py-2">运营一览</td><td className="px-3 py-2 font-mono">/</td><td className="px-3 py-2">运营状态总览 + 待办</td></tr>
+              <tr><td rowSpan={6} className="px-3 py-2 align-top text-foreground-500">决策组</td><td className="px-3 py-2">运营一览</td><td className="px-3 py-2 font-mono">/</td><td className="px-3 py-2">运营状态总览 + 待办</td></tr>
               <tr><td className="px-3 py-2">异常诊断</td><td className="px-3 py-2 font-mono">/diagnosis</td><td className="px-3 py-2">风险原因拆解</td></tr>
               <tr><td className="px-3 py-2">历史对比</td><td className="px-3 py-2 font-mono">/history</td><td className="px-3 py-2">本周 vs 上周对比</td></tr>
               <tr><td className="px-3 py-2">数据健康</td><td className="px-3 py-2 font-mono">/data-health</td><td className="px-3 py-2">导入质量检查</td></tr>
               <tr><td className="px-3 py-2">发货决策</td><td className="px-3 py-2 font-mono">/shipment</td><td className="px-3 py-2">自动补货建议</td></tr>
               <tr><td className="px-3 py-2">风险中心</td><td className="px-3 py-2 font-mono">/risk</td><td className="px-3 py-2">全站异常列表</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <SubTitle>运营组（5 项）</SubTitle>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px] border border-background-200 rounded-lg">
-            <thead className="bg-background-100">
-              <tr>
-                <th className="px-3 py-2 text-left">名称</th>
-                <th className="px-3 py-2 text-left">路径</th>
-                <th className="px-3 py-2 text-left">说明</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-background-200">
-              <tr><td className="px-3 py-2">运营中心</td><td className="px-3 py-2 font-mono">/operations</td><td className="px-3 py-2">6 张运营视图</td></tr>
+              <tr><td rowSpan={5} className="px-3 py-2 align-top text-foreground-500">运营组</td><td className="px-3 py-2">运营中心</td><td className="px-3 py-2 font-mono">/operations</td><td className="px-3 py-2">6 张运营视图</td></tr>
               <tr><td className="px-3 py-2">SKU 详情</td><td className="px-3 py-2 font-mono">/sku</td><td className="px-3 py-2">单品全景 + MSKU 明细</td></tr>
               <tr><td className="px-3 py-2">旺季模拟</td><td className="px-3 py-2 font-mono">/season</td><td className="px-3 py-2">Prime / BF / Xmas 预测</td></tr>
               <tr><td className="px-3 py-2">促销运营中心</td><td className="px-3 py-2 font-mono">/promo-center</td><td className="px-3 py-2">活动管理 + 促销成本 + 促销时间线（三合一）</td></tr>
               <tr><td className="px-3 py-2">新品测算</td><td className="px-3 py-2 font-mono">/calculator</td><td className="px-3 py-2">成本利润预估</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <SubTitle>工具组（2 项）</SubTitle>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px] border border-background-200 rounded-lg">
-            <thead className="bg-background-100">
-              <tr>
-                <th className="px-3 py-2 text-left">名称</th>
-                <th className="px-3 py-2 text-left">路径</th>
-                <th className="px-3 py-2 text-left">说明</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-background-200">
-              <tr><td className="px-3 py-2">我的待办</td><td className="px-3 py-2 font-mono">/todo</td><td className="px-3 py-2">轻量任务记录</td></tr>
+              <tr><td rowSpan={2} className="px-3 py-2 align-top text-foreground-500">工具组</td><td className="px-3 py-2">我的待办</td><td className="px-3 py-2 font-mono">/todo</td><td className="px-3 py-2">轻量任务记录</td></tr>
               <tr><td className="px-3 py-2">操作记录</td><td className="px-3 py-2 font-mono">/ops-logs</td><td className="px-3 py-2">运营操作日志</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <SubTitle>数据组（3 项）</SubTitle>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px] border border-background-200 rounded-lg">
-            <thead className="bg-background-100">
-              <tr>
-                <th className="px-3 py-2 text-left">名称</th>
-                <th className="px-3 py-2 text-left">路径</th>
-                <th className="px-3 py-2 text-left">说明</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-background-200">
-              <tr><td className="px-3 py-2">数据导入</td><td className="px-3 py-2 font-mono">/import</td><td className="px-3 py-2">Excel & 云端</td></tr>
+              <tr><td rowSpan={3} className="px-3 py-2 align-top text-foreground-500">数据组</td><td className="px-3 py-2">数据导入</td><td className="px-3 py-2 font-mono">/import</td><td className="px-3 py-2">Excel &amp; 云端</td></tr>
               <tr><td className="px-3 py-2">店铺管理</td><td className="px-3 py-2 font-mono">/shop-management</td><td className="px-3 py-2">新增/编辑/删除店铺</td></tr>
               <tr><td className="px-3 py-2">参数中心</td><td className="px-3 py-2 font-mono">/settings</td><td className="px-3 py-2">供应链 / 活动参数</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <SubTitle>帮助组（1 项）</SubTitle>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px] border border-background-200 rounded-lg">
-            <thead className="bg-background-100">
-              <tr>
-                <th className="px-3 py-2 text-left">名称</th>
-                <th className="px-3 py-2 text-left">路径</th>
-                <th className="px-3 py-2 text-left">说明</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-background-200">
-              <tr><td className="px-3 py-2">使用指南</td><td className="px-3 py-2 font-mono">/guide</td><td className="px-3 py-2">完整操作手册</td></tr>
+              <tr><td className="px-3 py-2 align-top text-foreground-500">帮助组</td><td className="px-3 py-2">使用指南</td><td className="px-3 py-2 font-mono">/guide</td><td className="px-3 py-2">完整操作手册</td></tr>
             </tbody>
           </table>
         </div>
       </GuideSection>
+
       {/* 四、各模块详细说明 */}
-      <GuideSection num="四" title="各模块详细说明">
+      <GuideSection num="四" title="各模块详细说明" open={open["四"]} onToggle={() => toggle("四")}>
         <Module title="4.1 运营一览（首页 /）">
           <p>运营总览，包含 KPI 指标卡、风险提醒、待办事项、本周 vs 上周对比、健康度 TOP10。</p>
           <p className="text-[12px] text-foreground-500">支持自定义卡片布局：点击右上角「自定义布局」可拖拽排序、切换 KPI 指标。</p>
@@ -194,8 +197,9 @@ export default function GuidePage() {
           <p className="text-[12px] text-foreground-500">「利润公式」Tab 可查看默认利润计算公式，并自定义成本项计入与折扣预估上浮率，详见第八节。</p>
         </Module>
       </GuideSection>
+
       {/* 五、数据导入指南 */}
-      <GuideSection num="五" title="数据导入指南">
+      <GuideSection num="五" title="数据导入指南" open={open["五"]} onToggle={() => toggle("五")}>
         <SubTitle>综合运营表（主要入口）</SubTitle>
         <p>数据导入页第一个 Tab「综合运营表」，下载模板后填充数据，上传时自动识别多 Sheet 一次性导入。</p>
         <div className="overflow-x-auto">
@@ -264,8 +268,10 @@ export default function GuidePage() {
           <li>竞品链接 / Competitor URL 均可识别</li>
         </ul>
       </GuideSection>
+
       {/* 六、常见问题 */}
-      <GuideSection num="六" title="常见问题">
+      <GuideSection num="六" title="常见问题" open={open["六"]} onToggle={() => toggle("六")}>
+        <p className="text-[12px] text-foreground-500">点击问题展开答案：</p>
         <Faq q="导入数据后页面显示为空？">
           进入「数据健康」检查数据完整度，确认 Excel 中 SKU 列名正确，刷新页面重新加载。
         </Faq>
@@ -291,13 +297,14 @@ export default function GuidePage() {
           进入「发货决策」页点「补货公式」，可自定义日均销量口径（7天/30天）、触发阈值方式、目标天数/Lead Time/安全库存系数、活动倍率与取整方式（见第七节）。利润计算同理，可在「参数中心 → 利润公式」自定义成本项计入（见第八节）。
         </Faq>
       </GuideSection>
+
       {/* 七、补货公式自定义 */}
-      <GuideSection num="七" title="补货公式自定义（/shipment）">
+      <GuideSection num="七" title="补货公式自定义（/shipment）" open={open["七"]} onToggle={() => toggle("七")}>
         <p>入口：「发货决策」页右上角「补货公式」按钮。系统默认按以下公式计算补货建议，所有参数均可修改：</p>
-        <div className="rounded-lg bg-background-100/60 p-3 font-mono text-[12px] leading-relaxed text-foreground-700">
-          <div>建议发货量 = (目标天数 + Lead Time + 安全库存 − 含在途覆盖天数) × 日均销量 × 活动倍率</div>
-          <div>触发条件：含在途覆盖天数 &lt; 触发阈值（默认 Lead Time + 安全库存）</div>
-        </div>
+        <CopyBlock lines={[
+          "建议发货量 = (目标天数 + Lead Time + 安全库存 − 含在途覆盖天数) × 日均销量 × 活动倍率",
+          "触发条件：含在途覆盖天数 < 触发阈值（默认 Lead Time + 安全库存）",
+        ]} />
         <div className="overflow-x-auto">
           <table className="w-full text-[13px] border border-background-200 rounded-lg">
             <thead className="bg-background-100">
@@ -317,6 +324,9 @@ export default function GuidePage() {
           </table>
         </div>
         <p className="text-[12px] text-foreground-500">说明：SKU 级单独设置过的 Lead Time / 安全库存优先于这里的全局系数；保存后立即重新计算发货建议列表，弹窗内附实时公式预览。</p>
+        <SubTitle>互动：发货建议计算器</SubTitle>
+        <p className="text-[12px] text-foreground-500">预填的就是第七节算例数字，随意改动体验卡片各数字如何联动（与发货决策页完全同一套算法）：</p>
+        <ShipmentCalc />
         <SubTitle>卡片数字依据</SubTitle>
         <p className="text-[12px] text-foreground-500">发货建议卡片上每个数字的来源（在库可售 = FBA 各仓在库合计）：</p>
         <div className="overflow-x-auto">
@@ -359,24 +369,17 @@ export default function GuidePage() {
             </tbody>
           </table>
         </div>
-        <SubTitle>完整算例</SubTitle>
-        <div className="rounded-lg bg-background-100/60 p-3 font-mono text-[12px] leading-relaxed text-foreground-700">
-          <div>设：日均 10 件（近 7 天）、在库 80 件、在途 40 件、LT 15 天、安全库存 10 天、目标 45 天</div>
-          <div className="mt-1.5">综合覆盖 = (80 + 40) ÷ 10 = 12 天；触发阈值 = 15 + 10 = 25 天</div>
-          <div>12 天 &lt; 25 天 → 触发，出建议</div>
-          <div className="mt-1.5">建议补货 = (45 + 15 + 10 − 12) × 10 = 580 件（向上取整）</div>
-          <div>最晚发货 = 今天 + max(0, 12 − 25) = 今天（已到阈值，标「紧急」）</div>
-        </div>
       </GuideSection>
+
       {/* 八、利润公式自定义 */}
-      <GuideSection num="八" title="利润公式自定义（/settings）">
+      <GuideSection num="八" title="利润公式自定义（/settings）" open={open["八"]} onToggle={() => toggle("八")}>
         <p>入口：「参数中心」→「利润公式」Tab。系统默认公式如下，页面顶部实时展示当前生效的公式文本：</p>
-        <div className="rounded-lg bg-background-100/60 p-3 font-mono text-[12px] leading-relaxed text-foreground-700">
-          <div>总成本 = FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退货损失 + 促销成本 + 优惠券</div>
-          <div>单件净利 = 售价 − 总成本；净利率 = 净利 ÷ 售价 × 100%</div>
-          <div>广告费比 = 广告费 ÷ 售价 × 100%</div>
-          <div>折扣广告费(估) = 正常广告费 × (1 + 上浮率)；折扣退款费(估) 同理</div>
-        </div>
+        <CopyBlock lines={[
+          "总成本 = FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退货损失 + 促销成本 + 优惠券",
+          "单件净利 = 售价 − 总成本；净利率 = 净利 ÷ 售价 × 100%",
+          "广告费比 = 广告费 ÷ 售价 × 100%",
+          "折扣广告费(估) = 正常广告费 × (1 + 上浮率)；折扣退款费(估) 同理",
+        ]} />
         <SubTitle>可自定义内容</SubTitle>
         <ul className="list-disc pl-5 space-y-1">
           <li><strong>公式表达式完全自定义（高级）</strong>：8 条公式（总成本、折扣总成本、单件净利、净利率、广告费比、退货率、折扣广告费估、折扣退款费估）都能用中文变量名加四则运算、括号和 min/max/round/floor/ceil/abs 函数改写。留空即用内置默认公式；表达式写错会标红提示，计算时若出错自动回退默认公式，不会算崩。</li>
@@ -384,6 +387,9 @@ export default function GuidePage() {
           <li><strong>默认佣金率</strong>：SKU 未填佣金且未填佣金率时按此比例估算，默认 15%，可按类目实际佣金比例修改。</li>
           <li><strong>折扣预估上浮率</strong>：折扣价场景下广告费与退款费的预估上浮比例，默认 10%（即 ×1.1），可按实际促销力度调整。</li>
         </ul>
+        <SubTitle>互动：公式试算器</SubTitle>
+        <p className="text-[12px] text-foreground-500">选一条公式、改改示例变量、直接写表达式，即时看到结果与报错——用的就是设置页同一套求值器（仅本地试玩，不会保存到设置）：</p>
+        <FormulaPlayground />
         <SubTitle>自定义公式：变量列表</SubTitle>
         <p className="text-[12px] text-foreground-500">运算符支持 + − × ÷（也可写 * /）、括号、小数；函数支持 min(a,b)、max(a,b)、round(x)、floor(x)、ceil(x)、abs(x)。除以 0 或表达式无效时自动回退默认公式。</p>
         <div className="overflow-x-auto">
@@ -439,26 +445,21 @@ export default function GuidePage() {
             </tbody>
           </table>
         </div>
-        <SubTitle>自定义公式：常用示例</SubTitle>
-        <div className="rounded-lg bg-background-100/60 p-3 font-mono text-[12px] leading-relaxed text-foreground-700">
-          <div>// 「单件净利」先扣 5% 杂费再减成本</div>
-          <div>售价 * 0.95 - 总成本</div>
-          <div className="mt-1.5">// 「总成本」不算促销成本和优惠券（也可直接用上方开关关闭）</div>
-          <div>FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退款损失</div>
-          <div className="mt-1.5">// 「总成本」每件额外加 2 元包材费</div>
-          <div>FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退款损失 + 促销成本 + 优惠券 + 2</div>
-          <div className="mt-1.5">// 「净利率」封顶 60%，避免极端值</div>
-          <div>min(净利 ÷ 售价 × 100, 60)</div>
-          <div className="mt-1.5">// 「净利率」亏损时按 -5% 兜底展示</div>
-          <div>max(净利 ÷ 售价 × 100, -5)</div>
-          <div className="mt-1.5">// 「折扣广告费(估)」固定按 1.2 倍估（不随上浮率设置变化）</div>
-          <div>正常广告费 * 1.2</div>
+        <SubTitle>自定义公式：常用示例（点击右侧图标一键复制）</SubTitle>
+        <div className="space-y-1.5">
+          <ExampleRow note="「单件净利」先扣 5% 杂费再减成本" expr="售价 * 0.95 - 总成本" />
+          <ExampleRow note="「总成本」不算促销成本和优惠券（也可直接用上方开关关闭）" expr="FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退款损失" />
+          <ExampleRow note="「总成本」每件额外加 2 元包材费" expr="FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退款损失 + 促销成本 + 优惠券 + 2" />
+          <ExampleRow note="「净利率」封顶 60%，避免极端值" expr="min(净利 ÷ 售价 × 100, 60)" />
+          <ExampleRow note="「净利率」亏损时按 -5% 兜底展示" expr="max(净利 ÷ 售价 × 100, -5)" />
+          <ExampleRow note="「折扣广告费(估)」固定按 1.2 倍估（不随上浮率设置变化）" expr="正常广告费 * 1.2" />
         </div>
-        <p className="text-[12px] text-foreground-500">说明：示例中「// …」行仅标注该表达式应填在哪条公式下，输入框中只需粘贴它下一行的表达式本身（不要带公式名和等号，等号不是合法字符）；净利率 / 广告费比 / 退货率的结果为百分数（15 表示 15%）；变量名需与表中完全一致（不区分大小写英文字母，如 FOB 也可写 fob）。</p>
+        <p className="text-[12px] text-foreground-500">说明：示例中注释仅标注该表达式应填在哪条公式下，输入框中只需粘贴表达式本身（不要带公式名和等号，等号不是合法字符）；净利率 / 广告费比 / 退货率的结果为百分数（15 表示 15%）；变量名需与表中完全一致（不区分大小写英文字母，如 FOB 也可写 fob）。</p>
         <p className="text-[12px] text-foreground-500">说明：佣金取值优先级为 显式填写 → SKU 佣金率 × 售价 → 默认佣金率估算（比例可在下方修改）；广告费缺失时按费比 × 售价反推。点「恢复默认」还原全部配置，保存后无需刷新立即生效。</p>
       </GuideSection>
+
       {/* 九、GitHub 云端同步 */}
-      <GuideSection num="九" title="GitHub 云端同步（手动保存）">
+      <GuideSection num="九" title="GitHub 云端同步（手动保存）" open={open["九"]} onToggle={() => toggle("九")}>
         <p>数据默认只存在当前浏览器的 IndexedDB 中，换设备或清除浏览器数据会丢失。「GitHub 云端同步」把全部数据（SKU 主档、快照、分仓库存、促销、参数等）导出为一个 JSON 文件，备份到<strong>你自己的 GitHub 私有仓库</strong>，需要时一键恢复。全程手动触发，不会自动上传。</p>
         <SubTitle>首次配置（约 5 分钟）</SubTitle>
         <Step n="1" title="新建私有仓库">
@@ -484,6 +485,7 @@ export default function GuidePage() {
           <li><strong>多设备</strong>：多台设备可共用同一备份仓库；建议养成「先拉取 → 编辑 → 再保存」的习惯，避免互相覆盖。</li>
         </ul>
       </GuideSection>
+
       {/* 底部 */}
       <div className="border-t border-background-200 pt-6 text-center">
         <Link to="/" className="text-[13px] font-medium text-primary-600 hover:underline">
@@ -493,20 +495,30 @@ export default function GuidePage() {
     </div>
   );
 }
-/* ── 子组件 ── */
-function GuideSection({ num, title, children }: { num: string; title: string; children: React.ReactNode }) {
+
+/* ── 章节折叠容器 ── */
+function GuideSection({ num, title, open, onToggle, children }: {
+  num: string; title: string; open: boolean; onToggle: () => void; children: React.ReactNode;
+}) {
   return (
-    <section className="rounded-[14px] border border-background-200 bg-background-50/40 p-5">
-      <h2 className="text-[17px] font-semibold text-foreground-900 mb-3">
-        <span className="text-primary-600 mr-2">{num}、</span>{title}
-      </h2>
-      <div className="space-y-3 text-[13px] text-foreground-700 leading-relaxed">{children}</div>
+    <section id={`guide-${num}`} className="scroll-mt-28 rounded-[14px] border border-background-200 bg-background-50/40">
+      <button onClick={onToggle} className="flex w-full items-center justify-between px-5 py-3.5 text-left">
+        <h2 className="text-[16px] font-semibold text-foreground-900">
+          <span className="text-primary-600 mr-2">{num}、</span>{title}
+        </h2>
+        <i className={`text-[18px] text-foreground-400 ${open ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"}`} aria-hidden />
+      </button>
+      {open && (
+        <div className="space-y-3 px-5 pb-5 text-[13px] text-foreground-700 leading-relaxed">{children}</div>
+      )}
     </section>
   );
 }
+
 function SubTitle({ children }: { children: React.ReactNode }) {
   return <h3 className="text-[14px] font-semibold text-foreground-800 mt-3 mb-1">{children}</h3>;
 }
+
 function Step({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
   return (
     <div className="flex gap-3">
@@ -518,6 +530,7 @@ function Step({ n, title, children }: { n: string; title: string; children: Reac
     </div>
   );
 }
+
 function Module({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="border-l-2 border-primary-300 pl-4 py-1">
@@ -526,11 +539,292 @@ function Module({ title, children }: { title: string; children: React.ReactNode 
     </div>
   );
 }
+
+/* ── 可折叠 FAQ ── */
 function Faq({ q, children }: { q: string; children: React.ReactNode }) {
+  const [openF, setOpenF] = useState(false);
   return (
-    <div className="rounded-[10px] border border-background-200 bg-background-50/60 px-4 py-3">
-      <div className="font-semibold text-foreground-800 text-[13px] mb-1">Q：{q}</div>
-      <div className="text-[12px] text-foreground-600 leading-relaxed">A：{children}</div>
+    <div className="rounded-[10px] border border-background-200 bg-background-50/60">
+      <button onClick={() => setOpenF(!openF)} className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left">
+        <span className="font-semibold text-foreground-800 text-[13px]">Q：{q}</span>
+        <i className={`shrink-0 text-foreground-400 ${openF ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"}`} aria-hidden />
+      </button>
+      {openF && <div className="px-4 pb-3 text-[12px] text-foreground-600 leading-relaxed">A：{children}</div>}
+    </div>
+  );
+}
+
+/* ── 代码块 + 一键复制 ── */
+function CopyBlock({ lines }: { lines: string[] }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* 剪贴板不可用时忽略 */ }
+  };
+  return (
+    <div className="relative rounded-lg bg-background-100/60 p-3 pr-11 font-mono text-[12px] leading-relaxed text-foreground-700">
+      {lines.map((l, i) => <div key={i}>{l}</div>)}
+      <button onClick={copy} title="复制" className="absolute right-2 top-2 rounded-md border border-background-300 bg-white/90 px-1.5 py-0.5 text-[12px] text-foreground-400 hover:text-primary-600">
+        <i className={copied ? "ri-check-line text-green-600" : "ri-file-copy-line"} aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+function ExampleRow({ note, expr }: { note: string; expr: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(expr);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* 忽略 */ }
+  };
+  return (
+    <div className="flex items-start justify-between gap-2 rounded-md border border-background-200 bg-background-50 px-3 py-1.5">
+      <div className="min-w-0">
+        <div className="text-[11px] text-foreground-400">{note}</div>
+        <div className="truncate font-mono text-[12px] text-foreground-700">{expr}</div>
+      </div>
+      <button onClick={copy} title="复制表达式" className="shrink-0 rounded-md border border-background-300 bg-white px-1.5 py-0.5 text-[12px] text-foreground-400 hover:text-primary-600">
+        <i className={copied ? "ri-check-line text-green-600" : "ri-file-copy-line"} aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+/* ── 分段选择器 ── */
+function Seg<T extends string>({ options, value, onChange }: {
+  options: { v: T; label: string }[]; value: T; onChange: (v: T) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-md border border-background-300/70 bg-white p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.v}
+          onClick={() => onChange(o.v)}
+          className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
+            value === o.v ? "bg-primary-600 text-white" : "text-foreground-600 hover:bg-background-100"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function NumField({ label, value, onChange, step = "1" }: {
+  label: string; value: number; onChange: (n: number) => void; step?: string;
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[11px] text-foreground-500">{label}</span>
+      <input
+        type="number"
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full rounded-md border border-background-300/70 bg-white px-2 py-1 text-[12px] text-foreground-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
+      />
+    </label>
+  );
+}
+
+/* ── 互动：发货建议计算器（与 engine.computeShipmentSuggestions 同一套算法） ── */
+function ShipmentCalc() {
+  const [v, setV] = useState({ daily: 10, onHand: 80, transit: 40, lt: 15, safety: 10, target: 45, mult: 1.5, extra: 30, custom: 60 });
+  const [promoOn, setPromoOn] = useState(false);
+  const [mode, setMode] = useState<"lt_safety" | "lt_only" | "safety_only" | "custom_days">("lt_safety");
+  const [rounding, setRounding] = useState<"ceil" | "round" | "floor">("ceil");
+  const set = (k: keyof typeof v, n: number) => setV((s) => ({ ...s, [k]: n }));
+
+  const daily = v.daily;
+  const ok = Number.isFinite(daily) && daily > 0 && v.onHand >= 0 && v.transit >= 0;
+  const cover = ok ? (v.onHand + v.transit) / daily : Infinity;
+  const multiplier = promoOn && v.mult > 1 ? v.mult : 1;
+  const boosted = daily * multiplier;
+  const targetEff = promoOn && multiplier > 1 ? v.target + v.extra : v.target;
+  const threshold = mode === "lt_only" ? v.lt : mode === "safety_only" ? v.safety : mode === "custom_days" ? v.custom : v.lt + v.safety;
+  const triggered = ok && cover < threshold;
+  const raw = (targetEff + v.lt + v.safety - cover) * boosted;
+  const qty = !ok ? 0 : rounding === "ceil" ? Math.ceil(raw) : rounding === "round" ? Math.round(raw) : Math.floor(raw);
+  const daysUntil = ok ? Math.max(0, cover - threshold) : 0;
+  const latest = new Date();
+  latest.setDate(latest.getDate() + Math.round(daysUntil));
+  const latestStr = latest.toISOString().slice(0, 10);
+  const priority = daysUntil <= 3 ? "紧急" : daysUntil <= 10 ? "优先" : daysUntil > 30 ? "低优" : "常规";
+  const priorityCls = daysUntil <= 3 ? "bg-red-100 text-red-700" : daysUntil <= 10 ? "bg-amber-100 text-amber-700" : "bg-background-100 text-foreground-600";
+
+  return (
+    <div className="rounded-lg border border-background-200 bg-white p-3 space-y-2.5">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+        <NumField label="日均（件/天）" value={v.daily} step="0.1" onChange={(n) => set("daily", n)} />
+        <NumField label="在库（件）" value={v.onHand} onChange={(n) => set("onHand", n)} />
+        <NumField label="在途（件）" value={v.transit} onChange={(n) => set("transit", n)} />
+        <NumField label="Lead Time（天）" value={v.lt} onChange={(n) => set("lt", n)} />
+        <NumField label="安全库存（天）" value={v.safety} onChange={(n) => set("safety", n)} />
+        <NumField label="目标天数" value={v.target} onChange={(n) => set("target", n)} />
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-foreground-500">
+        <span className="flex items-center gap-1.5">活动加成
+          <Seg options={[{ v: "off", label: "关" }, { v: "on", label: "开" }]} value={promoOn ? "on" : "off"} onChange={(x) => setPromoOn(x === "on")} />
+        </span>
+        {promoOn && <NumField label="倍率" value={v.mult} step="0.1" onChange={(n) => set("mult", n)} />}
+        {promoOn && <NumField label="额外天数" value={v.extra} onChange={(n) => set("extra", n)} />}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-foreground-500">
+        <span className="flex items-center gap-1.5">触发阈值
+          <Seg<"lt_safety" | "lt_only" | "safety_only" | "custom_days">
+            options={[{ v: "lt_safety", label: "LT+安全" }, { v: "lt_only", label: "仅LT" }, { v: "safety_only", label: "仅安全" }, { v: "custom_days", label: "自定义" }]}
+            value={mode}
+            onChange={setMode}
+          />
+        </span>
+        {mode === "custom_days" && <NumField label="阈值（天）" value={v.custom} onChange={(n) => set("custom", n)} />}
+        <span className="flex items-center gap-1.5">取整
+          <Seg<"ceil" | "round" | "floor"> options={[{ v: "ceil", label: "向上" }, { v: "round", label: "四舍五入" }, { v: "floor", label: "向下" }]} value={rounding} onChange={setRounding} />
+        </span>
+      </div>
+      <div className={`rounded-md border px-3 py-2 text-[12px] ${triggered ? "border-red-200 bg-red-50/70" : "border-primary-200 bg-primary-50/30"}`}>
+        {!ok ? (
+          <div className="font-semibold text-foreground-500">日均销量需大于 0，在库/在途不能为负</div>
+        ) : triggered ? (
+          <>
+            <div className="flex items-center gap-1 font-semibold text-red-700">
+              <i className="ri-error-warning-line" aria-hidden />
+              综合覆盖 {cover.toFixed(1)} 天 &lt; 阈值 {threshold} 天，需要向工厂下单
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-foreground-600">
+              <span className="font-medium text-primary-700">建议补货 {qty.toLocaleString()} 件</span>
+              <span>·</span>
+              <span>最晚 {latestStr}</span>
+              <span>·</span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${priorityCls}`}>{priority}</span>
+              {qty <= 0 && <span className="text-foreground-400">（建议量 ≤ 0，列表中不会展示）</span>}
+            </div>
+            <div className="mt-1 font-mono text-[10px] text-foreground-400">
+              (目标{targetEff} + LT{v.lt} + 安全{v.safety} − 综合覆盖{cover.toFixed(1)}) × 日均{boosted.toFixed(1)} = {qty.toLocaleString()} 件
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center gap-1 font-semibold text-primary-700">
+            <i className="ri-check-double-line" aria-hidden />
+            综合覆盖 {cover.toFixed(1)} 天 ≥ 阈值 {threshold} 天，库存充足，无需下单
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── 互动：利润公式试算器（使用与设置页同一套求值器） ── */
+const SAMPLE_VARS: Record<string, number> = {
+  售价: 35, FOB: 8, 头程运费: 3, 配送费: 4.2, 佣金: 5.25, 仓储费: 0.6,
+  广告费: 3.5, 退货费: 0.7, 退款损失: 1.05, 促销成本: 0.35, 优惠券: 0.7,
+  总成本: 26.65, 净利: 8.35, 上浮率: 0.1, 正常广告费: 3.5, 正常退款费: 1.05,
+};
+const COST_ITEMS = ["FOB", "头程运费", "配送费", "佣金", "仓储费", "广告费", "退款损失", "促销成本", "优惠券"];
+const VAR_LISTS: Record<ProfitFormulaKey, string[]> = {
+  totalCost: ["售价", ...COST_ITEMS, "退货费"],
+  discountTotalCost: ["售价", ...COST_ITEMS, "退货费"],
+  grossProfit: ["售价", "总成本"],
+  grossMargin: ["净利", "售价", "总成本"],
+  adRatio: ["广告费", "售价"],
+  returnRate: ["退货费", "售价"],
+  discountAdEst: ["正常广告费", "上浮率"],
+  discountReturnEst: ["正常退款费", "上浮率"],
+};
+const PLAY_DEFAULT: Record<ProfitFormulaKey, string> = {
+  totalCost: [...COST_ITEMS].join(" + "),
+  discountTotalCost: [...COST_ITEMS].join(" + "),
+  grossProfit: "售价 − 总成本",
+  grossMargin: "净利 ÷ 售价 × 100",
+  adRatio: "广告费 ÷ 售价 × 100",
+  returnRate: "退货费 ÷ 售价 × 100",
+  discountAdEst: "正常广告费 × (1 + 上浮率)",
+  discountReturnEst: "正常退款费 × (1 + 上浮率)",
+};
+const SAMPLE_EXPR: Record<ProfitFormulaKey, string> = {
+  totalCost: COST_ITEMS.slice(0, 7).join(" + "),
+  discountTotalCost: COST_ITEMS.slice(0, 7).join(" + "),
+  grossProfit: "售价 * 0.95 - 总成本",
+  grossMargin: "min(净利 ÷ 售价 × 100, 60)",
+  adRatio: "广告费 ÷ 售价 × 100",
+  returnRate: "退货费 ÷ 售价 × 100",
+  discountAdEst: "正常广告费 * 1.2",
+  discountReturnEst: "正常退款费 × (1 + 上浮率)",
+};
+
+function FormulaPlayground() {
+  const keys = Object.keys(PROFIT_FORMULA_META) as ProfitFormulaKey[];
+  const [key, setKey] = useState<ProfitFormulaKey>("totalCost");
+  const [expr, setExpr] = useState(PLAY_DEFAULT.totalCost);
+  const [vals, setVals] = useState<Record<string, number>>(SAMPLE_VARS);
+
+  const varNames = VAR_LISTS[key];
+
+  const pick = (k: ProfitFormulaKey) => {
+    setKey(k);
+    setExpr(PLAY_DEFAULT[k]);
+  };
+
+  const result = useMemo(() => {
+    try {
+      const fn = compileFormula(expr);
+      const vars: Record<string, number> = {};
+      for (const n of varNames) vars[n] = vals[n] ?? 0;
+      return { ok: true as const, value: fn(vars) };
+    } catch (e) {
+      return { ok: false as const, msg: e instanceof FormulaEvalError ? e.message : "表达式无效" };
+    }
+  }, [expr, varNames, vals]);
+
+  return (
+    <div className="rounded-lg border border-background-200 bg-white p-3 space-y-2.5">
+      <div className="flex flex-wrap gap-1.5">
+        {keys.map((k) => (
+          <button
+            key={k}
+            onClick={() => pick(k)}
+            className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              key === k ? "border-primary-500 bg-primary-600 text-white" : "border-background-300 bg-white text-foreground-600 hover:border-primary-400 hover:text-primary-600"
+            }`}
+          >
+            {PROFIT_FORMULA_META[k].label}
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+        {varNames.map((n) => (
+          <NumField key={n} label={n} value={vals[n] ?? 0} step="0.05" onChange={(num) => setVals((s) => ({ ...s, [n]: num }))} />
+        ))}
+      </div>
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-[11px] text-foreground-500">表达式（可用变量：{varNames.join("、")}）</span>
+          <div className="flex gap-1.5">
+            <button onClick={() => setExpr(SAMPLE_EXPR[key])} className="rounded-md border border-background-300 bg-white px-2 py-0.5 text-[11px] text-foreground-600 hover:border-primary-400 hover:text-primary-600">填入示例</button>
+            <button onClick={() => setExpr(PLAY_DEFAULT[key])} className="rounded-md border border-background-300 bg-white px-2 py-0.5 text-[11px] text-foreground-600 hover:border-primary-400 hover:text-primary-600">还原默认</button>
+          </div>
+        </div>
+        <textarea
+          value={expr}
+          onChange={(e) => setExpr(e.target.value)}
+          rows={2}
+          className="w-full rounded-md border border-background-300/70 bg-white px-2.5 py-1.5 font-mono text-[12px] text-foreground-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
+        />
+      </div>
+      <div className={`rounded-md border px-3 py-2 text-[12px] ${result.ok ? "border-green-200 bg-green-50/60" : "border-red-200 bg-red-50/60"}`}>
+        {result.ok ? (
+          <span className="font-mono font-semibold text-green-700">= {Number.isFinite(result.value) ? result.value.toFixed(2) : "∞（除以 0 会自动回退默认公式）"}</span>
+        ) : (
+          <span className="text-red-700"><i className="ri-error-warning-line mr-1" aria-hidden />{result.msg}（设置页会标红拦截，实际计算自动回退默认公式）</span>
+        )}
+      </div>
     </div>
   );
 }
