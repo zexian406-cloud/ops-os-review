@@ -317,6 +317,56 @@ export default function GuidePage() {
           </table>
         </div>
         <p className="text-[12px] text-foreground-500">说明：SKU 级单独设置过的 Lead Time / 安全库存优先于这里的全局系数；保存后立即重新计算发货建议列表，弹窗内附实时公式预览。</p>
+        <SubTitle>卡片数字依据</SubTitle>
+        <p className="text-[12px] text-foreground-500">发货建议卡片上每个数字的来源（在库可售 = FBA 各仓在库合计）：</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px] border border-background-200 rounded-lg">
+            <thead className="bg-background-100">
+              <tr>
+                <th className="px-3 py-2 text-left">卡片显示</th>
+                <th className="px-3 py-2 text-left">计算依据</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-background-200">
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">日均 N 件（7天/30天）</td>
+                <td className="px-3 py-2">近 7 天销量日均，或 近 30 天月销 ÷ 30（口径在补货公式里切换）；日均为 0 或已停售的 SKU 不出建议</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">综合覆盖 X 天</td>
+                <td className="px-3 py-2">(在库可售 + 在途) ÷ 日均。「综合」= 把在途库存也算作未来可用库存</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">目标 N 天</td>
+                <td className="px-3 py-2">全局「目标覆盖天数」；活动倍率开启且 SKU 命中活动时 = 目标天数 + 活动额外天数（默认追加 30 天），同时日均按最高活动倍率放大</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">LT+安全 Y 天（阈值）</td>
+                <td className="px-3 py-2">触发阈值，默认 = Lead Time + 安全库存天数；可在补货公式里改为 仅 LT / 仅安全库存 / 自定义天数</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">建议补货 N 件</td>
+                <td className="px-3 py-2">(目标 + LT + 安全 − 综合覆盖) × 日均 × 活动倍率，再按取整方式处理（默认向上取整）；结果 ≤ 0 不出建议</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">最晚 YYYY-MM-DD</td>
+                <td className="px-3 py-2">今天 + max(0, 综合覆盖 − 阈值)，即库存（含在途）烧到阈值那一天的日期</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 whitespace-nowrap">紧急 / 优先 / 常规 / 低优</td>
+                <td className="px-3 py-2">按最晚发货日距今：≤ 3 天紧急、≤ 10 天优先、&gt; 30 天低优，其余常规；列表默认按此优先级排序</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <SubTitle>完整算例</SubTitle>
+        <div className="rounded-lg bg-background-100/60 p-3 font-mono text-[12px] leading-relaxed text-foreground-700">
+          <div>设：日均 10 件（近 7 天）、在库 80 件、在途 40 件、LT 15 天、安全库存 10 天、目标 45 天</div>
+          <div className="mt-1.5">综合覆盖 = (80 + 40) ÷ 10 = 12 天；触发阈值 = 15 + 10 = 25 天</div>
+          <div>12 天 &lt; 25 天 → 触发，出建议</div>
+          <div className="mt-1.5">建议补货 = (45 + 15 + 10 − 12) × 10 = 580 件（向上取整）</div>
+          <div>最晚发货 = 今天 + max(0, 12 − 25) = 今天（已到阈值，标「紧急」）</div>
+        </div>
       </GuideSection>
       {/* 八、利润公式自定义 */}
       <GuideSection num="八" title="利润公式自定义（/settings）">
