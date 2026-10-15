@@ -683,7 +683,8 @@ export default function Settings() {
 
             {/* 折扣预估上浮率 */}
             <div>
-              <div className="mb-2 text-[13px] font-semibold text-foreground-900">折扣预估上浮率（%）</div>
+              <div className="mb-1 text-[13px] font-semibold text-foreground-900">折扣预估上浮率（%）</div>
+              <p className="mb-2 text-[12px] text-foreground-400">SKU 详情页「折扣广告费(估)」「折扣退款费(估)」两个参考行的兜底估算：折扣口径有真实数据时不生效，不参与折扣净利计算，平时保持默认 10 即可。</p>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <NumField
                   label="折扣广告费上浮率（默认 10 = ×1.1）"
