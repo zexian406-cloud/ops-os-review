@@ -370,26 +370,24 @@ export default function GuidePage() {
         <Module title="5.4 参数中心（/settings）">
           <p>供应链参数（Lead Time、安全库存、目标库存）、活动参数、利润率/广告费比/退货率阈值，以及「利润公式」Tab（详见下方）。</p>
         </Module>
-        <SubTitle>5.4.1 利润公式自定义</SubTitle>
-        <p>入口：「参数中心」→「利润公式」Tab。系统默认公式如下，页面顶部实时展示当前生效的公式文本：</p>
+        <SubTitle>5.4.1 常用设置（一般改这些就够了）</SubTitle>
+        <p>入口：「参数中心」→「利润公式」Tab。默认按下面的公式计算，多数场景只需动两处：</p>
         <CopyBlock lines={[
           "总成本 = FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退货损失 + 促销成本 + 优惠券",
           "单件净利 = 售价 − 总成本；净利率 = 净利 ÷ 售价 × 100%",
-          "广告费比 = 广告费 ÷ 售价 × 100%",
-          "折扣广告费(估) = 正常广告费 × (1 + 上浮率)；折扣退款费(估) 同理",
         ]} />
-        <SubTitle>可自定义内容</SubTitle>
         <ul className="list-disc pl-5 space-y-1">
-          <li><strong>公式表达式完全自定义（高级）</strong>：8 条公式（总成本、折扣总成本、单件净利、净利率、广告费比、退货率、折扣广告费估、折扣退款费估）都能用中文变量名加四则运算、括号和 min/max/round/floor/ceil/abs 函数改写。留空即用内置默认公式；表达式写错会标红提示，计算时若出错自动回退默认公式，不会算崩。</li>
-          <li><strong>成本项计入开关</strong>：9 个成本项（FOB / 头程运费 / 配送费 / 佣金 / 仓储费 / 广告费 / 退货损失 / 促销成本 / 优惠券）任意开关。关闭后该项按 0 计，全站所有利润数字（运营一览、SKU 详情、新品测算等）实时联动。</li>
-          <li><strong>默认佣金率</strong>：SKU 未填佣金且未填佣金率时按此比例估算，默认 15%，可按类目实际佣金比例修改。</li>
-          <li><strong>折扣预估上浮率</strong>：折扣价场景下广告费与退款费的预估上浮比例，默认 10%（即 ×1.1），可按实际促销力度调整。</li>
+          <li><strong>成本项计入开关</strong>：9 个成本项（FOB / 头程运费 / 配送费 / 佣金 / 仓储费 / 广告费 / 退货损失 / 促销成本 / 优惠券）任意开关，关闭后该项按 0 计，全站利润数字（运营一览、SKU 详情、新品测算等）实时联动。</li>
+          <li><strong>三个系数</strong>：默认佣金率（SKU 未填佣金时按此估算，默认 15%）、折扣广告费上浮率与折扣退款费上浮率（折扣场景预估加成，默认 10%）。</li>
         </ul>
+        <p className="text-[12px] text-foreground-500">Tab 顶部的「当前生效公式」默认收起，点开可查看 8 条公式全文；自定义过的会有「已自定义 N 条」标记。设置页还有同款试算器思路——先在下方 5.4.2 玩明白，再去设置页改。</p>
         <SubTitle>5.4.2 互动：公式试算器</SubTitle>
-        <p className="text-[12px] text-foreground-500">选一条公式、改改示例变量、直接写表达式，即时看到结果与报错——用的就是设置页同一套求值器（仅本地试玩，不会保存到设置）：</p>
+        <p className="text-[12px] text-foreground-500">选一条公式、改改变量、直接写表达式，即时看到结果与报错——与设置页同一套求值器（仅本地试玩，不会保存到设置）：</p>
         <FormulaPlayground />
-        <SubTitle>5.4.3 自定义公式：变量列表</SubTitle>
-        <p className="text-[12px] text-foreground-500">运算符支持 + − × ÷（也可写 * /）、括号、小数；函数支持 min(a,b)、max(a,b)、round(x)、floor(x)、ceil(x)、abs(x)。除以 0 或表达式无效时自动回退默认公式。</p>
+        <SubTitle>5.4.3 高级：公式表达式自定义</SubTitle>
+        <p className="text-[12px] text-foreground-500">一般无需修改——写错会实时标红、保存时拦截、计算异常自动回退默认公式，不会算崩。需要改写某条公式算法时，展开下面的折叠区，内含变量列表、函数说明与可复制的示例。</p>
+        <Collapse title="展开：变量列表 · 函数 · 常用示例（高级）">
+          <p className="text-[12px] text-foreground-500">运算符支持 + − × ÷（也可写 * /）、括号、小数；函数支持 min(a,b)、max(a,b)、round(x)、floor(x)、ceil(x)、abs(x)。除以 0 或表达式无效时自动回退默认公式。</p>
         <div className="overflow-x-auto">
           <table className="w-full text-[13px] border border-background-200 rounded-lg">
             <thead className="bg-background-100">
@@ -443,7 +441,7 @@ export default function GuidePage() {
             </tbody>
           </table>
         </div>
-        <SubTitle>5.4.4 自定义公式：常用示例（点击右侧图标一键复制）</SubTitle>
+        <SubTitle>常用示例（点击右侧图标一键复制）</SubTitle>
         <div className="space-y-1.5">
           <ExampleRow note="「单件净利」先扣 5% 杂费再减成本" expr="售价 * 0.95 - 总成本" />
           <ExampleRow note="「总成本」不算促销成本和优惠券（也可直接用上方开关关闭）" expr="FOB + 头程运费 + 配送费 + 佣金 + 仓储费 + 广告费 + 退款损失" />
@@ -454,6 +452,7 @@ export default function GuidePage() {
         </div>
         <p className="text-[12px] text-foreground-500">说明：示例中注释仅标注该表达式应填在哪条公式下，输入框中只需粘贴表达式本身（不要带公式名和等号，等号不是合法字符）；净利率 / 广告费比 / 退货率的结果为百分数（15 表示 15%）；变量名需与表中完全一致（不区分大小写英文字母，如 FOB 也可写 fob）。</p>
         <p className="text-[12px] text-foreground-500">说明：佣金取值优先级为 显式填写 → SKU 佣金率 × 售价 → 默认佣金率估算（比例可在下方修改）；广告费缺失时按费比 × 售价反推。点「恢复默认」还原全部配置，保存后无需刷新立即生效。</p>
+        </Collapse>
         <ExampleBox>
           <p><strong>首次导入全流程</strong>：① 店铺管理建好 3 个店铺 → ② 数据导入下载「综合运营表」模板 → ③「SKU 标识符」Sheet 填 5 个 SKU（每个 MSKU 一行，含 ASIN/MSKU 对应关系）→ ④「销量导入」按 MSKU 填销量 + 评分 + 广告费比 → ⑤ 填 FBA 库存 / 仓库明细(FBM) / 在途明细 → ⑥ 上传一个文件，8 个 Sheet 自动识别导入 → ⑦ 数据健康检查字段完整度 → ⑧ 发货决策立即出建议。</p>
           <p><strong>仓库映射</strong>：领星导出的仓库名「AMER-WEST-LG1」→ 设别名「美西 LG1」、区域美西；美国站配一份，加拿大站再配一份，同名仓库互不影响。</p>
@@ -626,6 +625,20 @@ function Faq({ q, children }: { q: string; children: React.ReactNode }) {
         <i className={`shrink-0 text-foreground-400 ${openF ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"}`} aria-hidden />
       </button>
       {openF && <div className="px-4 pb-3 text-[12px] text-foreground-600 leading-relaxed">A：{children}</div>}
+    </div>
+  );
+}
+
+/* ── 内容折叠区（默认收起） ── */
+function Collapse({ title, children }: { title: string; children: React.ReactNode }) {
+  const [openC, setOpenC] = useState(false);
+  return (
+    <div className="rounded-[10px] border border-background-200 bg-background-50/60">
+      <button onClick={() => setOpenC(!openC)} className="flex w-full cursor-pointer items-center justify-between gap-2 px-4 py-2.5 text-left">
+        <span className="font-semibold text-foreground-800 text-[13px]">{title}</span>
+        <i className={`shrink-0 text-foreground-400 ${openC ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"}`} aria-hidden />
+      </button>
+      {openC && <div className="space-y-2 border-t border-background-200 px-4 pb-3 pt-3">{children}</div>}
     </div>
   );
 }

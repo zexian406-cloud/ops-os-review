@@ -103,6 +103,8 @@ export default function Settings() {
   const [profitFormula, setProfitFormula] = useState<ProfitFormulaConfig>(DEFAULT_PROFIT_FORMULA);
   const [profitMsg, setProfitMsg] = useState<string | null>(null);
   const [profitErr, setProfitErr] = useState<string | null>(null);
+  const [showCurrentFormulas, setShowCurrentFormulas] = useState(false);
+  const [showAdvancedFormulas, setShowAdvancedFormulas] = useState(false);
 
   useEffect(() => { getProfitFormulaConfig().then(setProfitFormula); }, []);
 
@@ -590,36 +592,53 @@ export default function Settings() {
 
       {/* 利润公式 */}
       {tab === "profit" && (
-        <Section title="利润计算公式" icon="ri-funds-line" subtitle="查看默认公式 · 成本项/系数可调 · 公式表达式可完全自定义">
+        <Section title="利润计算公式" icon="ri-funds-line" subtitle="改成本项开关和系数即可 · 高级公式表达式按需展开">
           <div className="space-y-5">
-            {/* 默认公式展示（含自定义生效标记） */}
-            <div className="rounded-xl bg-primary-50/60 p-4">
-              <div className="mb-2 flex items-center gap-2">
+            {/* 默认公式展示（默认收起，含自定义生效标记） */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowCurrentFormulas((v) => !v)}
+                className="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-background-200 bg-primary-50/60 px-3 py-2.5 text-left hover:border-primary-300"
+              >
                 <i className="ri-function-line text-[15px] text-primary-700" aria-hidden />
-                <span className="text-[13px] font-semibold text-primary-800">当前生效公式</span>
-              </div>
-              <div className="space-y-1 font-mono text-[12px] leading-relaxed text-foreground-700">
-                {(Object.entries(PROFIT_FORMULA_META) as Array<[ProfitFormulaKey, (typeof PROFIT_FORMULA_META)[ProfitFormulaKey]]>)
-                  .filter(([key]) => key !== "discountTotalCost")
-                  .map(([key, meta]) => {
-                    const custom = profitFormula.formulas[key]?.trim();
-                    return (
-                      <div key={key}>
-                        {meta.label} = {custom || meta.defaultExpr}
-                        {custom && (
-                          <span className="ml-1.5 inline-block rounded bg-accent-100 px-1.5 py-0.5 align-middle font-sans text-[10px] font-semibold text-accent-700">
-                            已自定义
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-              <div className="mt-2 text-[11px] leading-relaxed text-foreground-500">
-                佣金：显式填写的佣金优先 → 无则按佣金率 × 售价 → 再无则按默认佣金率（当前 {profitFormula.defaultCommissionRate}%，下方可修改）估算；
-                广告费缺失时按费比 × 售价反推。下方开关可把任一成本项从总成本中排除（按 0 计），全站所有利润数字实时联动。
-                公式可在下方「自定义公式」中改写，留空即恢复内置默认。
-              </div>
+                <span className="text-[13px] font-semibold text-foreground-800">当前生效公式</span>
+                {(() => {
+                  const n = Object.values(profitFormula.formulas).filter((v) => v?.trim()).length;
+                  return n > 0 ? (
+                    <span className="rounded bg-accent-100 px-1.5 py-0.5 text-[10px] font-semibold text-accent-700">
+                      已自定义 {n} 条
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-foreground-400">使用内置默认</span>
+                  );
+                })()}
+                <i className={`${showCurrentFormulas ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"} ml-auto text-[16px] text-foreground-400`} aria-hidden />
+              </button>
+              {showCurrentFormulas && (
+                <div className="mt-2 rounded-lg bg-primary-50/60 p-4">
+                  <div className="space-y-1 font-mono text-[12px] leading-relaxed text-foreground-700">
+                    {(Object.entries(PROFIT_FORMULA_META) as Array<[ProfitFormulaKey, (typeof PROFIT_FORMULA_META)[ProfitFormulaKey]]>)
+                      .filter(([key]) => key !== "discountTotalCost")
+                      .map(([key, meta]) => {
+                        const custom = profitFormula.formulas[key]?.trim();
+                        return (
+                          <div key={key}>
+                            {meta.label} = {custom || meta.defaultExpr}
+                            {custom && (
+                              <span className="ml-1.5 inline-block rounded bg-accent-100 px-1.5 py-0.5 align-middle font-sans text-[10px] font-semibold text-accent-700">
+                                已自定义
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                  <div className="mt-2 text-[11px] leading-relaxed text-foreground-500">
+                    佣金：显式填写的佣金优先 → 无则按佣金率 × 售价 → 再无则按默认佣金率（当前 {profitFormula.defaultCommissionRate}%，下方可修改）估算；广告费缺失时按费比 × 售价反推。
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 成本项开关 */}
@@ -679,29 +698,49 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* 自定义公式（高级） */}
+            {/* 自定义公式（高级，默认收起） */}
             <div>
-              <div className="mb-1 flex flex-wrap items-baseline gap-x-2">
-                <span className="text-[13px] font-semibold text-foreground-900">自定义公式（高级）</span>
-                <span className="text-[11px] text-foreground-400">每条留空 = 使用内置默认公式</span>
-              </div>
-              <div className="space-y-2.5">
-                {(Object.keys(PROFIT_FORMULA_META) as ProfitFormulaKey[]).map((key) => (
-                  <FormulaField
-                    key={key}
-                    metaKey={key}
-                    value={profitFormula.formulas[key] ?? ""}
-                    onChange={(v) =>
-                      setProfitFormula((p) => {
-                        const next = { ...p.formulas };
-                        if (v.trim()) next[key] = v.trim();
-                        else delete next[key];
-                        return { ...p, formulas: next };
-                      })
-                    }
-                  />
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdvancedFormulas((v) => !v)}
+                className="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-background-200 bg-background-50 px-3 py-2.5 text-left hover:border-primary-300"
+              >
+                <span className="text-[13px] font-semibold text-foreground-800">自定义公式表达式</span>
+                <span className="text-[11px] text-foreground-400">高级 · 一般无需修改，改开关和系数就够了</span>
+                {(() => {
+                  const n = Object.values(profitFormula.formulas).filter((v) => v?.trim()).length;
+                  return n > 0 ? (
+                    <span className="rounded bg-accent-100 px-1.5 py-0.5 text-[10px] font-semibold text-accent-700">
+                      已自定义 {n} 条
+                    </span>
+                  ) : null;
+                })()}
+                <i className={`${showAdvancedFormulas ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"} ml-auto text-[16px] text-foreground-400`} aria-hidden />
+              </button>
+              {showAdvancedFormulas && (
+                <div className="mt-2">
+                  <div className="mb-2 text-[11px] text-foreground-400">
+                    逐条改写计算表达式，留空 = 使用内置默认公式；支持中文变量、四则运算和 min/max/round/floor/ceil/abs 函数，写错会实时标红且保存时拦截。
+                  </div>
+                  <div className="space-y-2.5">
+                    {(Object.keys(PROFIT_FORMULA_META) as ProfitFormulaKey[]).map((key) => (
+                      <FormulaField
+                        key={key}
+                        metaKey={key}
+                        value={profitFormula.formulas[key] ?? ""}
+                        onChange={(v) =>
+                          setProfitFormula((p) => {
+                            const next = { ...p.formulas };
+                            if (v.trim()) next[key] = v.trim();
+                            else delete next[key];
+                            return { ...p, formulas: next };
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-3">
