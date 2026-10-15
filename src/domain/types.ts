@@ -520,7 +520,8 @@ export interface WarehouseProvider {
   id: string;
   name: string;                 // 服务商名称，如"无忧达"
   billingMode: "days_tier" | "longest_edge_tier"; // 天数阶梯 / 最长边阶梯
-  unit: "cbm_per_day" | "cft_per_day";            // USD/立方米/天 或 USD/立方尺/天
+  unit: "cbm_per_day" | "cft_per_day";            // 费率/立方米/天 或 费率/立方尺/天
+  currency?: string;            // 费率计价币种（ISO 代码，如 CAD/EUR）；缺省 = 按站点币种直接录入
   tiers: RateTier[];            // 服务商级费率表（不分仓库）
 }
 

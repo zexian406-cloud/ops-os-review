@@ -3,6 +3,7 @@ import { db, DEFAULT_GLOBAL_CONFIG, getGlobalConfig, setGlobalConfig, getCurrent
 import { setProfitFormulaCache } from "@/domain/calculator";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
+import { COMMON_CURRENCIES, SYMBOL_MAP } from "@/components/layout/SiteManager";
 import type { GlobalConfig, SkuMaster, WarehouseProvider, RateTier, ProfitFormulaConfig, ProfitFormulaKey } from "@/domain/types";
 import { DEFAULT_PROFIT_FORMULA, PROFIT_FORMULA_META } from "@/domain/types";
 import { compileFormula, FormulaEvalError } from "@/domain/formulaEval";
@@ -431,7 +432,13 @@ export default function Settings() {
             </div>
           ) : (
             <div className="space-y-5">
-              {providers.map((provider) => (
+              <datalist id="warehouse-currency-options">
+                {COMMON_CURRENCIES.map((c) => <option key={c} value={c} />)}
+              </datalist>
+              {providers.map((provider) => {
+                const curCode = provider.currency ?? "";
+                const curSym = curCode ? (SYMBOL_MAP[curCode] ?? curCode) : "站点币种";
+                return (
                 <div key={provider.id} className="rounded-xl border border-background-200/70 bg-background-50 p-4">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -460,9 +467,21 @@ export default function Settings() {
                         }}
                         className="rounded border border-background-200 bg-background-50 px-1.5 py-0.5 text-[11px] cursor-pointer"
                       >
-                        <option value="cbm_per_day">USD/m³/天</option>
-                        <option value="cft_per_day">USD/ft³/天</option>
+                        <option value="cbm_per_day">{curSym}/m³/天</option>
+                        <option value="cft_per_day">{curSym}/ft³/天</option>
                       </select>
+                      <input
+                        list="warehouse-currency-options"
+                        value={curCode}
+                        onChange={async (e) => {
+                          const val = e.target.value.trim().toUpperCase();
+                          await db.warehouseProviders.put({ ...provider, currency: val === "" ? undefined : val });
+                          setProviders((prev) => prev.map((p) => (p.id === provider.id ? { ...p, currency: val === "" ? undefined : val } : p)));
+                        }}
+                        placeholder="跟随站点"
+                        title="费率计价币种：留空 = 按站点币种直接录入；填 CAD/EUR 等 ISO 代码，新品测算仓储费自动换算到站点币种（需在「汇率管理」配置对应汇率）"
+                        className="w-[96px] rounded border border-background-200 bg-background-50 px-1.5 py-0.5 text-[11px] cursor-pointer"
+                      />
                       <Badge tone="accent">{provider.tiers.length} 个费率档位</Badge>
                     </div>
                     <div className="flex items-center gap-2">
@@ -491,7 +510,7 @@ export default function Settings() {
                         <tr className="text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-foreground-500">
                           <th className="border-b border-background-200/70 py-1.5 px-2">范围 (自动计算)</th>
                           <th className="border-b border-background-200/70 py-1.5 px-2 text-right">上界 (填数字)</th>
-                          <th className="border-b border-background-200/70 py-1.5 px-2 text-right">费率 $</th>
+                          <th className="border-b border-background-200/70 py-1.5 px-2 text-right">费率 ({curSym})</th>
                           <th className="border-b border-background-200/70 py-1.5 px-2 w-8" />
                         </tr>
                       </thead>
@@ -576,7 +595,8 @@ export default function Settings() {
                     <i className="ri-add-line mr-0.5" aria-hidden />添加费率档位
                   </button>
                 </div>
-              ))}
+                );
+              })}
 
               <button
                 type="button"

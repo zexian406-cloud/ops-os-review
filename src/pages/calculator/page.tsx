@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { db, getCurrentSiteId } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
+import { useCurrency } from "@/hooks/useCurrency";
 import type { WarehouseProvider, SkuMaster, CalculationRecord } from "@/domain/types";
 import CalculationHistory from "@/pages/calculator/CalculationHistory";
 
@@ -149,6 +150,8 @@ export default function CalculatorPage() {
   };
 
   const currency = CURRENCY[marketplace] ?? "$";
+  const siteCurrencyCode = MARKETPLACE_CURRENCY_CODE[marketplace] ?? "USD";
+  const { convert: convertRate } = useCurrency();
 
   // ── 重新编辑：把已保存的测算记录回填到表单，便于修改后重新测算 ──
   const handleEdit = (rec: CalculationRecord) => {
@@ -414,7 +417,19 @@ export default function CalculatorPage() {
         const prov = providersMap.get(provId);
         if (!prov) return null!;
         const shipFee = n(p.providerShipFees[provId] ?? "0");
-        const storageFee = cbm > 0 ? calcStorageFee(l, w, h, prov, sd) : 0;
+        const rawStorageFee = cbm > 0 ? calcStorageFee(l, w, h, prov, sd) : 0;
+        // 服务商费率按自定义币种录入（如加拿大仓 CAD / 欧洲仓 EUR）→ 经汇率图换算到站点币种
+        let storageFee = rawStorageFee;
+        let currencyNote = "";
+        if (prov.currency && prov.currency !== siteCurrencyCode && rawStorageFee > 0) {
+          const converted = convertRate(rawStorageFee, prov.currency, siteCurrencyCode);
+          if (converted != null) {
+            storageFee = converted;
+            currencyNote = `${prov.currency} 计价已按汇率换算`;
+          } else {
+            currencyNote = `缺 ${prov.currency}→${siteCurrencyCode} 汇率，按原值计`;
+          }
+        }
         const totalCost = baseCost + storageFee + shipFee;
         const profit = priceN - totalCost;
         const margin = priceN > 0 ? (profit / priceN) * 100 : 0;
@@ -422,6 +437,7 @@ export default function CalculatorPage() {
         let billingDetail = "";
         if (prov.billingMode === "days_tier") billingDetail = `天数阶梯(${sd}天落档)`;
         else billingDetail = `最长边${Math.max(l, w, h)}cm落档`;
+        if (currencyNote) billingDetail += ` · ${currencyNote}`;
         return {
           provId, provName: prov.name,
           shipFee: Number(shipFee.toFixed(2)),
@@ -493,7 +509,7 @@ export default function CalculatorPage() {
         bestLabel, bestProfit, comparisons, hasComparison, hasAnyData,
       };
     });
-  }, [products, rate, commRate, adRate, returnRate, storageDays, providersMap]);
+  }, [products, rate, commRate, adRate, returnRate, storageDays, providersMap, siteCurrencyCode, convertRate]);
 
   const inputCls = "w-full rounded-md border border-background-200 bg-background-50 px-3 py-2 text-sm text-foreground-800 placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200/50";
   const labelCls = "mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-500";
@@ -784,7 +800,12 @@ export default function CalculatorPage() {
                           return (
                             <div key={provId} className="rounded-lg border border-background-200/70 bg-background-50 p-3">
                               <div className="flex items-center justify-between mb-2">
-                                <span className="text-[12px] font-semibold text-foreground-800">{prov.name}</span>
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="text-[12px] font-semibold text-foreground-800">{prov.name}</span>
+                                  {prov.currency && prov.currency !== siteCurrencyCode && (
+                                    <span className="rounded bg-secondary-100 px-1 py-px text-[9px] font-semibold text-secondary-700" title={`该服务商费率按 ${prov.currency} 录入，仓储费自动换算到站点币种（${siteCurrencyCode}）`}>{prov.currency}</span>
+                                  )}
+                                </span>
                                 <span className="text-[10px] text-foreground-500">{prov.billingMode === "days_tier" ? "天数阶梯" : "最长边阶梯"}</span>
                               </div>
                               <input type="number" step="0.01" className={inputCls + " mb-1.5"} value={p.providerShipFees[provId] ?? ""}

@@ -7,13 +7,13 @@ import { SITE_CHANGE_EVENT } from "./SiteSwitcher";
 /** 站点列表变更事件：新增/编辑/删除/启停后广播，站点切换器监听刷新 */
 export const SITES_LIST_EVENT = "ops-sites-change";
 
-const COMMON_CURRENCIES = [
+export const COMMON_CURRENCIES = [
   "USD", "CNY", "EUR", "GBP", "JPY", "CAD", "AUD", "MXN", "SEK", "PLN",
   "AED", "SAR", "BRL", "INR", "KRW", "SGD", "HKD", "NZD", "CHF", "TRY",
   "EGP", "ILS", "NGN", "ZAR", "COP", "CLP",
 ];
 
-const SYMBOL_MAP: Record<string, string> = {
+export const SYMBOL_MAP: Record<string, string> = {
   USD: "$", CNY: "¥", EUR: "€", GBP: "£", JPY: "¥", CAD: "C$", AUD: "A$",
   MXN: "MX$", SEK: "kr", PLN: "zł", AED: "د.إ", SAR: "﷼", BRL: "R$",
   INR: "₹", KRW: "₩", SGD: "S$", HKD: "HK$", NZD: "NZ$", CHF: "CHF",
