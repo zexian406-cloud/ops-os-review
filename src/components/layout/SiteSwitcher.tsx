@@ -3,12 +3,14 @@ import { getAllSites, getCurrentSiteId, setCurrentSiteId, ensureDefaultSites } f
 import type { Site } from "@/domain/types";
 import { useCurrency } from "@/hooks/useCurrency";
 import ExchangeRateManager from "./ExchangeRateManager";
+import SiteManager, { SITES_LIST_EVENT } from "./SiteManager";
 
 export const SITE_CHANGE_EVENT = "ops-site-change";
 
 export default function SiteSwitcher() {
   const [open, setOpen] = useState(false);
   const [managerOpen, setManagerOpen] = useState(false);
+  const [siteManagerOpen, setSiteManagerOpen] = useState(false);
   const [sites, setSites] = useState<Site[]>([]);
   const [currentSiteId, setCurrentSiteIdState] = useState<string>("site_us");
   const ref = useRef<HTMLDivElement>(null);
@@ -36,6 +38,22 @@ export default function SiteSwitcher() {
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const handler = () => loadSites();
+    window.addEventListener(SITES_LIST_EVENT, handler);
+    return () => window.removeEventListener(SITES_LIST_EVENT, handler);
+  }, [loadSites]);
+
+  // 站点管理弹窗内也会切换当前站点（如新增后自动切换、删除当前站点回退默认），需同步顶栏显示
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const siteId = (e as CustomEvent<{ siteId?: string }>).detail?.siteId;
+      if (siteId) setCurrentSiteIdState(siteId);
+    };
+    window.addEventListener(SITE_CHANGE_EVENT, handler);
+    return () => window.removeEventListener(SITE_CHANGE_EVENT, handler);
   }, []);
 
   const handleSelect = useCallback(async (siteId: string) => {
@@ -71,17 +89,30 @@ export default function SiteSwitcher() {
         <div className="absolute left-0 top-full z-50 mt-1 min-w-[300px] rounded-xl border border-background-200 bg-background-50 py-1 shadow-lg">
           <div className="flex items-center justify-between border-b border-background-200 px-3 py-1.5">
             <span className="text-[11px] font-medium text-foreground-500">站点切换</span>
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                setManagerOpen(true);
-              }}
-              className="flex items-center gap-1 text-[11px] text-primary-600 hover:text-primary-700 cursor-pointer"
-            >
-              <i className="ri-settings-3-line" style={{ fontSize: "13px" }} aria-hidden />
-              汇率管理
-            </button>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setSiteManagerOpen(true);
+                }}
+                className="flex items-center gap-1 text-[11px] text-primary-600 hover:text-primary-700 cursor-pointer"
+              >
+                <i className="ri-add-circle-line" style={{ fontSize: "13px" }} aria-hidden />
+                站点管理
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setManagerOpen(true);
+                }}
+                className="flex items-center gap-1 text-[11px] text-primary-600 hover:text-primary-700 cursor-pointer"
+              >
+                <i className="ri-settings-3-line" style={{ fontSize: "13px" }} aria-hidden />
+                汇率管理
+              </button>
+            </div>
           </div>
 
           {sites.map((site) => (
@@ -106,12 +137,13 @@ export default function SiteSwitcher() {
           ))}
 
           <div className="border-t border-background-200 px-3 py-1.5 text-[11px] text-foreground-400">
-            点击「汇率管理」可自定义任意货币对汇率（支持非 USD 中转换算）
+            冷门站点可在「站点管理」中自定义新增；「汇率管理」支持任意货币对（非 USD 中转换算）
           </div>
         </div>
       )}
 
       <ExchangeRateManager open={managerOpen} onClose={() => setManagerOpen(false)} />
+      <SiteManager open={siteManagerOpen} onClose={() => setSiteManagerOpen(false)} />
     </div>
   );
 }
