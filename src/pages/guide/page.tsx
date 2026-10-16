@@ -255,6 +255,7 @@ export default function GuidePage() {
         <Module title="3.5 新品测算（/calculator）">
           <p>输入尺寸、重量、FOB、头程、售价等参数，自动计算体积、总成本、毛利、毛利率、ROI。</p>
           <p className="text-[12px] text-foreground-500">利润数字与全站共用一套公式，可在「参数中心 → 利润公式」自定义（见 5.4）。</p>
+          <p className="text-[12px] text-foreground-500">仓储天数别用默认值硬套：按「每批发货量 ÷ 日均销量」估算在仓天数再填（如日销 10、每批发 600 件 → 填 60）。费率阶梯越久越贵（如 61~90 天 0.3、91~120 天 0.6），估准天数才能落到正确费率档，仓储费成本才不失真。</p>
           <p className="text-[12px] text-foreground-500">海外仓服务商费率支持自定义计价币种：参数中心 → 海外仓费率，每个服务商可填 CAD / EUR 等（留空 = 按站点币种直接录入）。勾选参与比价时，仓储费自动按汇率图换算到当前站点币种；缺对应汇率时按原值计算并在结果中提示。</p>
         </Module>
         <ExampleBox>

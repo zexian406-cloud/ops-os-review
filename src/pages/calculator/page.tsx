@@ -575,6 +575,7 @@ export default function CalculatorPage() {
           <div>
             <label className={labelCls}>仓储天数</label>
             <input type="number" step="1" className={inputCls} value={storageDays} onChange={(e) => setStorageDays(e.target.value)} />
+            <p className="mt-1 text-[10px] text-foreground-400 leading-snug">≈ 每批发货量 ÷ 日均销量，估准才能落到正确的费率阶梯档</p>
           </div>
         </div>
       </Section>
