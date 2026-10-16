@@ -127,6 +127,7 @@ export default function GuidePage() {
         </Module>
         <Module title="2.2 异常诊断（/diagnosis）">
           <p>对风险 SKU 进行原因拆解，展示影响因子（上期→本期变化），支持记录操作到操作记录。</p>
+          <p className="text-[12px] text-foreground-500">对比口径可选：「本次 vs 上次导入」（默认，对比两个导入批次）、「近7天环比」「近30天环比」（以最新快照为终点，自动取目标日期前最近的快照做基线，实际基线日期会显示在口径旁；该时间范围前无快照时提示切换口径）。</p>
         </Module>
         <Module title="2.3 历史对比（/history）">
           <p>本周（最新导入）对比上周（上次导入），展示销量、库存、利润率、TACOS、评分的环比变化。</p>

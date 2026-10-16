@@ -3,22 +3,42 @@ import { useSearchParams, Link } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
 import { snapKey } from "@/domain/engine";
 import { diagnoseProfitDecline, diagnoseSalesDecline, type DiagnosisOutput } from "@/domain/diagnose";
-import type { AlertType } from "@/domain/types";
+import type { AlertType, DailySnapshot } from "@/domain/types";
 
 const TABS: Array<{ key: "profit" | "sales"; label: string; icon: string; alertTypes: AlertType[] }> = [
   { key: "profit", label: "利润下降诊断", icon: "ri-money-dollar-circle-line", alertTypes: ["profit"] },
   { key: "sales", label: "销量下降诊断", icon: "ri-bar-chart-line", alertTypes: ["stockout", "low_stock"] },
 ];
 
+type Basis = "import" | "7d" | "30d";
+
+const BASIS_OPTIONS: Array<{ key: Basis; label: string }> = [
+  { key: "import", label: "本次 vs 上次导入" },
+  { key: "7d", label: "近7天环比" },
+  { key: "30d", label: "近30天环比" },
+];
+
+/** 本地日期加减天数（YYYY-MM-DD），避免 toISOString 的 UTC 偏移 */
+const shiftDate = (date: string, days: number): string => {
+  const [y, m, d] = date.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+};
+
 export default function DiagnosisPage() {
-  const { currentSiteId, skuMaster, latestSnapshot, previousSnapshot, latestInventory, config, loading } = useOpsData();
+  const { currentSiteId, skuMaster, snapshots, latestSnapshot, previousSnapshot, latestInventory, config, loading } = useOpsData();
   const [searchParams, setSearchParams] = useSearchParams();
   const type = (searchParams.get("type") ?? "profit") as "profit" | "sales";
   const skuParam = searchParams.get("sku") ?? "";
+  const basisParam = (searchParams.get("basis") ?? "import") as Basis;
 
   const [skuInput, setSkuInput] = useState(skuParam);
   const [activeTab, setActiveTab] = useState<"profit" | "sales">(
     TABS.some((t) => t.key === type) ? type : "profit",
+  );
+  const [basis, setBasisState] = useState<Basis>(
+    BASIS_OPTIONS.some((o) => o.key === basisParam) ? basisParam : "import",
   );
 
   // 同步 URL 参数到本地状态（仅在 URL 参数变化时触发）
@@ -33,23 +53,49 @@ export default function DiagnosisPage() {
     return skuMaster.find((s) => s.sku === skuInput.trim()) ?? null;
   }, [skuMaster, skuInput]);
 
+  // 时间维度下的基线快照：目标日期 = 最新快照日期 - N 天，取 ≤ 目标日期中最近的一条
+  const baselineInfo = useMemo<{ snap?: DailySnapshot; label: string }>(() => {
+    if (basis === "import") return { label: "上次导入" };
+    const days = basis === "7d" ? 7 : 30;
+    const basisLabel = basis === "7d" ? "近7天环比" : "近30天环比";
+    const key = snapKey(skuInput.trim(), currentSiteId);
+    const latestSnap = latestSnapshot.get(key);
+    if (!latestSnap) return { label: `${basisLabel} · 无快照` };
+    const target = shiftDate(latestSnap.date, -days);
+    let prior: DailySnapshot | undefined;
+    for (const s of snapshots) {
+      if (s.sku === currentSku?.sku && s.date <= target && (!prior || s.date > prior.date)) prior = s;
+    }
+    return prior
+      ? { snap: prior, label: `${basisLabel} · 基线 ${prior.date}` }
+      : { label: `${basisLabel} · 目标基线 ${target} 前无快照` };
+  }, [basis, skuInput, currentSku, currentSiteId, snapshots, latestSnapshot]);
+
   // 执行诊断
   const diagnosis: DiagnosisOutput | null = useMemo(() => {
     if (!currentSku) return null;
+    const key = snapKey(currentSku.sku, currentSiteId);
     const params = {
       sku: currentSku,
-      latestSnap: latestSnapshot.get(snapKey(currentSku.sku, currentSiteId)),
-      previousSnap: previousSnapshot?.get(snapKey(currentSku.sku, currentSiteId)),
-      latestInv: latestInventory.get(snapKey(currentSku.sku, currentSiteId)),
+      latestSnap: latestSnapshot.get(key),
+      previousSnap: basis === "import" ? previousSnapshot?.get(key) : baselineInfo.snap,
+      latestInv: latestInventory.get(key),
       config,
     };
     return activeTab === "profit" ? diagnoseProfitDecline(params) : diagnoseSalesDecline(params);
-  }, [currentSku, latestSnapshot, previousSnapshot, latestInventory, config, activeTab]);
+  }, [currentSku, latestSnapshot, previousSnapshot, latestInventory, config, activeTab, basis, baselineInfo]);
 
   const setTab = (key: "profit" | "sales") => {
     setActiveTab(key);
     const next = new URLSearchParams(searchParams);
     next.set("type", key);
+    setSearchParams(next);
+  };
+
+  const setBasis = (key: Basis) => {
+    setBasisState(key);
+    const next = new URLSearchParams(searchParams);
+    next.set("basis", key);
     setSearchParams(next);
   };
 
@@ -74,7 +120,9 @@ export default function DiagnosisPage() {
         </div>
         <div>
           <h1 className="font-heading text-[26px] font-bold text-foreground-950">异常诊断</h1>
-          <p className="text-[13px] text-foreground-500">基于预设规则的根因分析 · 对比本次与上次导入数据</p>
+          <p className="text-[13px] text-foreground-500">
+            基于预设规则的根因分析 · {basis === "import" ? "对比本次与上次导入数据" : basis === "7d" ? "近7天环比口径" : "近30天环比口径"}
+          </p>
         </div>
       </div>
 
@@ -96,6 +144,36 @@ export default function DiagnosisPage() {
             {t.label}
           </button>
         ))}
+      </div>
+
+      {/* 对比口径（时间维度） */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[12px] font-medium text-foreground-600">
+          <i className="ri-time-line mr-1 text-[14px] text-primary-600" aria-hidden />对比口径
+        </span>
+        <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-background-300/70 bg-background-100/70 px-1 py-1">
+          {BASIS_OPTIONS.map((o) => (
+            <button
+              key={o.key}
+              type="button"
+              onClick={() => setBasis(o.key)}
+              title={o.key === "import" ? "对比最新导入批次与上一次导入批次" : `以最新快照为终点，与 ${o.key === "7d" ? "7" : "30"} 天前的快照对比（自动取 ≤ 目标日期的最近快照）`}
+              className={[
+                "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors cursor-pointer whitespace-nowrap",
+                basis === o.key
+                  ? "bg-foreground-900 text-background-50"
+                  : "text-foreground-600 hover:text-foreground-900",
+              ].join(" ")}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        {currentSku && basis !== "import" && (
+          <span className={`text-[11px] ${baselineInfo.snap ? "text-foreground-500" : "text-amber-600"}`}>
+            {baselineInfo.label}
+          </span>
+        )}
       </div>
 
       {/* SKU 搜索 */}
@@ -187,7 +265,7 @@ function DiagnosisResultView({ result }: { result: DiagnosisOutput }) {
           {result.reason}
         </div>
         <p className="mt-2 text-[13px] text-foreground-600">
-          缺少历史数据，无法诊断。请至少导入两次数据后再查看 —— 系统需要对比上次导入的快照才能定位异常根因。
+          缺少可对比的基线快照，无法诊断。可切换上方「对比口径」重试；「本次 vs 上次导入」需至少导入两次数据，「近7/30天环比」需要该时间范围前存在导入快照。
         </p>
         <Link
           to="/import"
