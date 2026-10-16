@@ -573,9 +573,20 @@ export default function CalculatorPage() {
             <input type="number" step="0.1" className={inputCls} value={returnRate} onChange={(e) => setReturnRate(e.target.value)} />
           </div>
           <div>
-            <label className={labelCls}>仓储天数</label>
+            <label className={labelCls} title="≈ 每批发货量 ÷ 日均销量，估准才能落到正确的费率阶梯档">仓储天数</label>
             <input type="number" step="1" className={inputCls} value={storageDays} onChange={(e) => setStorageDays(e.target.value)} />
-            <p className="mt-1 text-[10px] text-foreground-400 leading-snug">≈ 每批发货量 ÷ 日均销量，估准才能落到正确的费率阶梯档</p>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {[30, 60, 90, 120, 180, 360].map((d) => (
+                <button key={d} type="button" onClick={() => setStorageDays(String(d))}
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium border cursor-pointer transition-colors ${
+                    n(storageDays) === d
+                      ? "border-primary-400 bg-primary-100 text-primary-800"
+                      : "border-background-200 text-foreground-500 hover:border-primary-300 hover:text-primary-700"
+                  }`}>
+                  {d}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </Section>
