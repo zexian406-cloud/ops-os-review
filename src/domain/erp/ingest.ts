@@ -45,6 +45,9 @@ export async function pullAndNormalize(
     salesRows = r.salesRows; stockRows = r.stockRows; whRows = r.whRows;
     if (salesRows.length === 0) log("warn", "REST 未拉到销量数据：销售额/销量将为 0（接口路径以官方文档为准，见 lingxing.ts LINGXING_ENDPOINTS）");
   }
+  if (salesRows.length === 0) {
+    log("warn", "本次拉取没有销量数据源：快照的销量/销售额将为 0，Excel 侧已录入的数值不受影响，可改用 REST 通道或 Excel 补录");
+  }
   log("info", `归一化：主档 ${listingRows.length} · 销量 ${salesRows.length} · FBA库存 ${stockRows.length} · 海外仓 ${whRows.length} · 广告 ${adRows.length}`);
   const rows = normalizeLingxing(listingRows, salesRows, adRows, stockRows, whRows);
   log("ok", `归一化完成：${rows.length} 行统一结构（MSKU/ASIN/SKU/销量/销售额/广告/ACoS/库存/退款）`);
@@ -74,9 +77,26 @@ export async function writeNormalizedRows(
   const shopNames = new Set<string>();
 
   // ── 1. SKU 主档（部分更新：仅补 msku/asin/name/store，不碰成本/售价等已有字段） ──
+  // 主键复用：先按 MSKU/ASIN 建现有主档索引，命中则沿用已有主键，
+  // 避免与 Excel 导入的主档（本地 SKU 主键）对同一商品各建一条
+  const allMaster = await db.skuMaster.toArray();
+  const masterKeyByMsku = new Map<string, string>();
+  const masterKeyByAsin = new Map<string, string>();
+  for (const s of allMaster) {
+    if ((s.siteId ?? "site_us") !== siteId) continue;
+    if (s.msku) {
+      for (const m of s.msku.split(",")) {
+        const t = m.trim();
+        if (t) masterKeyByMsku.set(t, s.sku);
+      }
+    }
+    if (s.asin) masterKeyByAsin.set(s.asin, s.sku);
+  }
+
   const skuRows: SkuMaster[] = [];
   for (const r of rows) {
-    const keySku = r.sku || r.msku; // 主键：本地 SKU 优先，无则用 MSKU
+    // 主键优先级：已有主档的 MSKU/ASIN 命中 → 沿用其主键；否则 本地SKU → MSKU（|| 跳过空串）
+    const keySku = masterKeyByMsku.get(r.msku) ?? masterKeyByAsin.get(r.asin) ?? (r.sku || r.msku);
     if (!keySku) continue;
     const storeName = r.store || fallbackShop || "";
     if (storeName) {
@@ -98,22 +118,23 @@ export async function writeNormalizedRows(
   }
   await upsertSkuMasterPartial(skuRows);
 
-  // ── 2. 每日快照（销量按 7 天日均口径；附加 revenue/acos/refundQty 可选字段） ──
+  // ── 2. 每日快照（口径与 Excel 导入一致：dailySales7d = 7天累计/7；monthlySales = 30天累计/30） ──
   const snapshots: DailySnapshot[] = rows
     .filter((r) => r.sku || r.msku)
     .map((r) => {
+      const keySku = masterKeyByMsku.get(r.msku) ?? masterKeyByAsin.get(r.asin) ?? (r.sku || r.msku);
       const daily = Math.round((r.sales / 7) * 100) / 100;
       const stockOnHand = r.fbaStock + r.whStock;
       return {
         date,
-        sku: r.sku || r.msku,
+        sku: keySku,
         siteId,
         dailySales7d: daily,
-        monthlySales: r.sales30d ?? 0,
+        monthlySales: Math.round(((r.sales30d ?? 0) / 30) * 100) / 100,
         stockOnHand,
         stockInTransit: 0,
-        daysOfCoverOnHand: daily > 0 ? Math.round(stockOnHand / daily) : 999,
-        daysOfCoverWithTransit: daily > 0 ? Math.round(stockOnHand / daily) : 999,
+        daysOfCoverOnHand: daily > 0 ? Number((stockOnHand / daily).toFixed(1)) : Infinity,
+        daysOfCoverWithTransit: daily > 0 ? Number((stockOnHand / daily).toFixed(1)) : Infinity,
         adSpend: r.adSpend,
         adRatio: r.revenue > 0 ? Math.round((r.adSpend / r.revenue) * 10000) / 100 : 0,
         profit: 0,
@@ -133,7 +154,7 @@ export async function writeNormalizedRows(
     .filter((r) => r.sku || r.msku)
     .map((r) => ({
       date,
-      sku: r.sku || r.msku,
+      sku: masterKeyByMsku.get(r.msku) ?? masterKeyByAsin.get(r.asin) ?? (r.sku || r.msku),
       siteId,
       fbaStock: r.fbaStock,
       fbmStock: r.whStock,

@@ -25,8 +25,11 @@ export interface HttpRequest {
 /**
  * 发送请求：直连优先，失败回落 Worker 转发。
  * 返回解析后的 JSON 对象与响应文本（日志用）。
+ * headers 尽力返回响应头（Worker 转发时由 cors-proxy.js 原样带回；
+ * 浏览器直连时仅当服务端通过 Access-Control-Expose-Headers 暴露才可读，
+ * MCP 的 mcp-session-id 主要依赖 Worker 通道获取）。
  */
-export async function fetchWithFallback(req: HttpRequest): Promise<{ status: number; text: string; via: "direct" | "proxy" }> {
+export async function fetchWithFallback(req: HttpRequest): Promise<{ status: number; text: string; via: "direct" | "proxy"; headers?: Record<string, string> }> {
   // 1) 直连尝试
   try {
     const res = await fetch(req.url, {
@@ -35,7 +38,9 @@ export async function fetchWithFallback(req: HttpRequest): Promise<{ status: num
       body: req.body,
     });
     const text = await res.text();
-    return { status: res.status, text, via: "direct" };
+    const headers: Record<string, string> = {};
+    res.headers.forEach((v, k) => { headers[k] = v; });
+    return { status: res.status, text, via: "direct", headers };
   } catch {
     // 直连失败（典型为 CORS 拦截），继续走转发
   }
@@ -47,14 +52,16 @@ export async function fetchWithFallback(req: HttpRequest): Promise<{ status: num
     body: JSON.stringify({ url: req.url, method: req.method ?? "POST", headers: req.headers ?? {}, body: req.body ?? "" }),
   });
   if (!res.ok) throw new Error(`Worker 转发失败：HTTP ${res.status}（请检查 Worker 是否已部署并允许该目标域名）`);
-  const forwarded = (await res.json()) as { status: number; text: string };
-  return { status: forwarded.status, text: forwarded.text, via: "proxy" };
+  const forwarded = (await res.json()) as { status: number; text: string; headers?: Record<string, string> };
+  return { status: forwarded.status, text: forwarded.text, via: "proxy", headers: forwarded.headers };
 }
 
 /**
  * 解析响应文本为 JSON —— 兼容两种格式：
  * ① application/json：直接 parse；
- * ② text/event-stream（SSE）：取最后一个 data: 行的内容 parse。
+ * ② text/event-stream（SSE）：取 data: 行的内容 parse。
+ *    优先解析最后一个 data: 行；失败时按 SSE 规范把多行 data 以换行拼接后重试
+ *    （长 JSON 可能被 server 拆成多个 data: 行发送）。
  * MCP Streamable HTTP 的响应可能是这两种之一。
  */
 export function parseJsonOrSse(text: string): Record<string, unknown> {
@@ -70,7 +77,11 @@ export function parseJsonOrSse(text: string): Record<string, unknown> {
     .map((l) => l.slice(5).trim())
     .filter((l) => l && l !== "[DONE]");
   if (dataLines.length === 0) throw new Error(`无法解析的响应格式：${trimmed.slice(0, 200)}`);
-  return JSON.parse(dataLines[dataLines.length - 1]) as Record<string, unknown>;
+  try {
+    return JSON.parse(dataLines[dataLines.length - 1]) as Record<string, unknown>;
+  } catch {
+    return JSON.parse(dataLines.join("\n")) as Record<string, unknown>;
+  }
 }
 
 /* ────────── 浏览器内 MCP 客户端（JSON-RPC 2.0 over Streamable HTTP） ────────── */
@@ -112,7 +123,7 @@ export class McpHttpClient {
     if (params !== undefined) payload.params = params;
     if (!isNotification) payload.id = this.nextId++;
 
-    const { status, text, via } = await fetchWithFallback({
+    const { status, text, via, headers: respHeaders } = await fetchWithFallback({
       url: this.opts.endpoint,
       headers,
       body: JSON.stringify(payload),
@@ -120,11 +131,17 @@ export class McpHttpClient {
     });
     if (!isNotification) this.opts.log?.("info", `MCP ${method} → HTTP ${status}（${via === "direct" ? "直连" : "Worker 转发"}）`);
 
+    // 会话 ID：server 在 initialize 响应头返回 mcp-session-id，后续请求必须回传；
+    // Worker 转发通道会原样带回响应头（直连通道受浏览器 Expose-Headers 限制，尽力而为）
+    if (method === "initialize" && respHeaders) {
+      const sid = respHeaders["mcp-session-id"] ?? respHeaders["Mcp-Session-Id"];
+      if (sid) this.sessionId = sid;
+    }
+
     // 流式 HTTP 规范：通知类请求服务器返回 202 Accepted 无 body
     if (isNotification || status === 202 || !text.trim()) return null;
 
     const parsed = parseJsonOrSse(text);
-    // 会话 ID：从响应头拿不到（Worker 场景），部分 server 会放在 body._meta；尽力而为
     if (method === "initialize") {
       this.opts.log?.("ok", `已连接 MCP 服务：${JSON.stringify((parsed as { result?: { serverInfo?: unknown } }).result?.serverInfo ?? {})}`);
     }

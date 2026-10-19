@@ -69,8 +69,8 @@ export default {
 
     // 纯转发：原样带 method/headers/body，不修改、不缓存、不记录
     const upstreamHeaders = new Headers(payload.headers ?? {});
-    delete upstreamHeaders.set("host");
-    delete upstreamHeaders.set("content-length");
+    upstreamHeaders.delete("host");
+    upstreamHeaders.delete("content-length");
     try {
       const upstream = await fetch(target, {
         method: payload.method ?? "POST",
@@ -78,8 +78,12 @@ export default {
         body: payload.body || undefined,
       });
       const text = await upstream.text();
-      // 返回 { status, text }：让前端拿到真实状态码与响应体（含 SSE 文本）
-      return new Response(JSON.stringify({ status: upstream.status, text }), {
+      // 响应头一并带回（前端 MCP 客户端需要读取 mcp-session-id；
+      // 仅放进 JSON body，Worker 侧不存储、不记录）
+      const respHeaders = {};
+      upstream.headers.forEach((v, k) => { respHeaders[k] = v; });
+      // 返回 { status, text, headers }：让前端拿到真实状态码、响应体（含 SSE 文本）与响应头
+      return new Response(JSON.stringify({ status: upstream.status, text, headers: respHeaders }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } catch (e) {

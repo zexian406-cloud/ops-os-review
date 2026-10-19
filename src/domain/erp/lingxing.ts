@@ -79,7 +79,7 @@ export function lingxingClearToken(): void {
  * 广告费/ACoS 数据量小且字段稳定，一期建议走 MCP 的广告报告工具。
  */
 export const LINGXING_ENDPOINTS = {
-  /** 亚马逊订单列表（按下单时间区间拉取，聚合出销量/销售额/退款数量） */
+  /** 亚马逊订单列表（按下单时间区间拉取，前端按 MSKU 聚合出销量/销售额） */
   orders: "/erp/sc/data/mws/order",
   /** FBA 库存（可售） */
   fbaStock: "/erp/sc/data/mws/inventory",
@@ -92,6 +92,58 @@ const daysAgo = (n: number): string => {
   d.setDate(d.getDate() - n);
   return d.toISOString().slice(0, 10);
 };
+
+/* 订单行字段别名（宽松匹配，发现新字段名往这里补） */
+const ORDER_FIELD = {
+  msku: ["msku", "msku_name", "seller_sku", "sellerSku", "在线SKU"],
+  sku: ["sku", "product_sku", "local_sku", "本地SKU"],
+  asin: ["asin", "asin1", "ASIN"],
+  qty: ["quantity", "qty", "order_quantity", "item_quantity", "product_quantity", "数量"],
+  amount: ["order_total", "item_total", "amount", "total_price", "price_amount", "sales_amount", "order_amount", "订单金额"],
+} as const;
+
+/**
+ * 订单明细按标识符聚合为「销量行」。
+ * 背景：订单接口返回的是每单一行，normalize 期望的是 MSKU 维度的销量统计行
+ * （sales_7d / sales_30d / sales_amount_7d 别名），必须先在前端聚合，否则销量全 0。
+ * 聚合键：MSKU → 本地 SKU → ASIN 任一命中即并入同一行。
+ */
+export function aggregateOrders(orders: RawRow[], window: "7d" | "30d"): RawRow[] {
+  const pick = (row: RawRow, aliases: readonly string[]): string => {
+    for (const a of aliases) {
+      const v = row[a];
+      if (v != null && v !== "") return String(v).trim();
+    }
+    return "";
+  };
+  const num = (row: RawRow, aliases: readonly string[]): number => {
+    const v = row[aliases.find((a) => row[a] != null && row[a] !== "") ?? ""];
+    if (v == null || v === "") return 0;
+    const n = typeof v === "number" ? v : Number(String(v).replace(/[,，\s]/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const map = new Map<string, RawRow>();
+  for (const row of orders) {
+    const msku = pick(row, ORDER_FIELD.msku);
+    const sku = pick(row, ORDER_FIELD.sku);
+    const asin = pick(row, ORDER_FIELD.asin);
+    const key = msku || sku || asin;
+    if (!key) continue;
+    let agg = map.get(key);
+    if (!agg) {
+      agg = { msku, sku, asin };
+      map.set(key, agg);
+    }
+    if (window === "7d") {
+      agg.sales_7d = ((agg.sales_7d as number) ?? 0) + num(row, ORDER_FIELD.qty);
+      agg.sales_amount_7d = ((agg.sales_amount_7d as number) ?? 0) + num(row, ORDER_FIELD.amount);
+    } else {
+      agg.sales_30d = ((agg.sales_30d as number) ?? 0) + num(row, ORDER_FIELD.qty);
+    }
+  }
+  return Array.from(map.values());
+}
 
 /** 带公共参数与签名的领星业务请求 */
 async function lingxingApi(
@@ -131,18 +183,38 @@ export async function lingxingRestPull(
   log: Log,
 ): Promise<{ salesRows: RawRow[]; stockRows: RawRow[]; whRows: RawRow[] }> {
   const token = await lingxingGetToken(cred, log);
-  const range: Record<string, string | number> = {
-    date_from: daysAgo(30),
-    date_to: daysAgo(0),
-  };
+  const range30: Record<string, string | number> = { date_from: daysAgo(30), date_to: daysAgo(0) };
+  const range7: Record<string, string | number> = { date_from: daysAgo(7), date_to: daysAgo(0) };
 
   const out = { salesRows: [] as RawRow[], stockRows: [] as RawRow[], whRows: [] as RawRow[] };
-  // 订单 → 销量/销售额（近 30 天区间，前端聚合 7/30 天口径）
+  // 订单 → 销量/销售额：分别拉近 7 天与近 30 天区间，按 MSKU 聚合成销量统计行
+  let orders7: RawRow[] = [];
+  let orders30: RawRow[] = [];
   try {
-    out.salesRows = await lingxingApi(cred, token, LINGXING_ENDPOINTS.orders, range, log);
+    orders7 = await lingxingApi(cred, token, LINGXING_ENDPOINTS.orders, range7, log);
   } catch (e) {
-    log("warn", `订单接口拉取失败（销量/销售额将为 0）：${(e as Error).message}`);
+    log("warn", `订单接口（近7天）拉取失败：${(e as Error).message}`);
   }
+  try {
+    orders30 = await lingxingApi(cred, token, LINGXING_ENDPOINTS.orders, range30, log);
+  } catch (e) {
+    log("warn", `订单接口（近30天）拉取失败：${(e as Error).message}`);
+  }
+  if (orders7.length === 0 && orders30.length === 0) {
+    log("warn", "订单数据为空：销量/销售额将为 0（请检查 AppSecret 权限或接口路径，见 LINGXING_ENDPOINTS）");
+  } else if (orders30.length >= 200) {
+    log("warn", `近30天订单 ${orders30.length} 行，可能超出单页上限被截断；订单量大时请在 LINGXING_ENDPOINTS 调用处按官方文档加 page 分页参数`);
+  }
+  // 合并两个窗口的聚合行（同一 key 出现时字段互补）
+  const merged = new Map<string, RawRow>();
+  for (const r of [...aggregateOrders(orders7, "7d"), ...aggregateOrders(orders30, "30d")]) {
+    const key = String(r.msku || r.sku || r.asin || "");
+    const prev = merged.get(key);
+    if (prev) merged.set(key, { ...prev, ...r });
+    else merged.set(key, r);
+  }
+  out.salesRows = Array.from(merged.values());
+  log("ok", `订单聚合完成：${out.salesRows.length} 个 SKU 的近7天/近30天销量行`);
   // FBA 可售库存
   try {
     out.stockRows = await lingxingApi(cred, token, LINGXING_ENDPOINTS.fbaStock, {}, log);
