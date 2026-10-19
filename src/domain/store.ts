@@ -37,6 +37,7 @@ import {
   snapKey,
   type WowDelta,
 } from "./engine";
+import { filterSkuMasterByShop } from "./shopFilter";
 
 const SITE_CHANGE_EVENT = "ops-site-change";
 const SHOP_CHANGE_EVENT = "ops-shop-change";
@@ -170,14 +171,10 @@ export function useOpsData() {
     return allInventory.filter(s => (s.siteId ?? "site_us") === currentSiteId);
   }, [allInventory, currentSiteId]);
 
-  const skuMaster = useMemo(() => {
-    if (currentShopId === "all") return siteSkuMaster;
-    // skuMaster.store 可能存店铺 id（编辑器写入）或店铺名（历史导入/演示数据），两者都匹配
-    const shop = shops.find(s => s.id === currentShopId);
-    const tokens = new Set<string>([currentShopId]);
-    if (shop?.name) tokens.add(shop.name);
-    return siteSkuMaster.filter(s => s.store != null && tokens.has(s.store));
-  }, [siteSkuMaster, currentShopId, shops]);
+  const skuMaster = useMemo(
+    () => filterSkuMasterByShop(siteSkuMaster, currentShopId, shops),
+    [siteSkuMaster, currentShopId, shops],
+  );
 
   const snapshots = useMemo(() => {
     if (currentShopId === "all") return siteSnapshots;
