@@ -10,7 +10,8 @@ export type DashboardSectionKey =
   | "riskBuckets"
   | "alerts"
   | "shipment"
-  | "wowBar";
+  | "wowBar"
+  | "mskuDemo";
 
 export type SkuDetailSectionKey =
   | "header"
@@ -288,6 +289,7 @@ const DEFAULT_DASHBOARD_GRID_LAYOUT: Record<DashboardSectionKey, GridItemLayout>
   promotions:  { x: 0, y: 23, w: 6,  h: 8 },
   shipment:    { x: 6, y: 23, w: 6,  h: 8 },
   wowBar:      { x: 0, y: 31, w: 12, h: 4 },
+  mskuDemo:    { x: 0, y: 35, w: 12, h: 6 },
 };
 
 interface LayoutPrefs {
@@ -315,6 +317,7 @@ const DEFAULT_DASHBOARD_VISIBLE: DashboardSectionKey[] = [
   "alerts",
   "shipment",
   "wowBar",
+  "mskuDemo",
 ];
 
 const DEFAULT_SKU_VISIBLE: SkuDetailSectionKey[] = [
@@ -641,4 +644,5 @@ export const DASHBOARD_LABELS: Record<DashboardSectionKey, string> = {
   alerts: "紧急告警",
   shipment: "发货建议",
   wowBar: "上期对比条",
+  mskuDemo: "一品多链接",
 };

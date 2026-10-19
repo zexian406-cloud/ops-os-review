@@ -76,10 +76,14 @@ export default function SiteSwitcher() {
       <button
         type="button"
         onClick={() => setOpen(!open)}
+        title="点击切换站点 · 汇率支持任意货币对自定义（含非 USD 中转换算）"
         className="flex items-center gap-2 rounded-lg border border-background-300/70 bg-background-50 px-3 py-1.5 text-[13px] text-foreground-700 hover:border-primary-400 hover:bg-background-100 cursor-pointer transition-colors"
       >
         <i className="ri-global-line text-[15px] text-primary-600" aria-hidden />
         <span className="font-medium">{current?.name ?? "选择站点"}</span>
+        {current?.id === "site_demo" && (
+          <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">演示</span>
+        )}
         <span className="text-[11px] font-mono text-foreground-500">{current?.currency}</span>
         {current && <span className="text-[10px] text-foreground-400">1={rateToUsd(current)}$</span>}
         <i className={`ri-arrow-down-s-line text-[13px] text-foreground-400 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />

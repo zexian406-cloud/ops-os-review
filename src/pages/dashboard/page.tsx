@@ -1,19 +1,19 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
-  BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { type LayoutItem } from "react-grid-layout";
 import { useOpsData } from "@/domain/store";
 import { computeAll, computeWarehouseTotals } from "@/domain/calculator";
 import { snapKey } from "@/domain/engine";
-import { db, getAllShops } from "@/domain/db";
+import { db } from "@/domain/db";
 import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
-import type { AlertType, TodoItem, Shop, OpsLog } from "@/domain/types";
+import type { AlertType, TodoItem, OpsLog, SkuMaster } from "@/domain/types";
 import AlertList from "./AlertList";
 import LayoutCustomizer from "@/components/layout/LayoutCustomizer";
 import { useDashboardLayout, type DashboardSectionKey, type KpiMetricKey, KPI_METRIC_LABELS, KPI_METRIC_ICONS, KPI_METRIC_TONES, type GridItemLayout } from "@/hooks/useLayoutPrefs";
@@ -26,29 +26,40 @@ const deltaArrow = (v: number, inverse = false) => {
   return <span className={color}>{arrow} {Math.abs(v).toFixed(1)}</span>;
 };
 
-interface WeekCompareItem {
-  label: string;
-  current: number;
-  previous: number;
-  unit: string;
-}
+/* ── 近 14 天分日走势：可切换指标 ── */
+const WEEK_METRICS = [
+  { key: "sales", label: "销量", unit: " 件", color: "#3b82f6", goodWhenUp: true },
+  { key: "adRatio", label: "广告费比", unit: "%", color: "#f59e0b", goodWhenUp: false },
+  { key: "returnRate", label: "退货率", unit: "%", color: "#ef4444", goodWhenUp: false },
+  { key: "rating", label: "评分", unit: "", color: "#10b981", goodWhenUp: true },
+] as const;
+type WeekMetricKey = (typeof WEEK_METRICS)[number]["key"];
+
+/** ISO 日期 → 相对今天的人话：今天 / 明天 / 后天 / N 天后 / 已过 N 天 */
+const relativeDayLabel = (date: string, today: string) => {
+  const n = Math.ceil((new Date(date).getTime() - new Date(today).getTime()) / 86400000);
+  if (n === 0) return "今天";
+  if (n === 1) return "明天";
+  if (n === 2) return "后天";
+  if (n < 0) return `已过 ${-n} 天`;
+  return `${n} 天后`;
+};
 
 /* ─────────────────────────────────────── */
 export default function Dashboard() {
   const {
     loading, skuMaster, alerts, promotions,
     shipmentSuggestions, wowDeltas, latestSnapshot,
-    latestInventory, previousSnapshot, today, currentSite,
+    latestInventory, today, currentSite,
+    currentShopId, shops, snapshots,
   } = useOpsData();
 
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [opsLogs, setOpsLogs] = useState<OpsLog[]>([]);
-  const [shops, setShops] = useState<Shop[]>([]);
-  const [shopsMap, setShopsMap] = useState<Map<string, string>>(new Map());
   const [promosExpanded, setPromosExpanded] = useState(false);
   const [alertsExpanded, setAlertsExpanded] = useState(false);
   const [shipmentExpanded, setShipmentExpanded] = useState(false);
-  const [shopFilter, setShopFilter] = useState<string>("all");
+  const [weekMetric, setWeekMetric] = useState<WeekMetricKey>("sales");
 
   const loadTodos = async () => {
     const all = await db.todos.toArray();
@@ -62,14 +73,11 @@ export default function Dashboard() {
     }).catch(() => setOpsLogs([]));
   }, [loading]);
 
-  useEffect(() => {
-    getAllShops().then((allShops) => {
-      setShops(allShops);
-      const map = new Map<string, string>();
-      allShops.forEach((s) => { map.set(s.id, s.name); map.set(s.name, s.id); });
-      setShopsMap(map);
-    });
-  }, []);
+  const shopsMap = useMemo(() => {
+    const map = new Map<string, string>();
+    shops.forEach((s) => { map.set(s.id, s.name); });
+    return map;
+  }, [shops]);
 
   const {
     customizing, setCustomizing, toggleSection, reset, setKpiSlot,
@@ -99,113 +107,83 @@ export default function Dashboard() {
     setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
   }, [setGridLayout]);
 
-  // ── 店铺筛选 ──
-  const shopFilterId = useMemo(() => {
-    if (shopFilter === "all") return "all";
-    const id = shopsMap.get(shopFilter) ?? shopFilter;
-    return id;
-  }, [shopFilter, shopsMap]);
-
-  const filteredSkuMaster = useMemo(() => {
-    if (shopFilterId === "all") return skuMaster;
-    return skuMaster.filter((s) => s.store === shopFilterId);
-  }, [skuMaster, shopFilterId]);
-
-  const filteredPromotions = useMemo(() => {
-    if (shopFilterId === "all") return promotions;
-    return promotions.filter((p) => p.store === shopFilterId);
-  }, [promotions, shopFilterId]);
-
-  const filteredAlerts = useMemo(() => {
-    if (shopFilterId === "all") return alerts;
-    // Filter alerts by checking if the related SKU belongs to the selected shop
-    const shopSkuSet = new Set(filteredSkuMaster.map((s) => s.sku));
-    return alerts.filter((a) => {
-      if (a.sku && shopSkuSet.has(a.sku)) return true;
-      return false;
-    });
-  }, [alerts, shopFilterId, filteredSkuMaster]);
-
-  const filteredShipmentSuggestions = useMemo(() => {
-    if (shopFilterId === "all") return shipmentSuggestions;
-    return shipmentSuggestions.filter((s) => {
-      const sku = skuMaster.find((sm) => sm.sku === s.sku);
-      return sku && sku.store === shopFilterId;
-    });
-  }, [shipmentSuggestions, shopFilterId, skuMaster]);
-
-  // ── 本周 vs 上周 ──
-  const weekCompare = useMemo((): {
-    chartData: Array<{ label: string; current: number; previous: number }>;
-    items: WeekCompareItem[];
-    hasTwoWeeks: boolean;
-  } => {
-    if (!previousSnapshot || previousSnapshot.size === 0) {
-      return { chartData: [], items: [], hasTwoWeeks: false };
+  // ── 近 14 天分日聚合（店铺/站点过滤已在 useOpsData 内完成）──
+  const dailySeries = useMemo(() => {
+    const byDate = new Map<string, { sales: number; adSum: number; adN: number; retSum: number; retN: number; ratSum: number; ratN: number }>();
+    for (const s of snapshots) {
+      let d = byDate.get(s.date);
+      if (!d) {
+        d = { sales: 0, adSum: 0, adN: 0, retSum: 0, retN: 0, ratSum: 0, ratN: 0 };
+        byDate.set(s.date, d);
+      }
+      d.sales += s.dailySales7d;
+      if (s.adRatio > 0) { d.adSum += s.adRatio; d.adN += 1; }
+      if (s.returnRate > 0) { d.retSum += s.returnRate; d.retN += 1; }
+      if (s.rating > 0) { d.ratSum += s.rating; d.ratN += 1; }
     }
-    const curSnaps = Array.from(latestSnapshot.values()).filter((r) =>
-      shopFilterId === "all" || filteredSkuMaster.some((s) => s.sku === r.sku)
-    );
-    const prevSnaps = Array.from(previousSnapshot.values()).filter((r) =>
-      shopFilterId === "all" || filteredSkuMaster.some((s) => s.sku === r.sku)
-    );
-    const curSalesSum = curSnaps.reduce((s, r) => s + r.dailySales7d, 0);
-    const prevSalesSum = prevSnaps.reduce((s, r) => s + r.dailySales7d, 0);
-    const curAds = curSnaps.filter((r) => r.adRatio > 0);
-    const prevAds = prevSnaps.filter((r) => r.adRatio > 0);
-    const curAdRatio = curAds.length > 0 ? curAds.reduce((s, r) => s + r.adRatio, 0) / curAds.length : 0;
-    const prevAdRatio = prevAds.length > 0 ? prevAds.reduce((s, r) => s + r.adRatio, 0) / prevAds.length : 0;
-    const curReturnRate = curSnaps.length > 0 ? curSnaps.reduce((s, r) => s + r.returnRate, 0) / curSnaps.length : 0;
-    const prevReturnRate = prevSnaps.length > 0 ? prevSnaps.reduce((s, r) => s + r.returnRate, 0) / prevSnaps.length : 0;
-    const curRatings = curSnaps.filter((r) => r.rating > 0);
-    const prevRatings = prevSnaps.filter((r) => r.rating > 0);
-    const curRating = curRatings.length > 0 ? curRatings.reduce((s, r) => s + r.rating, 0) / curRatings.length : 0;
-    const prevRating = prevRatings.length > 0 ? prevRatings.reduce((s, r) => s + r.rating, 0) / prevRatings.length : 0;
+    return [...byDate.keys()].sort().slice(-14).map((date) => {
+      const d = byDate.get(date)!;
+      return {
+        date,
+        label: date.slice(5),
+        sales: Number(d.sales.toFixed(1)),
+        adRatio: d.adN > 0 ? Number((d.adSum / d.adN).toFixed(1)) : 0,
+        returnRate: d.retN > 0 ? Number((d.retSum / d.retN).toFixed(1)) : 0,
+        rating: d.ratN > 0 ? Number((d.ratSum / d.ratN).toFixed(2)) : 0,
+      };
+    });
+  }, [snapshots]);
 
-    const items: WeekCompareItem[] = [
-      { label: "日均销量", current: curSalesSum, previous: prevSalesSum, unit: "件" },
-      { label: "广告费比", current: curAdRatio, previous: prevAdRatio, unit: "%" },
-      { label: "退货率", current: curReturnRate, previous: prevReturnRate, unit: "%" },
-      { label: "评分", current: curRating, previous: prevRating, unit: "" },
-    ];
-    const chartData = [
-      { label: "日均销量", current: Number(curSalesSum.toFixed(1)), previous: Number(prevSalesSum.toFixed(1)) },
-      { label: "广告费比", current: Number(curAdRatio.toFixed(1)), previous: Number(prevAdRatio.toFixed(1)) },
-      { label: "退货率", current: Number(curReturnRate.toFixed(1)), previous: Number(prevReturnRate.toFixed(1)) },
-      { label: "评分", current: Number(curRating.toFixed(2)), previous: Number(prevRating.toFixed(2)) },
-    ];
-    return { chartData, items, hasTwoWeeks: true };
-  }, [latestSnapshot, previousSnapshot, shopFilterId, filteredSkuMaster]);
+  // 本期（近 7 天）vs 上期（再前 7 天）均值，用于卡片与参考线
+  const weekCompare = useMemo((): {
+    current: Record<WeekMetricKey, number>;
+    previous: Record<WeekMetricKey, number> | null;
+  } => {
+    const s = dailySeries;
+    const calc = (rows: typeof s): Record<WeekMetricKey, number> => {
+      const avg = (f: (d: (typeof s)[number]) => number) =>
+        rows.length > 0 ? rows.reduce((sum, d) => sum + f(d), 0) / rows.length : 0;
+      return {
+        sales: avg((d) => d.sales),
+        adRatio: avg((d) => d.adRatio),
+        returnRate: avg((d) => d.returnRate),
+        rating: avg((d) => d.rating),
+      };
+    };
+    const cur = s.slice(-7);
+    const prev = s.length >= 8 ? s.slice(Math.max(0, s.length - 14), s.length - 7) : [];
+    return { current: calc(cur), previous: prev.length > 0 ? calc(prev) : null };
+  }, [dailySeries]);
 
   const activeProductGroups = useMemo(() => {
     const groups = new Set<string>();
-    filteredSkuMaster.forEach((s) => {
+    skuMaster.forEach((s) => {
       if (s.saleStatus !== "active") return;
       groups.add(s.groupSku || s.sku);
     });
     return groups.size;
-  }, [filteredSkuMaster]);
+  }, [skuMaster]);
 
-  const activeMskuLinks = useMemo(() => filteredSkuMaster.filter((s) => s.saleStatus === "active").length, [filteredSkuMaster]);
+  const activeMskuLinks = useMemo(() => skuMaster.filter((s) => s.saleStatus === "active").length, [skuMaster]);
 
   // ── KPI 指标值池（所有可配指标的计算结果）── 必须放在 loading 检查之前
 
-  const totalStock = useMemo(() => filteredSkuMaster.reduce((s, sku) => {
+  const totalStock = useMemo(() => skuMaster.reduce((s, sku) => {
     const inv = latestInventory.get(snapKey(sku.sku, sku.siteId));
     const wh = computeWarehouseTotals(inv);
     return s + wh.total;
-  }, 0), [filteredSkuMaster, latestInventory]);
+  }, 0), [skuMaster, latestInventory]);
 
-  const totalDailySales = useMemo(() => filteredSkuMaster.reduce((s, sku) => {
+  const totalDailySales = useMemo(() => skuMaster.reduce((s, sku) => {
     const snap = latestSnapshot.get(snapKey(sku.sku, sku.siteId));
     return s + (snap?.dailySales7d ?? 0);
-  }, 0), [filteredSkuMaster, latestSnapshot]);
+  }, 0), [skuMaster, latestSnapshot]);
 
   const wowTotalSalesDelta = useMemo(() => wowDeltas.reduce((s, d) => s + d.dailySalesDelta, 0), [wowDeltas]);
   const wowTotalStockDelta = useMemo(() => wowDeltas.reduce((s, d) => s + d.stockDelta, 0), [wowDeltas]);
 
   const kpiValues = useMemo((): Record<KpiMetricKey, { value: string | number; sub: React.ReactNode }> => {
-    const activeSkusList = filteredSkuMaster.filter((s) => s.saleStatus === "active");
+    const activeSkusList = skuMaster.filter((s) => s.saleStatus === "active");
     const avgMarginVal = activeSkusList.reduce((sum, s) => {
       const key = snapKey(s.sku, s.siteId);
       const snap = latestSnapshot.get(key);
@@ -214,10 +192,10 @@ export default function Dashboard() {
       return sum + calc.grossMargin;
     }, 0) / (activeSkusList.length || 1);
 
-    const adSnaps = Array.from(latestSnapshot.values()).filter((r) => r.adRatio > 0 && (shopFilterId === "all" || filteredSkuMaster.some((s) => s.sku === r.sku)));
+    const adSnaps = Array.from(latestSnapshot.values()).filter((r) => r.adRatio > 0);
     const avgAdRatioVal = adSnaps.length ? adSnaps.reduce((sum, r) => sum + r.adRatio, 0) / adSnaps.length : 0;
 
-    const urgent = filteredAlerts.filter((a) => a.severity !== "info").length;
+    const urgent = alerts.filter((a) => a.severity !== "info").length;
 
     return {
       activeSkus: { value: activeProductGroups, sub: `共用 ${activeMskuLinks} 个 MSKU 链接` },
@@ -226,12 +204,12 @@ export default function Dashboard() {
       dailySales: { value: totalDailySales.toFixed(1), sub: wowDeltas.length > 0 ? <span className="text-[11px]">较上期 {deltaArrow(wowTotalSalesDelta)}</span> : "近 7 天日均汇总" },
       avgMargin: { value: `${avgMarginVal.toFixed(1)}%`, sub: "所有活跃 SKU 均价利润率" },
       avgAdRatio: { value: `${avgAdRatioVal.toFixed(1)}%`, sub: "近 7 天均值 · 广告费÷售价" },
-      alertsCount: { value: urgent, sub: `Critical ${filteredAlerts.filter((a) => a.severity === "critical").length} · Warning ${filteredAlerts.filter((a) => a.severity === "warning").length}` },
-      shipmentCount: { value: filteredShipmentSuggestions.length, sub: `${filteredShipmentSuggestions.filter((s) => s.priority === "urgent").length} 个紧急` },
-      promoCount: { value: filteredPromotions.filter((p) => p.status === "upcoming" || p.status === "active").length, sub: `${filteredPromotions.filter((p) => p.status === "active").length} 个进行中` },
+      alertsCount: { value: urgent, sub: `Critical ${alerts.filter((a) => a.severity === "critical").length} · Warning ${alerts.filter((a) => a.severity === "warning").length}` },
+      shipmentCount: { value: shipmentSuggestions.length, sub: `${shipmentSuggestions.filter((s) => s.priority === "urgent").length} 个紧急` },
+      promoCount: { value: promotions.filter((p) => p.status === "upcoming" || p.status === "active").length, sub: `${promotions.filter((p) => p.status === "active").length} 个进行中` },
       todoCount: { value: todos.filter((t) => !t.completed).length, sub: `${todos.filter((t) => !t.completed && t.dueDate && t.dueDate < today).length} 个已逾期` },
     };
-  }, [activeProductGroups, activeMskuLinks, totalStock, totalDailySales, wowDeltas, wowTotalStockDelta, wowTotalSalesDelta, filteredSkuMaster, latestSnapshot, latestInventory, currentSite, filteredAlerts, filteredShipmentSuggestions, filteredPromotions, todos, today, shopFilterId]);
+  }, [activeProductGroups, activeMskuLinks, totalStock, totalDailySales, wowDeltas, wowTotalStockDelta, wowTotalSalesDelta, skuMaster, latestSnapshot, latestInventory, currentSite, alerts, shipmentSuggestions, promotions, todos, today]);
 
   if (loading) return <div className="text-sm text-foreground-400">加载中...</div>;
 
@@ -240,13 +218,13 @@ export default function Dashboard() {
   const avgMarginChange = wowDeltas.length > 0 ? wowDeltas.reduce((s, d) => s + d.profitMarginDelta, 0) / wowDeltas.length : 0;
   const avgRatingChange = wowDeltas.length > 0 ? wowDeltas.reduce((s, d) => s + d.ratingDelta, 0) / wowDeltas.length : 0;
 
-  const criticalCount = filteredAlerts.filter((a) => a.severity === "critical").length;
-  const warnCount = filteredAlerts.filter((a) => a.severity === "warning").length;
-  const infoCount = filteredAlerts.filter((a) => a.severity === "info").length;
+  const criticalCount = alerts.filter((a) => a.severity === "critical").length;
+  const warnCount = alerts.filter((a) => a.severity === "warning").length;
+  const infoCount = alerts.filter((a) => a.severity === "info").length;
   const urgentAlertCount = criticalCount + warnCount;
-  const groupCount = (t: AlertType) => filteredAlerts.filter((a) => a.type === t).length;
+  const groupCount = (t: AlertType) => alerts.filter((a) => a.type === t).length;
 
-  const activePromos = filteredPromotions.filter((p) => p.status === "upcoming" || p.status === "active");
+  const activePromos = promotions.filter((p) => p.status === "upcoming" || p.status === "active");
 
   const buckets: Array<{
     key: string; title: string; icon: string;
@@ -373,48 +351,100 @@ export default function Dashboard() {
     ),
 
     weekCompare: (
-      <Section title="本周 vs 上周环比对比" icon="ri-bar-chart-grouped-line" subtitle="柱状图对比近7天 vs 上期近7天 · 销量 / 广告费比 / 退货率 / 评分">
-        {weekCompare.hasTwoWeeks ? (
-          <div>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={weekCompare.chartData} barCategoryGap="30%" barGap={4}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(var(--background-300))" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "oklch(var(--foreground-500))" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "oklch(var(--foreground-500))" }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 14, border: "1px solid oklch(var(--background-300))", background: "#fff", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }} />
-                  <Bar dataKey="current" fill="oklch(var(--foreground-500))" radius={[8, 8, 0, 0]} name="本周" />
-                  <Bar dataKey="previous" fill="oklch(var(--background-400))" radius={[8, 8, 0, 0]} name="上周" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="mt-5 grid grid-cols-4 gap-3">
-              {weekCompare.items.map((item) => {
-                const delta = item.previous > 0 ? ((item.current - item.previous) / item.previous * 100) : 0;
-                const isUp = delta >= 0;
-                const isGood = item.label === "广告费比" || item.label === "退货率" ? !isUp : isUp;
-                return (
-                  <div key={item.label} className="glass-card p-4 text-center">
-                    <div className="text-[11px] font-medium text-foreground-400">{item.label}</div>
-                    <div className="mt-1 flex items-center justify-center gap-1.5">
-                      <span className="mono-num text-[15px] font-bold">{item.current.toFixed(item.label === "评分" ? 2 : 1)}{item.unit}</span>
-                      <span className={`text-[11px] font-medium ${isGood ? "text-accent-600" : "text-red-500"}`}>
-                        {isUp ? "↑" : "↓"}{Math.abs(delta).toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
+      <Section title="指标走势 · 本期 vs 上期" icon="ri-bar-chart-grouped-line" subtitle="近 14 天分日走势，虚线为上期（前 7 天）均值 · 点击卡片切换指标">
+        {dailySeries.length === 0 ? (
           <div className="glass-card px-4 py-8 text-center">
             <i className="ri-bar-chart-grouped-line mb-3 block text-[32px] text-foreground-300" aria-hidden />
-            <p className="text-[13px] text-foreground-400">暂无上周数据，下周上传后可查看环比</p>
+            <p className="text-[13px] text-foreground-400">暂无快照数据，上传后可查看走势</p>
             <Link to="/import" className="apple-btn mt-5 inline-flex items-center gap-1.5 px-5 py-2.5 text-[13px] font-medium cursor-pointer">
               <i className="ri-upload-cloud-2-line" aria-hidden />
               去导入数据
             </Link>
+          </div>
+        ) : (
+          <div>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              {WEEK_METRICS.map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setWeekMetric(m.key)}
+                  className={["rounded-full border px-3 py-1 text-[12px] font-medium transition-all cursor-pointer",
+                    weekMetric === m.key ? "border-transparent text-white shadow-sm" : "border-background-300/70 bg-background-50 text-foreground-600 hover:bg-background-100"].join(" ")}
+                  style={weekMetric === m.key ? { backgroundColor: m.color } : undefined}
+                >
+                  {m.label}
+                </button>
+              ))}
+              <span className="ml-auto text-[11px] text-foreground-400">每天一个点，哪天掉量 / 飙费比一眼定位</span>
+            </div>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={dailySeries} margin={{ top: 12, right: 16, bottom: 0, left: -8 }}>
+                  <defs>
+                    <linearGradient id={`grad-${weekMetric}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={WEEK_METRICS.find((m) => m.key === weekMetric)!.color} stopOpacity={0.22} />
+                      <stop offset="100%" stopColor={WEEK_METRICS.find((m) => m.key === weekMetric)!.color} stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(var(--background-300))" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "oklch(var(--foreground-500))" }} axisLine={false} tickLine={false} />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: "oklch(var(--foreground-500))" }}
+                    axisLine={false} tickLine={false}
+                    domain={weekMetric === "rating" ? ["dataMin - 0.5", 5] : ["auto", "auto"]}
+                  />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 14, border: "1px solid oklch(var(--background-300))", background: "#fff", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }} />
+                  {weekCompare.previous && (
+                    <ReferenceLine
+                      y={Number(weekCompare.previous[weekMetric].toFixed(2))}
+                      stroke="#94a3b8" strokeDasharray="5 5"
+                      label={{ value: `上期均值 ${weekCompare.previous[weekMetric].toFixed(1)}${WEEK_METRICS.find((m) => m.key === weekMetric)!.unit}`, position: "insideTopRight", fontSize: 11, fill: "#64748b" }}
+                    />
+                  )}
+                  <Area
+                    type="monotone"
+                    dataKey={weekMetric}
+                    name={WEEK_METRICS.find((m) => m.key === weekMetric)!.label}
+                    stroke={WEEK_METRICS.find((m) => m.key === weekMetric)!.color}
+                    strokeWidth={2}
+                    fill={`url(#grad-${weekMetric})`}
+                    dot={{ r: 2.5, strokeWidth: 0, fill: WEEK_METRICS.find((m) => m.key === weekMetric)!.color }}
+                    activeDot={{ r: 4.5 }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-5 grid grid-cols-4 gap-3">
+              {WEEK_METRICS.map((m) => {
+                const cur = weekCompare.current[m.key];
+                const prev = weekCompare.previous?.[m.key];
+                const delta = prev != null && prev > 0 ? ((cur - prev) / prev) * 100 : null;
+                const isUp = (delta ?? 0) >= 0;
+                const isGood = m.goodWhenUp ? isUp : !isUp;
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setWeekMetric(m.key)}
+                    className="glass-card p-4 text-center cursor-pointer transition-shadow hover:shadow-md"
+                    style={weekMetric === m.key ? { boxShadow: `0 0 0 2px ${m.color}66` } : undefined}
+                  >
+                    <div className="text-[11px] font-medium text-foreground-400">{m.label} · 近 7 天均值</div>
+                    <div className="mt-1 flex items-center justify-center gap-1.5">
+                      <span className="mono-num text-[15px] font-bold">{cur.toFixed(m.key === "rating" ? 2 : 1)}{m.unit}</span>
+                      {delta != null ? (
+                        <span className={`text-[11px] font-medium ${isGood ? "text-accent-600" : "text-red-500"}`}>
+                          {isUp ? "↑" : "↓"}{Math.abs(delta).toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-foreground-400">暂无上期</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </Section>
@@ -524,26 +554,25 @@ export default function Dashboard() {
       <Section title="紧急告警" subtitle={`Critical ${criticalCount} · Warning ${warnCount}`} icon="ri-alarm-warning-line"
         className="lg:col-span-2"
         action={
-          alerts.length > 5 ? (
+          urgentAlertCount > 5 ? (
             <button type="button" onClick={() => setAlertsExpanded(!alertsExpanded)}
               className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer whitespace-nowrap">
-              {alertsExpanded ? "收起" : `查看全部（${urgentAlertCount}）`}
+              {alertsExpanded ? "收起" : `展开全部（${urgentAlertCount}）`}
             </button>
           ) : (
             <Link to="/risk" className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer">查看全部 →</Link>
           )
         }
       >
-        {alerts.length === 0 ? (
+        {urgentAlertCount === 0 ? (
           <EmptyState icon="ri-check-double-line" title="今天一切正常" desc="没有需要处理的异常，可以专注新的运营任务" />
         ) : (
-          <>
-            <AlertList
-              alerts={alerts.filter((a) => a.severity !== "info")}
-              skuMaster={skuMaster}
-              limit={alertsExpanded ? undefined : 5}
-            />
-          </>
+          <AlertList
+            alerts={alerts.filter((a) => a.severity !== "info")}
+            skuMaster={skuMaster}
+            // 收起时保证 Critical 全部露出，不被截断成「对不上」的数字
+            limit={alertsExpanded ? undefined : Math.max(5, criticalCount)}
+          />
         )}
       </Section>
     ),
@@ -571,23 +600,28 @@ export default function Dashboard() {
             {shipmentSuggestions
               .filter((s) => (shipmentExpanded ? true : s.priority === "urgent"))
               .slice(0, shipmentExpanded ? shipmentSuggestions.length : 4)
-              .map((s) => (
-                <li key={s.sku} className="glass-card-hover glass-card p-3.5 cursor-default">
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0 flex-1">
-                      <Link to={`/sku/${encodeURIComponent(s.sku)}`} className="text-[13px] font-semibold text-foreground-900 hover:text-foreground-600 cursor-pointer">{s.skuName}</Link>
-                      <div className="mt-0.5 mono-num text-[11px] text-foreground-400">建议 {s.suggestQty} 件 · 最晚 {s.latestShipDate}</div>
+              .map((s) => {
+                const isUrgent = s.daysOfCoverOnHand <= 0;
+                return (
+                  <li key={s.sku} className={`glass-card-hover glass-card p-3.5 cursor-default ${isUrgent ? "border-red-300/80 bg-red-50/40" : ""}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 flex-1">
+                        <Link to={`/sku/${encodeURIComponent(s.sku)}`} className="text-[13px] font-semibold text-foreground-900 hover:text-foreground-600 cursor-pointer">{s.skuName}</Link>
+                        <div className="mt-0.5 mono-num text-[11px] text-foreground-400">
+                          建议 {s.suggestQty} 件 · 最晚 {s.latestShipDate.slice(5)}（{relativeDayLabel(s.latestShipDate, today)}）
+                        </div>
+                      </div>
+                      {(() => {
+                        const days = s.daysOfCoverOnHand;
+                        if (days <= 0) return <Badge tone="danger" className="animate-pulse font-bold">URGENT</Badge>;
+                        if (days <= 3) return <Badge tone="warn">高优</Badge>;
+                        if (days <= 7) return <Badge tone="secondary">关注</Badge>;
+                        return <Badge tone="accent">正常</Badge>;
+                      })()}
                     </div>
-                    {(() => {
-                      const days = s.daysOfCoverOnHand;
-                      if (days <= 0) return <Badge tone="danger">URGENT</Badge>;
-                      if (days <= 3) return <Badge tone="warn">高优</Badge>;
-                      if (days <= 7) return <Badge tone="secondary">关注</Badge>;
-                      return <Badge tone="accent">正常</Badge>;
-                    })()}
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
           </ul>
         )}
       </Section>
@@ -612,6 +646,63 @@ export default function Dashboard() {
         <Link to="/import" className="ml-auto text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer">导入数据 →</Link>
       </div>
     ),
+
+    mskuDemo: (() => {
+      const groups = new Map<string, SkuMaster[]>();
+      for (const s of skuMaster) {
+        const g = s.groupSku || s.sku;
+        const arr = groups.get(g) ?? [];
+        arr.push(s);
+        groups.set(g, arr);
+      }
+      let best: SkuMaster[] = [];
+      groups.forEach((arr) => {
+        if (arr.length > best.length) best = arr;
+      });
+      const parent = best.find((x) => !x.groupSku) ?? best[0];
+      const links = [...best].sort((a, b) => (a.groupSku ? 1 : 0) - (b.groupSku ? 1 : 0));
+      const hasGroup = best.length > 1;
+      return (
+        <Section title="一品多链接" icon="ri-links-line"
+          subtitle={hasGroup
+            ? `示例：${parent?.name ?? parent?.sku} — 1 个产品建了 ${best.length} 条 MSKU 链接`
+            : "同一产品在多个店铺/站点的链接聚合"}
+          action={<Link to="/sku" className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer whitespace-nowrap">在 SKU 列表查看 →</Link>}
+        >
+          {hasGroup ? (
+            <div>
+              <div className="space-y-2">
+                {links.map((l) => {
+                  const key = snapKey(l.sku, l.siteId);
+                  const snap = latestSnapshot.get(key);
+                  const inv = latestInventory.get(key);
+                  const stock = inv ? computeWarehouseTotals(inv).total : (snap?.stockOnHand ?? 0);
+                  return (
+                    <div key={l.sku} className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-[14px] border border-background-200/70 bg-background-50/60 px-3.5 py-2.5">
+                      <Link to={`/sku/${encodeURIComponent(l.sku)}`} className="text-[13px] font-semibold text-foreground-900 hover:text-foreground-600 cursor-pointer">{l.name}</Link>
+                      <span className="mono-num text-[11px] text-foreground-400">{l.msku ?? l.sku}</span>
+                      <Badge tone={l.groupSku ? "neutral" : "primary"}>{l.groupSku ? "子链接" : "父 SKU"}</Badge>
+                      <span className="text-[11px] text-foreground-500">{shopsMap.get(l.store) ?? l.store}</span>
+                      <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-foreground-600">
+                        <span>近 7 天日均 <b className="mono-num text-foreground-800">{(snap?.dailySales7d ?? 0).toFixed(1)}</b> 件</span>
+                        <span>在库 <b className="mono-num text-foreground-800">{stock.toLocaleString()}</b> 件</span>
+                        <span>费比 <b className="mono-num text-foreground-800">{(snap?.adRatio ?? 0).toFixed(1)}%</b></span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-2.5 text-[11px] leading-relaxed text-foreground-400">
+                <i className="ri-lightbulb-line mr-1" aria-hidden />
+                同一父 SKU 下的链接共享成本基准与备货池：在 SKU 页把多条 MSKU 挂到同一父 SKU 后，库存与发货建议按「品」聚合，避免重复备货；告警与诊断仍精确到每条链接。
+              </div>
+            </div>
+          ) : (
+            <EmptyState icon="ri-links-line" title="暂无多链接产品" desc="在 SKU 页为产品添加子 MSKU 链接后，这里会展示一品多链接聚合视图" />
+          )}
+        </Section>
+      );
+    })(),
   };
 
   // ── Main render ──
@@ -621,20 +712,16 @@ export default function Dashboard() {
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <h1 className="font-heading text-[32px] font-bold leading-tight text-foreground-950 tracking-tight">
-              运营一览
-            </h1>
-            <select
-              value={shopFilter}
-              onChange={(e) => setShopFilter(e.target.value)}
-              className="rounded-lg border border-background-300/70 bg-background-50 px-3 py-1.5 text-[13px] font-medium text-foreground-700 focus:border-primary-500 focus:outline-none cursor-pointer"
-            >
-              <option value="all">全部店铺</option>
-              {shops.map((s) => (
-                <option key={s.id} value={s.name}>{s.name}</option>
-              ))}
-            </select>
-          </div>
+          <h1 className="font-heading text-[32px] font-bold leading-tight text-foreground-950 tracking-tight">
+            运营一览
+          </h1>
+          <span className="hidden items-center gap-1 text-[12px] text-foreground-400 md:inline-flex">
+            <i className="ri-store-2-line text-[13px]" aria-hidden />
+            数据范围：{currentShopId === "all" ? "全部店铺" : shopsMap.get(currentShopId) ?? currentShopId}
+            <span className="text-foreground-300">·</span>
+            <span>顶栏可切换店铺</span>
+          </span>
+        </div>
           <button
             type="button"
             onClick={() => setCustomizing(!customizing)}
@@ -646,7 +733,7 @@ export default function Dashboard() {
         </div>
         <p className="text-[13px] text-foreground-400">
           {criticalCount} 个需要立即处理 · {warnCount} 个需要关注{infoCount > 0 ? ` · ${infoCount} 个提醒` : ""} ·{" "}
-          {filteredShipmentSuggestions.length} 个 SKU 建议发货
+          {shipmentSuggestions.length} 个 SKU 建议发货
           {activePromos.length > 0 && ` · ${activePromos.length} 个促销进行中/待开始`}
         </p>
       </div>

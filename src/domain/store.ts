@@ -172,8 +172,12 @@ export function useOpsData() {
 
   const skuMaster = useMemo(() => {
     if (currentShopId === "all") return siteSkuMaster;
-    return siteSkuMaster.filter(s => s.store === currentShopId);
-  }, [siteSkuMaster, currentShopId]);
+    // skuMaster.store 可能存店铺 id（编辑器写入）或店铺名（历史导入/演示数据），两者都匹配
+    const shop = shops.find(s => s.id === currentShopId);
+    const tokens = new Set<string>([currentShopId]);
+    if (shop?.name) tokens.add(shop.name);
+    return siteSkuMaster.filter(s => s.store != null && tokens.has(s.store));
+  }, [siteSkuMaster, currentShopId, shops]);
 
   const snapshots = useMemo(() => {
     if (currentShopId === "all") return siteSnapshots;

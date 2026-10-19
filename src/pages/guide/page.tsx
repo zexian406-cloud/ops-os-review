@@ -122,8 +122,8 @@ export default function GuidePage() {
       {/* 二、决策 */}
       <GuideSection num="二" title="决策（侧边栏第 1 组）" open={open["二"]} onToggle={() => toggle("二")}>
         <Module title="2.1 运营一览（首页 /）">
-          <p>运营总览，包含 KPI 指标卡、风险提醒、待办事项、本周 vs 上周对比、健康度 TOP10。</p>
-          <p className="text-[12px] text-foreground-500">支持自定义卡片布局：点击右上角「自定义布局」可拖拽排序、切换 KPI 指标。</p>
+          <p>运营总览，包含 KPI 指标卡、风险提醒、待办事项、近 14 天分日指标走势（可切换销量 / 广告费比 / 退货率 / 评分，虚线为上期均值）、一品多链接聚合、健康度 TOP10。</p>
+          <p className="text-[12px] text-foreground-500">支持自定义卡片布局：点击右上角「自定义布局」可拖拽排序、切换 KPI 指标。顶栏可按站点内店铺（下拉选择）过滤数据，告警区收起时 Critical 级别始终全部展示。</p>
         </Module>
         <Module title="2.2 异常诊断（/diagnosis）">
           <p>默认打开「问题总览」：一键扫描当前站点全部 SKU，把本次 vs 基线的所有异常（利润 / 广告 / 库存 / 评分 / Listing）汇总成一张清单，顶部统计严重 / 警告 / 提示数量，支持按严重度 / 类型 / SKU 排序，按问题类型和店铺筛选，点「去诊断」直达单品拆解。</p>

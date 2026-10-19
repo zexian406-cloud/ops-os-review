@@ -7,6 +7,7 @@ import { parseOperationExcel, type ImportResult } from "@/domain/excel";
 import { validateImportData, type ValidationResult } from "@/domain/data-health";
 import { buildColumnMap, headersOf, matchColumn, pickCell } from "@/domain/columnMatcher";
 import { applyIncrementalCostUpdate } from "@/domain/cost-merge";
+import { SEED_FLAG } from "@/domain/seed";
 import {
   clearAllData,
   db,
@@ -1209,7 +1210,7 @@ export default function ImportPage() {
         }
       );
       // 2. 设置种子数据标记，防止刷新后自动填充演示数据
-      await db.config.put({ key: "seeded_v9", value: true });
+      await db.config.put({ key: SEED_FLAG, value: true });
       // 3. 关闭 Dexie 连接
       db.close();
       // 3. 尝试删除数据库（可能被其他标签页阻塞，但不影响结果）
