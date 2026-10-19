@@ -10,13 +10,22 @@ const TABS: Array<{ key: "profit" | "sales"; label: string; icon: string; alertT
   { key: "sales", label: "销量下降诊断", icon: "ri-bar-chart-line", alertTypes: ["stockout", "low_stock"] },
 ];
 
-type Basis = "import" | "7d" | "30d";
+type Basis = "import" | "7d" | "14d" | "30d" | "custom";
 
 const BASIS_OPTIONS: Array<{ key: Basis; label: string }> = [
   { key: "import", label: "本次 vs 上次导入" },
   { key: "7d", label: "近7天环比" },
+  { key: "14d", label: "近14天环比" },
   { key: "30d", label: "近30天环比" },
+  { key: "custom", label: "自定义天数" },
 ];
+
+/** 各口径对应的回看天数（import 无固定天数） */
+const daysOfBasis = (basis: Basis, customDays: number): number =>
+  basis === "7d" ? 7 : basis === "14d" ? 14 : basis === "30d" ? 30 : basis === "custom" ? Math.max(1, Math.round(customDays)) : 0;
+
+const basisLabelOf = (basis: Basis, days: number): string =>
+  basis === "import" ? "本次 vs 上次导入" : `近${days}天环比`;
 
 /** 本地日期加减天数（YYYY-MM-DD），避免 toISOString 的 UTC 偏移 */
 const shiftDate = (date: string, days: number): string => {
@@ -32,6 +41,7 @@ export default function DiagnosisPage() {
   const type = (searchParams.get("type") ?? "profit") as "profit" | "sales";
   const skuParam = searchParams.get("sku") ?? "";
   const basisParam = (searchParams.get("basis") ?? "import") as Basis;
+  const daysParam = Number(searchParams.get("days") ?? "90");
 
   const [skuInput, setSkuInput] = useState(skuParam);
   const [activeTab, setActiveTab] = useState<"profit" | "sales">(
@@ -40,12 +50,22 @@ export default function DiagnosisPage() {
   const [basis, setBasisState] = useState<Basis>(
     BASIS_OPTIONS.some((o) => o.key === basisParam) ? basisParam : "import",
   );
+  // 自定义天数（1-730），输入框用字符串过渡避免输入中间态被强转
+  const [customDays, setCustomDaysState] = useState<number>(
+    Number.isFinite(daysParam) && daysParam >= 1 && daysParam <= 730 ? Math.round(daysParam) : 90,
+  );
+  const [customDaysInput, setCustomDaysInput] = useState(String(customDays));
 
-  // 同步 URL 参数到本地状态（仅在 URL 参数变化时触发）
+  // 同步 URL 参数到本地状态（浏览器后退/分享链接打开时保持一致）
   useEffect(() => {
     if (skuParam) setSkuInput(skuParam);
     if (type === "profit" || type === "sales") setActiveTab(type);
-  }, [skuParam, type]);
+    if (BASIS_OPTIONS.some((o) => o.key === basisParam)) setBasisState(basisParam);
+    if (Number.isFinite(daysParam) && daysParam >= 1 && daysParam <= 730) {
+      setCustomDaysState(Math.round(daysParam));
+      setCustomDaysInput(String(Math.round(daysParam)));
+    }
+  }, [skuParam, type, basisParam, daysParam]);
 
   // 当前选中的 SKU 对象
   const currentSku = useMemo(() => {
@@ -56,8 +76,8 @@ export default function DiagnosisPage() {
   // 时间维度下的基线快照：目标日期 = 最新快照日期 - N 天，取 ≤ 目标日期中最近的一条
   const baselineInfo = useMemo<{ snap?: DailySnapshot; label: string }>(() => {
     if (basis === "import") return { label: "上次导入" };
-    const days = basis === "7d" ? 7 : 30;
-    const basisLabel = basis === "7d" ? "近7天环比" : "近30天环比";
+    const days = daysOfBasis(basis, customDays);
+    const basisLabel = basisLabelOf(basis, days);
     const key = snapKey(skuInput.trim(), currentSiteId);
     const latestSnap = latestSnapshot.get(key);
     if (!latestSnap) return { label: `${basisLabel} · 无快照` };
@@ -69,7 +89,7 @@ export default function DiagnosisPage() {
     return prior
       ? { snap: prior, label: `${basisLabel} · 基线 ${prior.date}` }
       : { label: `${basisLabel} · 目标基线 ${target} 前无快照` };
-  }, [basis, skuInput, currentSku, currentSiteId, snapshots, latestSnapshot]);
+  }, [basis, skuInput, currentSku, currentSiteId, snapshots, latestSnapshot, customDays]);
 
   // 执行诊断
   const diagnosis: DiagnosisOutput | null = useMemo(() => {
@@ -96,6 +116,24 @@ export default function DiagnosisPage() {
     setBasisState(key);
     const next = new URLSearchParams(searchParams);
     next.set("basis", key);
+    if (key === "custom") next.set("days", String(customDays));
+    setSearchParams(next);
+  };
+
+  /** 提交自定义天数（1-730），写入 URL 支持分享 */
+  const commitCustomDays = (raw: string) => {
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 1 || n > 730) {
+      setCustomDaysInput(String(customDays)); // 非法输入回滚为当前生效值
+      return;
+    }
+    const v = Math.round(n);
+    setCustomDaysState(v);
+    setCustomDaysInput(String(v));
+    const next = new URLSearchParams(searchParams);
+    next.set("basis", "custom");
+    next.set("days", String(v));
+    setBasisState("custom");
     setSearchParams(next);
   };
 
@@ -121,7 +159,7 @@ export default function DiagnosisPage() {
         <div>
           <h1 className="font-heading text-[26px] font-bold text-foreground-950">异常诊断</h1>
           <p className="text-[13px] text-foreground-500">
-            基于预设规则的根因分析 · {basis === "import" ? "对比本次与上次导入数据" : basis === "7d" ? "近7天环比口径" : "近30天环比口径"}
+            基于预设规则的根因分析 · {basis === "import" ? "对比本次与上次导入数据" : `近${daysOfBasis(basis, customDays)}天环比口径`}
           </p>
         </div>
       </div>
@@ -157,7 +195,7 @@ export default function DiagnosisPage() {
               key={o.key}
               type="button"
               onClick={() => setBasis(o.key)}
-              title={o.key === "import" ? "对比最新导入批次与上一次导入批次" : `以最新快照为终点，与 ${o.key === "7d" ? "7" : "30"} 天前的快照对比（自动取 ≤ 目标日期的最近快照）`}
+              title={o.key === "import" ? "对比最新导入批次与上一次导入批次" : `以最新快照为终点，与 ${o.key === "custom" ? "自定义 N" : String(daysOfBasis(o.key, 0))} 天前的快照对比（自动取 ≤ 目标日期的最近快照）`}
               className={[
                 "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors cursor-pointer whitespace-nowrap",
                 basis === o.key
@@ -168,6 +206,25 @@ export default function DiagnosisPage() {
               {o.label}
             </button>
           ))}
+          {basis === "custom" && (
+            <span className="flex items-center gap-1 pl-1 pr-2 text-[12px] text-foreground-600">
+              回看
+              <input
+                type="number"
+                min={1}
+                max={730}
+                value={customDaysInput}
+                onChange={(e) => {
+                  setCustomDaysInput(e.target.value);
+                  if (/^\d{1,3}$/.test(e.target.value) && Number(e.target.value) >= 1) commitCustomDays(e.target.value);
+                }}
+                onBlur={() => commitCustomDays(customDaysInput)}
+                onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                className="w-14 rounded-md border border-background-300/70 bg-background-50 px-2 py-1 text-center text-[12px] text-foreground-800 focus:border-primary-500 focus:outline-none"
+              />
+              天
+            </span>
+          )}
         </div>
         {currentSku && basis !== "import" && (
           <span className={`text-[11px] ${baselineInfo.snap ? "text-foreground-500" : "text-amber-600"}`}>
