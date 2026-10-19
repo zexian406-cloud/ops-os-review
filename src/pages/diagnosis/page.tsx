@@ -2,12 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
 import { snapKey } from "@/domain/engine";
-import { diagnoseProfitDecline, diagnoseSalesDecline, type DiagnosisOutput } from "@/domain/diagnose";
-import type { AlertType, DailySnapshot } from "@/domain/types";
+import {
+  diagnoseProfitDecline,
+  diagnoseSalesDecline,
+  diagnoseRatingDecline,
+  diagnoseAdRatioRise,
+  type DiagnosisOutput,
+} from "@/domain/diagnose";
+import { ALERT_TYPE_LABELS, ALERT_TYPE_TO_DIAG } from "@/domain/types";
+import type { Alert, AlertType, DailySnapshot, SkuMaster } from "@/domain/types";
 
-const TABS: Array<{ key: "profit" | "sales"; label: string; icon: string; alertTypes: AlertType[] }> = [
-  { key: "profit", label: "利润下降诊断", icon: "ri-money-dollar-circle-line", alertTypes: ["profit"] },
-  { key: "sales", label: "销量下降诊断", icon: "ri-bar-chart-line", alertTypes: ["stockout", "low_stock"] },
+type DiagTab = "profit" | "sales" | "rating" | "adRatio";
+type TabKey = "overview" | DiagTab;
+
+const TABS: Array<{ key: DiagTab; label: string; icon: string }> = [
+  { key: "profit", label: "利润下降诊断", icon: "ri-money-dollar-circle-line" },
+  { key: "sales", label: "销量下降诊断", icon: "ri-bar-chart-line" },
+  { key: "rating", label: "评分下降诊断", icon: "ri-star-half-line" },
+  { key: "adRatio", label: "费比上升诊断", icon: "ri-funds-line" },
 ];
 
 type Basis = "import" | "7d" | "14d" | "30d" | "custom";
@@ -36,16 +48,16 @@ const shiftDate = (date: string, days: number): string => {
 };
 
 export default function DiagnosisPage() {
-  const { currentSiteId, skuMaster, snapshots, latestSnapshot, previousSnapshot, latestInventory, config, loading } = useOpsData();
+  const { currentSiteId, skuMaster, snapshots, latestSnapshot, previousSnapshot, latestInventory, config, alerts, loading } = useOpsData();
   const [searchParams, setSearchParams] = useSearchParams();
-  const type = (searchParams.get("type") ?? "profit") as "profit" | "sales";
+  const type = (searchParams.get("type") ?? "overview") as TabKey;
   const skuParam = searchParams.get("sku") ?? "";
   const basisParam = (searchParams.get("basis") ?? "import") as Basis;
   const daysParam = Number(searchParams.get("days") ?? "90");
 
   const [skuInput, setSkuInput] = useState(skuParam);
-  const [activeTab, setActiveTab] = useState<"profit" | "sales">(
-    TABS.some((t) => t.key === type) ? type : "profit",
+  const [activeTab, setActiveTab] = useState<TabKey>(
+    TABS.some((t) => t.key === type) || type === "overview" ? type : "overview",
   );
   const [basis, setBasisState] = useState<Basis>(
     BASIS_OPTIONS.some((o) => o.key === basisParam) ? basisParam : "import",
@@ -59,7 +71,7 @@ export default function DiagnosisPage() {
   // 同步 URL 参数到本地状态（浏览器后退/分享链接打开时保持一致）
   useEffect(() => {
     if (skuParam) setSkuInput(skuParam);
-    if (type === "profit" || type === "sales") setActiveTab(type);
+    if (TABS.some((t) => t.key === type) || type === "overview") setActiveTab(type);
     if (BASIS_OPTIONS.some((o) => o.key === basisParam)) setBasisState(basisParam);
     if (Number.isFinite(daysParam) && daysParam >= 1 && daysParam <= 730) {
       setCustomDaysState(Math.round(daysParam));
@@ -93,7 +105,7 @@ export default function DiagnosisPage() {
 
   // 执行诊断
   const diagnosis: DiagnosisOutput | null = useMemo(() => {
-    if (!currentSku) return null;
+    if (!currentSku || activeTab === "overview") return null;
     const key = snapKey(currentSku.sku, currentSiteId);
     const params = {
       sku: currentSku,
@@ -102,10 +114,16 @@ export default function DiagnosisPage() {
       latestInv: latestInventory.get(key),
       config,
     };
-    return activeTab === "profit" ? diagnoseProfitDecline(params) : diagnoseSalesDecline(params);
+    switch (activeTab) {
+      case "profit": return diagnoseProfitDecline(params);
+      case "sales": return diagnoseSalesDecline(params);
+      case "rating": return diagnoseRatingDecline(params);
+      case "adRatio": return diagnoseAdRatioRise(params);
+      default: return null;
+    }
   }, [currentSku, latestSnapshot, previousSnapshot, latestInventory, config, activeTab, basis, baselineInfo]);
 
-  const setTab = (key: "profit" | "sales") => {
+  const setTab = (key: TabKey) => {
     setActiveTab(key);
     const next = new URLSearchParams(searchParams);
     next.set("type", key);
@@ -166,6 +184,25 @@ export default function DiagnosisPage() {
 
       {/* Tab 切换 */}
       <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-background-300/70 bg-background-100/70 px-1 py-1">
+        <button
+          type="button"
+          onClick={() => setTab("overview")}
+          title="全量扫描所有 SKU 的本次 vs 上次导入对比，汇总哪些 SKU 有问题"
+          className={[
+            "rounded-full px-4 py-1.5 text-[13px] font-medium transition-colors cursor-pointer whitespace-nowrap",
+            activeTab === "overview"
+              ? "bg-primary-500 text-background-50"
+              : "text-foreground-600 hover:text-foreground-900",
+          ].join(" ")}
+        >
+          <i className="ri-dashboard-3-line mr-1 text-[14px]" aria-hidden />
+          问题总览
+          {alerts.length > 0 && (
+            <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${activeTab === "overview" ? "bg-background-50/25 text-background-50" : "bg-red-100 text-red-600"}`}>
+              {alerts.length}
+            </span>
+          )}
+        </button>
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -184,7 +221,8 @@ export default function DiagnosisPage() {
         ))}
       </div>
 
-      {/* 对比口径（时间维度） */}
+      {/* 对比口径（时间维度，仅单品诊断需要） */}
+      {activeTab !== "overview" && (
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[12px] font-medium text-foreground-600">
           <i className="ri-time-line mr-1 text-[14px] text-primary-600" aria-hidden />对比口径
@@ -232,7 +270,13 @@ export default function DiagnosisPage() {
           </span>
         )}
       </div>
+      )}
 
+      {/* 主体：问题总览 / 单品诊断 */}
+      {activeTab === "overview" ? (
+        <OverviewPanel alerts={alerts} skuMaster={skuMaster} />
+      ) : (
+      <>
       {/* SKU 搜索 */}
       <div className="rounded-[14px] border border-background-200/70 bg-background-100/50 p-4">
         <label className="mb-2 block text-[12px] font-medium text-foreground-700">输入要诊断的 SKU</label>
@@ -306,6 +350,159 @@ export default function DiagnosisPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+      </>
+      )}
+    </div>
+  );
+}
+
+/* ────────── 问题总览（全量扫描汇总） ────────── */
+
+const SEVERITY_ORDER: Record<Alert["severity"], number> = { critical: 0, warning: 1, info: 2 };
+
+const severityBadge: Record<Alert["severity"], { label: string; badgeCls: string }> = {
+  critical: { label: "严重", badgeCls: "bg-red-50 text-red-600 border-red-200" },
+  warning: { label: "警告", badgeCls: "bg-secondary-100/60 text-secondary-700 border-secondary-200" },
+  info: { label: "提示", badgeCls: "bg-background-100 text-foreground-500 border-background-300" },
+};
+
+const selectCls =
+  "rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] text-foreground-700 focus:border-primary-500 focus:outline-none cursor-pointer";
+
+function OverviewPanel({ alerts, skuMaster }: { alerts: Alert[]; skuMaster: SkuMaster[] }) {
+  const [typeFilter, setTypeFilter] = useState<"all" | AlertType>("all");
+  const [storeFilter, setStoreFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"severity" | "type" | "sku">("severity");
+
+  // 告警不带店铺信息，从 SKU 主档关联
+  const storeMap = useMemo(() => new Map(skuMaster.map((s) => [s.sku, s.store])), [skuMaster]);
+  const storeOptions = useMemo(
+    () => [...new Set(skuMaster.map((s) => s.store).filter(Boolean))].sort(),
+    [skuMaster],
+  );
+  const presentTypes = useMemo(() => [...new Set(alerts.map((a) => a.type))], [alerts]);
+
+  const visible = useMemo(() => {
+    let list = alerts.filter((a) => typeFilter === "all" || a.type === typeFilter);
+    if (storeFilter !== "all") list = list.filter((a) => storeMap.get(a.sku) === storeFilter);
+    return [...list].sort((x, y) => {
+      if (sortBy === "sku") return x.sku.localeCompare(y.sku);
+      if (sortBy === "type") return ALERT_TYPE_LABELS[x.type].localeCompare(ALERT_TYPE_LABELS[y.type]);
+      return SEVERITY_ORDER[x.severity] - SEVERITY_ORDER[y.severity];
+    });
+  }, [alerts, typeFilter, storeFilter, sortBy, storeMap]);
+
+  const counts = {
+    critical: alerts.filter((a) => a.severity === "critical").length,
+    warning: alerts.filter((a) => a.severity === "warning").length,
+    info: alerts.filter((a) => a.severity === "info").length,
+  };
+
+  if (alerts.length === 0) {
+    return (
+      <div className="rounded-2xl border border-background-200/70 bg-background-50 p-6 text-center">
+        <i className="ri-shield-check-line text-4xl text-emerald-500" aria-hidden />
+        <p className="mt-3 text-[14px] font-medium text-foreground-700">未发现问题项</p>
+        <p className="mt-1 text-[12px] text-foreground-500">
+          当前站点所有 SKU 的本次 vs 上次导入对比均正常；可切上方诊断 Tab 对单个 SKU 深度诊断
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 统计条 + 筛选排序 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-[11px] font-bold text-red-600">严重 {counts.critical}</span>
+          <span className="rounded-full border border-secondary-200 bg-secondary-50 px-2.5 py-0.5 text-[11px] font-bold text-secondary-700">警告 {counts.warning}</span>
+          {counts.info > 0 && (
+            <span className="rounded-full border border-background-300 bg-background-100 px-2.5 py-0.5 text-[11px] font-bold text-foreground-500">提示 {counts.info}</span>
+          )}
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            className={selectCls}
+            aria-label="排序方式"
+          >
+            <option value="severity">按严重度排序</option>
+            <option value="type">按类型排序</option>
+            <option value="sku">按 SKU 排序</option>
+          </select>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)}
+            className={selectCls}
+            aria-label="筛选问题类型"
+          >
+            <option value="all">全部类型</option>
+            {presentTypes.map((t) => (
+              <option key={t} value={t}>{ALERT_TYPE_LABELS[t]}</option>
+            ))}
+          </select>
+          <select
+            value={storeFilter}
+            onChange={(e) => setStoreFilter(e.target.value)}
+            className={selectCls}
+            aria-label="筛选店铺"
+          >
+            <option value="all">全部店铺</option>
+            {storeOptions.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* 问题清单 */}
+      {visible.length === 0 ? (
+        <div className="rounded-[16px] border border-background-200 bg-background-50 p-4 text-center text-[13px] text-foreground-500">
+          当前筛选条件下没有问题项，试试切换类型或店铺
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {visible.map((a) => {
+            const cfg = severityBadge[a.severity];
+            const diagType = ALERT_TYPE_TO_DIAG[a.type];
+            const store = storeMap.get(a.sku);
+            return (
+              <div
+                key={a.id}
+                className="rounded-[16px] border border-background-200/70 bg-background-50 p-4 transition-colors hover:border-background-300"
+              >
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <span className="text-[13px] font-semibold text-foreground-800">{ALERT_TYPE_LABELS[a.type]}</span>
+                  <span className="mono-num text-[13px] font-bold text-foreground-900">{a.detail}</span>
+                  <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-wider ${cfg.badgeCls}`}>
+                    {cfg.label}
+                  </span>
+                  <span className="text-[12px] text-foreground-500">
+                    <Link to={`/sku/${encodeURIComponent(a.sku)}`} className="font-medium text-foreground-600 hover:text-foreground-900 hover:underline cursor-pointer">
+                      [{a.sku}]
+                    </Link>
+                    {store && ` · ${store}`}
+                  </span>
+                  {diagType && (
+                    <Link
+                      to={`/diagnosis?type=${diagType}&sku=${encodeURIComponent(a.sku)}`}
+                      className="ml-auto inline-flex items-center gap-1 rounded-full border border-primary-300/70 bg-primary-50 px-2.5 py-1 text-[11px] font-medium text-primary-700 hover:bg-primary-100 cursor-pointer whitespace-nowrap transition-colors"
+                    >
+                      <i className="ri-search-eye-line text-[12px]" aria-hidden />
+                      去诊断
+                    </Link>
+                  )}
+                </div>
+                {a.suggestion && (
+                  <div className="mt-1.5 text-[12px] leading-relaxed text-foreground-500">{a.suggestion}</div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

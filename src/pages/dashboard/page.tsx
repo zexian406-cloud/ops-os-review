@@ -538,13 +538,11 @@ export default function Dashboard() {
           <EmptyState icon="ri-check-double-line" title="今天一切正常" desc="没有需要处理的异常，可以专注新的运营任务" />
         ) : (
           <>
-            <AlertList alerts={[...alerts]
-              .filter((a) => a.severity !== "info")
-              .sort((a, b) => (a.severity === "critical" ? -1 : 1) - (b.severity === "critical" ? -1 : 1))
-              .slice(0, alertsExpanded ? urgentAlertCount : 5)} />
-            {urgentAlertCount > 5 && !alertsExpanded && (
-              <div className="mt-2 text-center text-[12px] text-foreground-400">还有 {urgentAlertCount - 5} 条告警未显示</div>
-            )}
+            <AlertList
+              alerts={alerts.filter((a) => a.severity !== "info")}
+              skuMaster={skuMaster}
+              limit={alertsExpanded ? undefined : 5}
+            />
           </>
         )}
       </Section>

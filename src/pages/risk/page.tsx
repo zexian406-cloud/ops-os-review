@@ -18,7 +18,7 @@ const TABS: Array<{ key: string; label: string; icon: string; types: AlertType[]
 ];
 
 export default function RiskCenter() {
-  const { loading, alerts } = useOpsData();
+  const { loading, alerts, skuMaster } = useOpsData();
   const [params, setParams] = useSearchParams();
   const [tab, setTab] = useState<string>(params.get("type") ?? "all");
   const [sev, setSev] = useState<"all" | AlertSeverity>("all");
@@ -126,7 +126,7 @@ export default function RiskCenter() {
             desc="此类别下暂无异常，继续保持"
           />
         ) : (
-          <AlertList alerts={filtered} />
+          <AlertList alerts={filtered} skuMaster={skuMaster} />
         )}
       </Section>
     </div>

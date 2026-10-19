@@ -21,6 +21,13 @@ export const mockLatestSnapshot: Omit<DailySnapshot, "id" | "date">[] = [
   { sku: "sku017", siteId: "site_demo", dailySales7d: 0.7, monthlySales: 31, stockOnHand: 234, stockInTransit: 99, daysOfCoverOnHand: 323.1, daysOfCoverWithTransit: 459.8, adSpend: 4.14, adRatio: 10.36, profit: -4.65, profitMargin: -11.63, totalCost: 44.64, rating: 4.3, returnRate: 0 },
 ];
 
+// 演示案例定向制造：让部分 SKU 在「今天 vs 历史」对比中稳定触发评分/费比异常，
+// 保证演示环境下问题总览与评分/费比诊断始终有可看的内容
+const demoOverrides: Record<string, { dailyFactor?: number; adSpend?: number; adRatio?: number; rating?: number; returnRate?: number }> = {
+  sku011: { dailyFactor: 1, adSpend: 25, adRatio: 32 },   // 广告加投推高费比：32% → 46.52%
+  sku017: { dailyFactor: 1, rating: 5.0, returnRate: 0 }, // 评分重度下滑：5.0 → 4.3
+};
+
 // Generate a small history (last 30 days) so trend charts have data
 export function buildMockHistory(today: string): DailySnapshot[] {
   const base = new Date(today);
@@ -31,7 +38,8 @@ export function buildMockHistory(today: string): DailySnapshot[] {
     const date = day.toISOString().slice(0, 10);
     const dayFactor = 1 + Math.sin(d / 5) * 0.1;
     for (const s of mockLatestSnapshot) {
-      const daily = Math.max(0, s.dailySales7d * (0.85 + Math.random() * 0.3) * dayFactor);
+      const ov = demoOverrides[s.sku] ?? {};
+      const daily = Math.max(0, s.dailySales7d * (ov.dailyFactor ?? (0.85 + Math.random() * 0.3)) * dayFactor);
       const stock = Math.max(0, s.stockOnHand + d * daily * 0.6);
       rows.push({
         date,
@@ -43,13 +51,13 @@ export function buildMockHistory(today: string): DailySnapshot[] {
         stockInTransit: s.stockInTransit,
         daysOfCoverOnHand: daily > 0 ? Number((stock / daily).toFixed(1)) : 999,
         daysOfCoverWithTransit: daily > 0 ? Number(((stock + s.stockInTransit) / daily).toFixed(1)) : 999,
-        adSpend: Number((s.adSpend * (0.9 + Math.random() * 0.2)).toFixed(2)),
-        adRatio: Number((s.adRatio * (0.9 + Math.random() * 0.2)).toFixed(2)),
+        adSpend: Number((ov.adSpend ?? s.adSpend * (0.9 + Math.random() * 0.2)).toFixed(2)),
+        adRatio: Number((ov.adRatio ?? s.adRatio * (0.9 + Math.random() * 0.2)).toFixed(2)),
         profit: Number((s.profit + (Math.random() - 0.5) * 2).toFixed(2)),
         profitMargin: Number((s.profitMargin + (Math.random() - 0.5) * 4).toFixed(2)),
         totalCost: s.totalCost,
-        rating: Math.max(0, Math.min(5, s.rating + (Math.random() - 0.5) * 0.1)),
-        returnRate: s.returnRate,
+        rating: Math.max(0, Math.min(5, ov.rating ?? s.rating + (Math.random() - 0.5) * 0.1)),
+        returnRate: ov.returnRate ?? s.returnRate,
       });
     }
   }

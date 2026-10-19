@@ -20,7 +20,7 @@ export interface DiagnosisStep {
 /** 诊断输出 */
 export interface DiagnosisOutput {
   hasHistory: boolean;       // 是否有历史数据可对比
-  anomalyType: "profit" | "sales";
+  anomalyType: "profit" | "sales" | "rating" | "adRatio";
   sku: string;
   skuName?: string;
   /** 异常概要，如 "利润率异常：18% → 8%（下降 10pp）" */
@@ -403,7 +403,7 @@ export function diagnoseSalesDecline(input: DiagnosisInput): DiagnosisOutput {
 /* ────────── 内部辅助函数 ────────── */
 
 function buildResult(
-  type: "profit" | "sales",
+  type: "profit" | "sales" | "rating" | "adRatio",
   sku: SkuMaster,
   curValue: number,
   prevValue: number,
@@ -436,16 +436,226 @@ function buildResult(
   };
 }
 
-function noHistoryResult(type: "profit" | "sales", sku: SkuMaster): DiagnosisOutput {
+function noHistoryResult(type: "profit" | "sales" | "rating" | "adRatio", sku: SkuMaster): DiagnosisOutput {
+  const labelMap: Record<typeof type, string> = {
+    profit: "利润率诊断",
+    sales: "销量诊断",
+    rating: "评分下降诊断",
+    adRatio: "广告费比诊断",
+  };
   return {
     hasHistory: false,
     anomalyType: type,
     sku: sku.sku,
     skuName: sku.name,
-    summary: type === "profit" ? "利润率诊断" : "销量诊断",
+    summary: labelMap[type],
     reason: "缺少历史数据",
     evidence: [],
     suggestions: [],
     steps: [],
   };
+}
+
+/* ────────── 评分下降诊断 ────────── */
+/**
+ * 评分下降诊断规则（按顺序检查，找到第一个匹配的原因）：
+ * 1. 退货率上涨 > 3pp          → 产品质量问题引发差评
+ * 2. 新增评论且评分降幅 ≥ 0.2  → 新差评拉低评分
+ * 3. 评分降幅 ≥ 0.5            → 评分重度下滑
+ * 4. 评分降幅 0.2 ~ 0.5        → 评分轻度波动
+ * 5. 以上都不命中              → 评分稳定
+ */
+export function diagnoseRatingDecline(input: DiagnosisInput): DiagnosisOutput {
+  const { sku, latestSnap, previousSnap } = input;
+  if (!latestSnap || !previousSnap) return noHistoryResult("rating", sku);
+
+  const curRating = latestSnap.rating ?? 0;
+  const prevRating = previousSnap.rating ?? 0;
+  const ratingDelta = curRating - prevRating;
+
+  const steps: DiagnosisStep[] = [];
+  const evidence: string[] = [];
+  const suggestions: string[] = [];
+  let reason = "";
+
+  // ── 检查 1：退货率上涨 > 3pp → 产品质量问题 ──
+  const curReturn = latestSnap.returnRate ?? 0;
+  const prevReturn = previousSnap.returnRate ?? 0;
+  const returnDelta = ppDelta(curReturn, prevReturn);
+  const step1Hit = returnDelta > 3;
+  steps.push({
+    checkName: "退货率检查",
+    before: fmtPct(prevReturn),
+    after: fmtPct(curReturn),
+    delta: returnDelta,
+    unit: "pp",
+    hit: step1Hit,
+    note: step1Hit ? `+${returnDelta.toFixed(1)}pp，命中` : "涨幅未达 3pp 阈值",
+  });
+  if (step1Hit) {
+    reason = "产品质量问题引发差评";
+    evidence.push(`评分从 ${prevRating.toFixed(1)} 降至 ${curRating.toFixed(1)}（-${Math.abs(ratingDelta).toFixed(1)} 分）`);
+    evidence.push(`退货率从 ${fmtPct(prevReturn)} 升至 ${fmtPct(curReturn)}（+${returnDelta.toFixed(1)}pp）`);
+    suggestions.push("优先排查退货原因（质量/尺寸/描述不符），处理在途库存");
+    suggestions.push("针对差评逐条回复并推动移除违规评价");
+    return buildResult("rating", sku, curRating, prevRating, ratingDelta, reason, evidence, suggestions, steps, "评分", "分");
+  }
+
+  // ── 检查 2：新增评论且评分降幅 ≥ 0.2 → 新差评拉低评分 ──
+  const curReviews = latestSnap.reviewCount ?? 0;
+  const prevReviews = previousSnap.reviewCount ?? 0;
+  const newReviews = curReviews - prevReviews;
+  const step2Hit = newReviews > 0 && ratingDelta <= -0.2;
+  steps.push({
+    checkName: "新增评论检查",
+    before: fmtNum(prevReviews),
+    after: fmtNum(curReviews),
+    delta: newReviews,
+    unit: "条",
+    hit: step2Hit,
+    note: prevReviews === 0 ? "无评论数历史数据" : step2Hit ? `新增 ${newReviews} 条，命中` : "无新增或降幅未达阈值",
+  });
+  if (step2Hit) {
+    reason = "新差评拉低评分";
+    evidence.push(`评分从 ${prevRating.toFixed(1)} 降至 ${curRating.toFixed(1)}（-${Math.abs(ratingDelta).toFixed(1)} 分）`);
+    evidence.push(`评论数从 ${fmtNum(prevReviews)} 增至 ${fmtNum(curReviews)}（新增 ${newReviews} 条）`);
+    suggestions.push("查看最新差评内容，定位产品或物流问题");
+    suggestions.push("增加索评触达，稀释差评权重");
+    return buildResult("rating", sku, curRating, prevRating, ratingDelta, reason, evidence, suggestions, steps, "评分", "分");
+  }
+
+  // ── 检查 3/4：按降幅分级 ──
+  const step3Hit = ratingDelta <= -0.5;
+  steps.push({
+    checkName: "降幅分级",
+    before: prevRating.toFixed(1),
+    after: curRating.toFixed(1),
+    delta: ratingDelta,
+    unit: "分",
+    hit: step3Hit,
+    note: step3Hit ? "降幅 ≥ 0.5 分，重度下滑" : ratingDelta <= -0.2 ? "降幅 0.2~0.5 分，轻度波动" : "降幅未达 0.2 分",
+  });
+  if (ratingDelta <= -0.2) {
+    reason = step3Hit ? "评分重度下滑（多个差评）" : "评分轻度波动";
+    evidence.push(`评分从 ${prevRating.toFixed(1)} 降至 ${curRating.toFixed(1)}（-${Math.abs(ratingDelta).toFixed(1)} 分）`);
+    if (step3Hit) suggestions.push("立即排查近 30 天评价与退货记录，评估是否下架整改");
+    else suggestions.push("持续观察评分走势，跟进近期评价内容");
+    return buildResult("rating", sku, curRating, prevRating, ratingDelta, reason, evidence, suggestions, steps, "评分", "分");
+  }
+
+  // ── 兜底：评分稳定 ──
+  steps.push({
+    checkName: "结论",
+    before: prevRating.toFixed(1),
+    after: curRating.toFixed(1),
+    delta: ratingDelta,
+    unit: "分",
+    hit: false,
+    note: "评分变化在正常范围内",
+  });
+  return buildResult("rating", sku, curRating, prevRating, ratingDelta, "评分稳定", evidence.length ? evidence : [`评分 ${prevRating.toFixed(1)} → ${curRating.toFixed(1)}，无异常波动`], ["保持现有品控与索评节奏"], steps, "评分", "分");
+}
+
+/* ────────── 广告费比上升诊断 ────────── */
+/**
+ * 广告费比上升诊断规则（按顺序检查，找到第一个匹配的原因）：
+ * 1. 销量降幅 > 20% 且费比上涨        → 转化下降，广告占比被动升高
+ * 2. 广告花费涨幅 > 20% 且销量基本持平 → 广告加投推高费比
+ * 3. 当前为促销价                      → 促销期费比正常升高
+ * 4. 费比涨幅 ≤ 5pp                    → 波动正常
+ * 5. 以上都不命中                      → 多因素综合影响
+ */
+export function diagnoseAdRatioRise(input: DiagnosisInput): DiagnosisOutput {
+  const { sku, latestSnap, previousSnap } = input;
+  if (!latestSnap || !previousSnap) return noHistoryResult("adRatio", sku);
+
+  const curAdRatio = latestSnap.adRatio ?? 0;
+  const prevAdRatio = previousSnap.adRatio ?? 0;
+  const adRatioDelta = ppDelta(curAdRatio, prevAdRatio);
+
+  const steps: DiagnosisStep[] = [];
+  const evidence: string[] = [];
+  const suggestions: string[] = [];
+  let reason = "";
+
+  // ── 检查 1：销量降幅 > 20% → 转化下降 ──
+  const curSales = latestSnap.dailySales7d ?? 0;
+  const prevSales = previousSnap.dailySales7d ?? 0;
+  const salesDelta = relDelta(curSales, prevSales);
+  const step1Hit = salesDelta < -20 && adRatioDelta > 5;
+  steps.push({
+    checkName: "销量检查",
+    before: fmtNum(prevSales),
+    after: fmtNum(curSales),
+    delta: salesDelta,
+    unit: "%",
+    hit: step1Hit,
+    note: step1Hit ? `销量降幅 ${Math.abs(salesDelta).toFixed(1)}%，命中` : "销量降幅未达 20% 阈值",
+  });
+  if (step1Hit) {
+    reason = "转化下降，广告占比被动升高";
+    evidence.push(`广告费比从 ${fmtPct(prevAdRatio)} 升至 ${fmtPct(curAdRatio)}（+${adRatioDelta.toFixed(1)}pp）`);
+    evidence.push(`近 7 天日均销量从 ${fmtNum(prevSales)} 降至 ${fmtNum(curSales)}（${salesDelta.toFixed(1)}%）`);
+    suggestions.push("排查 Listing 排名与竞品动作，检查主图/价格/评论变化");
+    suggestions.push("暂停低效广告组，避免无效花费放大");
+    return buildResult("adRatio", sku, curAdRatio, prevAdRatio, adRatioDelta, reason, evidence, suggestions, steps, "广告费比");
+  }
+
+  // ── 检查 2：广告花费涨幅 > 20% 且销量基本持平 ──
+  const curAdSpend = latestSnap.adSpend ?? 0;
+  const prevAdSpend = previousSnap.adSpend ?? 0;
+  const adSpendDelta = relDelta(curAdSpend, prevAdSpend);
+  const step2Hit = adSpendDelta > 20 && salesDelta > -10;
+  steps.push({
+    checkName: "广告花费检查",
+    before: fmtUsd(prevAdSpend),
+    after: fmtUsd(curAdSpend),
+    delta: adSpendDelta,
+    unit: "%",
+    hit: step2Hit,
+    note: step2Hit ? `花费涨幅 ${adSpendDelta.toFixed(1)}%，命中` : "花费涨幅未达 20% 阈值",
+  });
+  if (step2Hit) {
+    reason = "广告加投推高费比";
+    evidence.push(`广告费比从 ${fmtPct(prevAdRatio)} 升至 ${fmtPct(curAdRatio)}（+${adRatioDelta.toFixed(1)}pp）`);
+    evidence.push(`广告花费从 ${fmtUsd(prevAdSpend)} 升至 ${fmtUsd(curAdSpend)}（+${adSpendDelta.toFixed(1)}%），销量基本持平`);
+    suggestions.push("评估加投的广告活动 ROI，收紧低产出广告位竞价");
+    return buildResult("adRatio", sku, curAdRatio, prevAdRatio, adRatioDelta, reason, evidence, suggestions, steps, "广告费比");
+  }
+
+  // ── 检查 3：促销价 → 费比正常升高 ──
+  const onSale = (sku.discountPrice ?? 0) > 0 && (sku.discountPrice ?? 0) < sku.price;
+  steps.push({
+    checkName: "促销检查",
+    before: fmtUsd(sku.price),
+    after: onSale ? fmtUsd(sku.discountPrice ?? 0) : fmtUsd(sku.price),
+    hit: onSale,
+    note: onSale ? "当前为促销价，命中" : "未在促销",
+  });
+  if (onSale && adRatioDelta > 5) {
+    reason = "促销期费比正常升高";
+    evidence.push(`广告费比从 ${fmtPct(prevAdRatio)} 升至 ${fmtPct(curAdRatio)}（+${adRatioDelta.toFixed(1)}pp）`);
+    evidence.push(`当前为促销价（${fmtUsd(sku.price)} → ${fmtUsd(sku.discountPrice ?? 0)}），销售额基数下降推高费比`);
+    suggestions.push("促销属预期行为，结束后费比会自然回落");
+    return buildResult("adRatio", sku, curAdRatio, prevAdRatio, adRatioDelta, reason, evidence, suggestions, steps, "广告费比");
+  }
+
+  // ── 检查 4/5：按涨幅分级 ──
+  const step4Hit = adRatioDelta <= 5;
+  steps.push({
+    checkName: "涨幅分级",
+    before: fmtPct(prevAdRatio),
+    after: fmtPct(curAdRatio),
+    delta: adRatioDelta,
+    unit: "pp",
+    hit: step4Hit,
+    note: step4Hit ? "涨幅 ≤ 5pp，波动正常" : "涨幅 > 5pp，多因素影响",
+  });
+  if (step4Hit) {
+    return buildResult("adRatio", sku, curAdRatio, prevAdRatio, adRatioDelta, "费比波动正常", evidence.length ? evidence : [`广告费比 ${fmtPct(prevAdRatio)} → ${fmtPct(curAdRatio)}，无异常`], ["保持现有投放策略"], steps, "广告费比");
+  }
+  reason = "多因素综合影响";
+  evidence.push(`广告费比从 ${fmtPct(prevAdRatio)} 升至 ${fmtPct(curAdRatio)}（+${adRatioDelta.toFixed(1)}pp）`);
+  suggestions.push("结合销量、花费与促销状态逐项排查");
+  return buildResult("adRatio", sku, curAdRatio, prevAdRatio, adRatioDelta, reason, evidence, suggestions, steps, "广告费比");
 }
