@@ -294,7 +294,7 @@ export default function GuidePage() {
       {/* 五、数据 */}
       <GuideSection num="五" title="数据（侧边栏第 4 组）" open={open["五"]} onToggle={() => toggle("五")}>
         <Module title="5.1 数据导入（/import）">
-          <p>支持综合运营表一次性多 Sheet 导入，自动识别列名。包含 9 个导入 Tab。模板已含 MSKU 级指标列（评分/评论数/广告费比/退货率/退款率）和产品链接/竞品链接列，按 MSKU 行填写即可展示独立指标和自然/广告订单占比。</p>
+          <p>支持综合运营表一次性多 Sheet 导入，自动识别列名。页面顶部「数据来源」三个 Tab：<strong>Excel 上传</strong>（9 个导入 Tab，见 5.1.1～5.1.7）、<strong>MCP 一键拉取</strong> / <strong>REST API 拉取</strong>（ERP 直连，见 5.1.8，一期仅领星）。模板已含 MSKU 级指标列（评分/评论数/广告费比/退货率/退款率）和产品链接/竞品链接列，按 MSKU 行填写即可展示独立指标和自然/广告订单占比。</p>
           <p className="text-[12px] text-foreground-500">主要入口：「综合运营表」下载模板 → 填充数据 → 上传自动识别多 Sheet。新增列均为可选，留空不影响导入。页面底部提供「GitHub 云端同步（手动保存）」备份区，详见第六章。</p>
         </Module>
         <SubTitle>5.1.1 综合运营表（主要入口）</SubTitle>
@@ -363,6 +363,16 @@ export default function GuidePage() {
           <li>FOB / 采购价 / 产品成本 均可识别</li>
           <li>产品链接 / Product URL / Listing 链接 均可识别</li>
           <li>竞品链接 / Competitor URL 均可识别</li>
+        </ul>
+        <SubTitle>5.1.8 ERP 一键拉取（一期：领星）</SubTitle>
+        <p>数据导入页顶部新增「数据来源」三个 Tab：<strong>Excel 上传</strong>（原有流程，永远保留兜底）、<strong>MCP 一键拉取</strong>、<strong>REST API 拉取</strong>。ERP 下拉选择后表单自动联动：领星两条通道都可用；积加/易仓仅 MCP、赛狐/优麦云仅 REST，二期开放。</p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>开通前提</strong>：领星管理员在【业务配置】→【开放接口】开通。MCP：AI 助手 → MCP 页复制「服务器 URL」与「密钥」；REST：开放后台查看 AppID / AppSecret。</li>
+          <li><strong>凭证安全</strong>：密钥只保存在本浏览器 localStorage，不上传任何服务器；「保存凭证到本机」后下次自动回填，换浏览器需重填。</li>
+          <li><strong>CORS 转发</strong>：浏览器直连被拦截时需一个转发通道——部署仓库 <code>worker/cors-proxy.js</code> 到 Cloudflare Workers（免费，只转发不存储密钥），把 <code>*.workers.dev</code> 地址填入「Worker 转发地址」即可；不填则直连，失败时日志会提示。</li>
+          <li><strong>拉取内容与口径</strong>：自动拉取 Listing 主档（MSKU/ASIN/SKU/店铺）、近 7 天销量/销售额、广告花费与 ACoS、FBA 可售库存、海外仓库存、退款数量，归一化后写入快照（数据日期可选，默认今天）。不同接口的行键（MSKU / 本地 SKU）自动合并为同一商品。</li>
+          <li><strong>只补不覆盖</strong>：拉取仅补 SKU 标识与销量库存快照，Excel 已录入的 FOB/售价等成本字段不会被覆盖；两种通道数据口径一致，可与 Excel 混用。</li>
+          <li><strong>限流</strong>：领星 MCP 工具调用限 100 次/分钟，常规拉取（3 个工具）不会触发。</li>
         </ul>
         <Module title="5.2 数据健康（/data-health）">
           <p>检查数据导入质量，展示各字段完整度，识别缺失或异常数据。</p>

@@ -35,6 +35,8 @@ import {
 } from "@/domain/db";
 import { pullFromGitHub, pushToGitHub, verifyGitHubConfig } from "@/domain/cloud";
 import type { CloudConfig, DailySnapshot, InventoryLayer, SkuMaster, Shop, TransitBatch, FactoryBatch, WarehouseMapping, WarehouseRegion, WarehouseRegionOption, Site } from "@/domain/types";
+import type { SourceTab } from "@/domain/erp/types";
+import ErpPullPanel from "./ErpPullPanel";
 
 const APP_VERSION = "4958334";
 
@@ -270,6 +272,9 @@ export default function ImportPage() {
   const [cloudSaving, setCloudSaving] = useState(false);
   const [cloudMsg, setCloudMsg] = useState<{ tone: "ok" | "err"; msg: string } | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("bundle");
+
+  /* 数据来源 Tab：Excel 上传（原有功能）/ MCP 一键拉取 / REST API 拉取（ERP 模块） */
+  const [sourceTab, setSourceTab] = useState<SourceTab>("excel");
 
   const [form, setForm] = useState<CloudConfig>({
     provider: "github",
@@ -1364,6 +1369,39 @@ export default function ImportPage() {
         </p>
       </div>
 
+      {/* ── 数据来源 Tab：Excel 上传 / MCP 一键拉取 / REST API 拉取 ── */}
+      <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-background-300/70 bg-background-100/70 px-1 py-1">
+        {([
+          { key: "excel", label: "Excel 上传", icon: "ri-file-excel-2-line", hint: "模板下载 + 表格上传（原有流程）" },
+          { key: "mcp", label: "MCP 一键拉取", icon: "ri-magic-line", hint: "领星 AI 助手 MCP 直连，无需导表" },
+          { key: "rest", label: "REST API 拉取", icon: "ri-key-2-line", hint: "领星开放平台签名接口" },
+        ] as Array<{ key: SourceTab; label: string; icon: string; hint: string }>).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => { setSourceTab(t.key); setImportMsg(null); }}
+            className={[
+              "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors cursor-pointer whitespace-nowrap",
+              sourceTab === t.key
+                ? "bg-primary-500 text-background-50"
+                : "text-foreground-600 hover:text-foreground-900",
+            ].join(" ")}
+          >
+            <i className={`${t.icon} mr-1 text-[13px]`} aria-hidden />
+            {t.label}
+          </button>
+        ))}
+        <span className="ml-auto mr-1 text-[11px] text-foreground-400">
+          {sourceTab === "excel" ? "Excel 上传是兜底通道，ERP 拉取数据与 Excel 导入口径一致" : "凭证仅保存在本浏览器，不会上传任何服务器"}
+        </span>
+      </div>
+
+      {/* ── ERP 拉取面板（MCP / REST）── */}
+      {sourceTab !== "excel" && <ErpPullPanel method={sourceTab} shops={shops} />}
+
+      {/* ── Excel 上传内容区（原有功能保留兜底）── */}
+      {sourceTab === "excel" && (<>
+
       {/* ── 店铺选择器 ── */}
       <div className="flex items-center gap-3 rounded-[14px] border border-background-200/70 bg-background-100/50 px-4 py-3">
         <div className="flex items-center gap-2">
@@ -1917,6 +1955,7 @@ export default function ImportPage() {
           Token 只保存在本地 IndexedDB，不会通过任何服务器中转
         </div>
       </Section>
+      </>)}
 
       {/* ── 清空数据确认弹窗 ── */}
       {clearModal && (

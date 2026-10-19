@@ -127,6 +127,10 @@ export interface DailySnapshot {
   reviewCount?: number;
   returnRate: number;        // 退货率 %
   refundRate?: number;       // 退款率 % (FBM)
+  // ERP 一键拉取附加字段（可选，非索引，不影响 Dexie schema 版本）
+  revenue?: number;          // 销售额（近7天，站点币种）
+  acos?: number;             // ACoS %（广告花费/广告销售额）
+  refundQty?: number;        // 退款数量（近7天）
   // FBA/FBM 分拆（混卖模式）
   fbaDailySales7d?: number;
   fbmDailySales7d?: number;
