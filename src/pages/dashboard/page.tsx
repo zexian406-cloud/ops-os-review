@@ -60,6 +60,10 @@ export default function Dashboard() {
   const [alertsExpanded, setAlertsExpanded] = useState(false);
   const [shipmentExpanded, setShipmentExpanded] = useState(false);
   const [weekMetric, setWeekMetric] = useState<WeekMetricKey>("sales");
+  // 展开/收起会改变卡片内容高度，递增此版本号让 CanvasLayout 重新测高，
+  // 否则卡片停留在收起时的高度，展开后的表格会被 overflow:hidden 裁切
+  const [contentVersion, setContentVersion] = useState(0);
+  const bumpContent = useCallback(() => setContentVersion((v) => v + 1), []);
 
   const loadTodos = async () => {
     const all = await db.todos.toArray();
@@ -460,7 +464,7 @@ export default function Dashboard() {
         action={
           activePromos.length > 0 ? (
             <div className="flex items-center gap-3">
-              <button type="button" onClick={() => setPromosExpanded(!promosExpanded)}
+              <button type="button" onClick={() => { setPromosExpanded(!promosExpanded); bumpContent(); }}
                 className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer whitespace-nowrap">
                 {promosExpanded ? "收起表格" : `展开（${activePromos.length} 个）`}
               </button>
@@ -555,7 +559,7 @@ export default function Dashboard() {
         className="lg:col-span-2"
         action={
           urgentAlertCount > 5 ? (
-            <button type="button" onClick={() => setAlertsExpanded(!alertsExpanded)}
+            <button type="button" onClick={() => { setAlertsExpanded(!alertsExpanded); bumpContent(); }}
               className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer whitespace-nowrap">
               {alertsExpanded ? "收起" : `展开全部（${urgentAlertCount}）`}
             </button>
@@ -582,7 +586,7 @@ export default function Dashboard() {
         action={
           shipmentSuggestions.length > 4 ? (
             <div className="flex items-center gap-3">
-              <button type="button" onClick={() => setShipmentExpanded(!shipmentExpanded)}
+              <button type="button" onClick={() => { setShipmentExpanded(!shipmentExpanded); bumpContent(); }}
                 className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer whitespace-nowrap">
                 {shipmentExpanded ? "收起" : `展开全部（${shipmentSuggestions.length}）`}
               </button>
@@ -757,6 +761,7 @@ export default function Dashboard() {
         onHideItem={toggleSection}
         onResetItemSize={resetItemSize}
         onResetItemPosition={resetItemPosition}
+        contentVersion={contentVersion}
       >
         {visibleKeys.map((key) => {
           const node = sections[key as DashboardSectionKey];

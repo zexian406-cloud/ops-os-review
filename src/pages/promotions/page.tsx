@@ -59,6 +59,10 @@ export default function PromotionsPage() {
   const [bulkMode, setBulkMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newPromo, setNewPromo] = useState<Partial<Promotion>>({ type: "BD", status: "upcoming" });
+  // 批量模式与行内编辑会改变卡片内容高度，递增版本号让 CanvasLayout 重新测高，
+  // 否则卡片沿用旧高度，展开后的表单/编辑行会被 overflow:hidden 裁切
+  const [contentVersion, setContentVersion] = useState(0);
+  useEffect(() => { setContentVersion((v) => v + 1); }, [bulkMode, editingId]);
 
   useEffect(() => {
     (async () => {
@@ -361,6 +365,7 @@ export default function PromotionsPage() {
         onHideItem={toggleSection}
         onResetItemSize={resetItemSize}
         onResetItemPosition={resetItemPosition}
+        contentVersion={contentVersion}
       >
 
       {/* ── 促销汇总卡片 ── */}
