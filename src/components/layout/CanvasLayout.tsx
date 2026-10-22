@@ -332,6 +332,54 @@ export default function CanvasLayout({
     return () => window.clearTimeout(timeout);
   }, [customizing, canRender, measureAndAdjust, layoutVersion, contentVersion]);
 
+  // ── 内容尺寸变化自动重测 ──
+  // 数据异步加载（待办/告警/表格）或卡片内展开折叠都会改变内容高度，
+  // 仅靠 contentVersion 覆盖不到异步数据到达的场景（实测待办、告警卡片会停在旧高度）。
+  // 这里直接观察每张卡片的内容元素，内容高度一变就排一次重测。
+  // 观察的是内容元素（height:auto）而非卡片本身，卡片高度变化不会反向触发，避免循环。
+  const measureTimerRef = useRef<number | null>(null);
+  // 用 ref 持有最新的测高函数，让 scheduleMeasure 保持稳定引用，
+  // 否则每次渲染都会重建 → 观察器 effect 重跑 → 清理掉待执行的重测，导致测量被丢弃。
+  const measureRef = useRef(measureAndAdjust);
+  measureRef.current = measureAndAdjust;
+  const scheduleMeasure = useCallback(() => {
+    if (measureTimerRef.current != null) return;
+    measureTimerRef.current = window.setTimeout(() => {
+      measureTimerRef.current = null;
+      measureRef.current();
+    }, 80);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!canRender || customizing) return;
+    const wrapper = containerRef.current;
+    if (!wrapper) return;
+
+    const observed = new Set<Element>();
+    const observer = new ResizeObserver(() => scheduleMeasure());
+    const observeAll = () => {
+      wrapper.querySelectorAll<HTMLElement>(".react-grid-item").forEach((gridItem) => {
+        const inner = gridItem.classList.contains("canvas-item-wrapper")
+          ? gridItem
+          : gridItem.querySelector<HTMLElement>(".canvas-item-wrapper");
+        const content = inner?.firstElementChild;
+        if (content && !observed.has(content)) {
+          observer.observe(content);
+          observed.add(content);
+        }
+      });
+    };
+    observeAll();
+
+    return () => {
+      observer.disconnect();
+      if (measureTimerRef.current != null) {
+        window.clearTimeout(measureTimerRef.current);
+        measureTimerRef.current = null;
+      }
+    };
+  }, [canRender, customizing, containerRef, scheduleMeasure, layoutVersion]);
+
   // Context value for CanvasItem children
   const ctxValue = useRef<CanvasItemContextValue>({ customizing, onHideItem, onResetItemSize, onResetItemPosition });
   ctxValue.current = { customizing, onHideItem, onResetItemSize, onResetItemPosition };

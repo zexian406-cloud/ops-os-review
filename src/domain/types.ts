@@ -687,6 +687,22 @@ export interface OpsLog {
   createdAt: string;       // 记录创建时间
 }
 
+// ═══════ 异常诊断备注（留痕：这段时间做了什么导致指标变化） ═══════
+export type DiagnosisType = "profit" | "sales" | "rating" | "adRatio";
+
+export interface DiagnosisNote {
+  id: string;
+  siteId?: string;
+  sku: string;
+  skuName?: string;
+  anomalyType: DiagnosisType;
+  content: string;
+  /** 记录时使用的对比口径，如「2026-10-15 ~ 2026-10-21 vs 2026-10-08 ~ 2026-10-14」 */
+  periodLabel?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 // ==================== 多币种汇率（任意货币对，用户自定义） ====================
 export interface ExchangeRate {
   id: string;              // `${from}_${to}`，如 USD_CNY

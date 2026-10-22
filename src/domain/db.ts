@@ -17,7 +17,7 @@ import type {
   Shop,
   OpsLog,
 } from "./types";
-import type { Site, SiteConfig, CrossSiteSummary, CrossSiteReport, ExchangeRate } from "./types";
+import type { Site, SiteConfig, CrossSiteSummary, CrossSiteReport, ExchangeRate, DiagnosisNote } from "./types";
 import type { ShipmentFormulaConfig, ProfitFormulaConfig } from "./types";
 import {
   DEFAULT_WAREHOUSE_REGIONS,
@@ -47,6 +47,7 @@ export class AmzOpsDB extends Dexie {
   opsLogs!: Table<OpsLog, string>;
   sites!: Table<Site, string>;
   exchangeRates!: Table<ExchangeRate, string>;
+  diagnosisNotes!: Table<DiagnosisNote, string>;
 
   constructor() {
     super("amazon-ops-os");
@@ -220,6 +221,11 @@ export class AmzOpsDB extends Dexie {
       const now = new Date().toISOString();
       const rows = [...rateMap.values()].map((r) => ({ id: `${r.from}_${r.to}`, ...r, updatedAt: now }));
       await tx.table("exchangeRates").bulkPut(rows);
+    });
+
+    // Step 7: 异常诊断备注（留痕）。新增表，不影响既有数据。
+    this.version(16).stores({
+      diagnosisNotes: "id, sku, siteId, anomalyType, createdAt",
     });
   }
 }
@@ -898,9 +904,10 @@ export async function exportSnapshot(): Promise<{
   opsLogs: OpsLog[];
   warehouseMappings: WarehouseMapping[];
   exchangeRates: ExchangeRate[];
+  diagnosisNotes: DiagnosisNote[];
   exportedAt: string;
 }> {
-  const [skuMaster, dailySnapshot, inventoryLayer, campaigns, promotions, manualPromotions, alerts, config, shops, opsLogs, warehouseMappings, exchangeRates] =
+  const [skuMaster, dailySnapshot, inventoryLayer, campaigns, promotions, manualPromotions, alerts, config, shops, opsLogs, warehouseMappings, exchangeRates, diagnosisNotes] =
     await Promise.all([
       db.skuMaster.toArray(),
       db.dailySnapshot.toArray(),
@@ -914,6 +921,7 @@ export async function exportSnapshot(): Promise<{
       db.opsLogs.toArray(),
       db.warehouseMappings.toArray(),
       db.exchangeRates.toArray(),
+      db.diagnosisNotes.toArray(),
     ]);
   return {
     skuMaster,
@@ -928,6 +936,7 @@ export async function exportSnapshot(): Promise<{
     opsLogs,
     warehouseMappings,
     exchangeRates,
+    diagnosisNotes,
     exportedAt: new Date().toISOString(),
   };
 }
@@ -946,6 +955,7 @@ export async function importSnapshot(payload: {
   opsLogs?: OpsLog[];
   warehouseMappings?: WarehouseMapping[];
   exchangeRates?: ExchangeRate[];
+  diagnosisNotes?: DiagnosisNote[];
 }): Promise<void> {
   await db.transaction(
     "rw",
@@ -966,6 +976,7 @@ export async function importSnapshot(payload: {
       db.opsLogs,
       db.warehouseMappings,
       db.exchangeRates,
+      db.diagnosisNotes,
     ],
     async () => {
       if (payload.skuMaster) {
@@ -1018,6 +1029,10 @@ export async function importSnapshot(payload: {
         await db.exchangeRates.clear();
         await db.exchangeRates.bulkPut(payload.exchangeRates);
       }
+      if (payload.diagnosisNotes) {
+        await db.diagnosisNotes.clear();
+        await db.diagnosisNotes.bulkPut(payload.diagnosisNotes);
+      }
     }
   );
   window.dispatchEvent(new CustomEvent(EXCHANGE_RATES_EVENT));
@@ -1059,6 +1074,57 @@ export async function addOpsLog(
 
 export async function deleteOpsLog(id: string): Promise<void> {
   await db.opsLogs.delete(id);
+}
+
+// ==================== 异常诊断备注 CRUD ====================
+
+/** 诊断备注变更事件：备注面板保存/删除后广播，概览页与列表同步刷新 */
+export const DIAGNOSIS_NOTES_EVENT = "ops-diagnosis-notes-change";
+
+export async function getDiagnosisNotes(filter?: {
+  sku?: string;
+  siteId?: string;
+  anomalyType?: DiagnosisNote["anomalyType"];
+}): Promise<DiagnosisNote[]> {
+  let data = await db.diagnosisNotes.toArray();
+  if (filter?.sku) data = data.filter((n) => n.sku === filter.sku);
+  if (filter?.siteId) data = data.filter((n) => (n.siteId ?? "site_us") === filter.siteId);
+  if (filter?.anomalyType) data = data.filter((n) => n.anomalyType === filter.anomalyType);
+  return data.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+}
+
+export async function addDiagnosisNote(input: {
+  sku: string;
+  skuName?: string;
+  anomalyType: DiagnosisNote["anomalyType"];
+  content: string;
+  periodLabel?: string;
+  siteId?: string;
+}): Promise<string> {
+  const sid = input.siteId ?? (await getCurrentSiteId());
+  const id = `dnote_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  await db.diagnosisNotes.put({
+    id,
+    siteId: sid,
+    sku: input.sku,
+    skuName: input.skuName,
+    anomalyType: input.anomalyType,
+    content: input.content.trim(),
+    periodLabel: input.periodLabel,
+    createdAt: new Date().toISOString(),
+  });
+  window.dispatchEvent(new CustomEvent(DIAGNOSIS_NOTES_EVENT));
+  return id;
+}
+
+export async function updateDiagnosisNote(id: string, content: string): Promise<void> {
+  await db.diagnosisNotes.update(id, { content: content.trim(), updatedAt: new Date().toISOString() });
+  window.dispatchEvent(new CustomEvent(DIAGNOSIS_NOTES_EVENT));
+}
+
+export async function deleteDiagnosisNote(id: string): Promise<void> {
+  await db.diagnosisNotes.delete(id);
+  window.dispatchEvent(new CustomEvent(DIAGNOSIS_NOTES_EVENT));
 }
 
 // ==================== Warehouse Mapping helpers ====================
