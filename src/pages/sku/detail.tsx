@@ -2452,7 +2452,7 @@ export default function SkuDetail() {
                     alert.severity === "critical" ? "bg-red-50 text-red-600" : "bg-secondary-100 text-secondary-700"
                   }`}>{alert.severity === "critical" ? "紧急" : "关注"}</span>
                   <span className="text-[13px] font-semibold text-foreground-900">{alert.title}</span>
-                  <Link to={`/diagnosis?type=${DIAGNOSIS_GROUP[alert.type] ?? alert.type}&sku=${encodeURIComponent(alert.sku)}`} className="ml-auto text-[11px] font-medium text-primary-600 hover:underline cursor-pointer">
+                  <Link to={`/operations?tab=diag&type=${DIAGNOSIS_GROUP[alert.type] ?? alert.type}&sku=${encodeURIComponent(alert.sku)}`} className="ml-auto text-[11px] font-medium text-primary-600 hover:underline cursor-pointer">
                     去诊断页 →
                   </Link>
                 </div>

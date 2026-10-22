@@ -83,7 +83,7 @@ export default function GuidePage() {
           打开首页查看运营总览，了解整体状态、风险提醒、待办事项。
         </Step>
         <Step n="3" title="处理异常">
-          库存问题→发货决策；异常分析→异常诊断；数据质量→数据健康；风险查看→风险中心。
+          库存问题→发货决策；异常分析与归因→异常中心；数据质量→数据健康；风险查看→风险中心。
         </Step>
         <SubTitle>本说明书怎么读</SubTitle>
         <p>章节顺序与侧边栏分组完全一致，逐组从上到下讲解；公式自定义、导入模板等深度内容直接内嵌在对应模块小节里，不用来回翻：</p>
@@ -97,8 +97,8 @@ export default function GuidePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-background-200">
-              <tr><td className="px-3 py-2 font-semibold">决策</td><td className="px-3 py-2">运营一览 · 异常诊断 · 历史对比 · 发货决策 · 风险中心</td><td className="px-3 py-2 text-primary-600 font-semibold">第二章</td></tr>
-              <tr><td className="px-3 py-2 font-semibold">运营</td><td className="px-3 py-2">运营中心 · SKU 详情 · 旺季模拟 · 促销运营中心 · 新品测算</td><td className="px-3 py-2 text-primary-600 font-semibold">第三章</td></tr>
+              <tr><td className="px-3 py-2 font-semibold">决策</td><td className="px-3 py-2">运营一览 · 历史对比 · 发货决策 · 风险中心</td><td className="px-3 py-2 text-primary-600 font-semibold">第二章</td></tr>
+              <tr><td className="px-3 py-2 font-semibold">运营</td><td className="px-3 py-2">异常中心 · SKU 详情 · 旺季模拟 · 促销运营中心 · 新品测算</td><td className="px-3 py-2 text-primary-600 font-semibold">第三章</td></tr>
               <tr><td className="px-3 py-2 font-semibold">工具</td><td className="px-3 py-2">我的待办 · 操作记录</td><td className="px-3 py-2 text-primary-600 font-semibold">第四章</td></tr>
               <tr><td className="px-3 py-2 font-semibold">数据</td><td className="px-3 py-2">数据导入 · 数据健康 · 店铺管理 · 参数中心</td><td className="px-3 py-2 text-primary-600 font-semibold">第五章</td></tr>
               <tr><td className="px-3 py-2 font-semibold">帮助</td><td className="px-3 py-2">使用指南（即本页）</td><td className="px-3 py-2">—</td></tr>
@@ -127,21 +127,13 @@ export default function GuidePage() {
           <p>指标走势卡片的「查看范围」可独立下钻：跟随顶栏筛选 / 全部店铺 / 指定店铺 / 指定 SKU·MSKU（支持输入 MSKU 链接号），与顶栏店铺筛选互不影响，方便单独看某个店铺或某条链接的走势。</p>
           <p className="text-[12px] text-foreground-500">走势口径：本期 = 最近 7 个有快照的日均值，上期 = 再往前 7 个自然日均值（图中虚线）。销量取各 SKU 当日「近 7 天日均」之和，费比 / 退货率 / 评分为当日有值 SKU 的均值；库存类指标不参与走势。卡片底部常驻口径说明，不用回翻说明书。</p>
         </Module>
-        <Module title="2.2 异常诊断（/diagnosis）">
-          <p>默认打开「问题总览」：一键扫描当前站点全部 SKU，把本次 vs 基线的所有异常（利润 / 广告 / 库存 / 评分 / Listing）汇总成一张清单，顶部统计严重 / 警告 / 提示数量，支持按严重度 / 类型 / SKU 排序，按问题类型和店铺筛选，点「去诊断」直达单品拆解。</p>
-          <p>单品诊断四个 Tab：利润下降 / 销量下降 / 评分下降 / 费比上升。每个 Tab 顶部先给出「本类问题清单」——问题总览里的告警按类型分流到这里（利润异常 → 利润下降；断货 / 库存紧张 / 库存积压 → 销量下降；评分下降 / 退货异常 / 差评激增 → 评分下降；广告异常 → 费比上升），点清单里的「去诊断」直接切换诊断对象，无需回总览重找。输入或选择 SKU / MSKU 后展示对比结论、主要病因、诊断过程（决策树逐项命中）与建议动作。</p>
-          <p className="text-[12px] text-foreground-500">评分下降诊断顺序：退货率 +3pp（质量问题）→ 新增评论且降幅 ≥0.2（新差评拉低）→ 按降幅分级（≥0.5 重度 / 0.2~0.5 轻度）。费比上升诊断顺序：销量降 20% 且费比 +5pp（转化下降被动推高）→ 广告花费涨 20% 且销量持平（加投）→ 促销期正常升高 → 涨幅 ≤5pp 波动正常。</p>
-          <p className="text-[12px] text-foreground-500">对比口径可选：「本次 vs 上次导入」（默认）、「近7天 / 近14天 / 近30天 vs 前等长区间」、「自定义天数」（1-730 天）、「指定日期区间」（例如 2026-10-19 ~ 2026-10-25，自动与紧邻其前的等长区间对比）。口径会写入链接，可直接分享。</p>
-          <p>所有口径都按「区间 vs 区间」对比，而不是单日快照 vs 单日快照：销量 / 费比 / 退货率 / 评分 / 利润取区间内均值，库存 / 在途 / 覆盖天数取区间最后一天。这样能过滤掉某一天漏导入或单日促销造成的假异常。口径旁会显示本期与上期的实际日期，某一侧区间没有快照时会用琥珀色提示，避免误报。</p>
-          <p>诊断结果下方有「诊断备注 · 留痕」：记录这段时间做了什么（调价 / 加广告 / 改主图 / 断货 / 秒杀等），保存时自动附带当前对比口径，下次回看异常时可直接对上原因。备注会以「备注 N」徽标显示在问题清单对应 SKU 上，并纳入全量导出备份。</p>
-        </Module>
-        <Module title="2.3 历史对比（/history）">
+        <Module title="2.2 历史对比（/history）">
           <p>本周（最新导入）对比上周（上次导入），展示销量、库存、利润率、TACOS、评分的环比变化。</p>
         </Module>
-        <Module title="2.4 发货决策（/shipment）">
+        <Module title="2.3 发货决策（/shipment）">
           <p>自动补货建议，按优先级排序（紧急/高/中/低），展示当前库存、在途、建议发货量、最晚发货日。点击右上角「补货公式」可自定义计算方式，详见下方。</p>
         </Module>
-        <SubTitle>2.4.1 补货公式自定义</SubTitle>
+        <SubTitle>2.3.1 补货公式自定义</SubTitle>
         <p>系统默认按以下公式计算补货建议，所有参数均可修改：</p>
         <CopyBlock lines={[
           "建议发货量 = (目标天数 + Lead Time + 安全库存 − 含在途覆盖天数) × 日均销量 × 活动倍率",
@@ -166,10 +158,10 @@ export default function GuidePage() {
           </table>
         </div>
         <p className="text-[12px] text-foreground-500">说明：SKU 级单独设置过的 Lead Time / 安全库存优先于这里的全局系数；保存后立即重新计算发货建议列表，弹窗内附实时公式预览。</p>
-        <SubTitle>2.4.2 互动：发货建议计算器</SubTitle>
+        <SubTitle>2.3.2 互动：发货建议计算器</SubTitle>
         <p className="text-[12px] text-foreground-500">随意改动参数，体验卡片各数字如何联动（与发货决策页完全同一套算法）：</p>
         <ShipmentCalc />
-        <SubTitle>2.4.3 卡片数字依据</SubTitle>
+        <SubTitle>2.3.3 卡片数字依据</SubTitle>
         <p className="text-[12px] text-foreground-500">发货建议卡片上每个数字的来源（在库可售 = FBA 各仓在库合计）：</p>
         <div className="overflow-x-auto">
           <table className="w-full text-[13px] border border-background-200 rounded-lg">
@@ -211,7 +203,7 @@ export default function GuidePage() {
             </tbody>
           </table>
         </div>
-        <Module title="2.5 风险中心（/risk）">
+        <Module title="2.4 风险中心（/risk）">
           <p>查看所有风险 SKU，按类型 / 店铺筛选，按严重度 / 类型 / SKU 排序；每条告警可一键「去诊断」定位根因。</p>
         </Module>
         <ExampleBox>
@@ -219,8 +211,8 @@ export default function GuidePage() {
           <p>① 运营一览看到「库存风险 13 条」→ 点卡片进风险中心，按严重程度排序；</p>
           <p>② 对断货的演示产品007（总库存 0、日销 5.2）点「去诊断」→ 跳转发货决策，列表按紧急优先，它排第一；</p>
           <p>③ 向工厂下单后，把「已下单 500 件」记录到操作记录；</p>
-          <p>④ 回到诊断页处理利润异常 sku001（单件利润 -5.16），记录调价动作。</p>
-          <p><strong>发货建议数字算例</strong>（可在 2.4.2 计算器直接复现）：日均 10 件、在库 80、在途 40 → 综合覆盖 (80+40)÷10 = 12 天，低于阈值 25 天（LT 15 + 安全库存 10）触发补货；建议量 = (45+15+10−12)×10 = <strong>580 件</strong>（向上取整）；最晚发货日 = 今天 + (25−12) = 13 天后；13 天落在 11~30 区间 → <strong>常规</strong>优先级。</p>
+          <p>④ 回到异常中心，在利润异常清单点 sku001（单件利润 -5.16）的「诊断」看归因结论，并把调价动作记入诊断备注。</p>
+          <p><strong>发货建议数字算例</strong>（可在 2.3.2 计算器直接复现）：日均 10 件、在库 80、在途 40 → 综合覆盖 (80+40)÷10 = 12 天，低于阈值 25 天（LT 15 + 安全库存 10）触发补货；建议量 = (45+15+10−12)×10 = <strong>580 件</strong>（向上取整）；最晚发货日 = 今天 + (25−12) = 13 天后；13 天落在 11~30 区间 → <strong>常规</strong>优先级。</p>
         </ExampleBox>
         <NoteBox items={[
           <>日均为 0 或已停售的 SKU 不出建议，这不是遗漏</>,
@@ -233,8 +225,18 @@ export default function GuidePage() {
 
       {/* 三、运营 */}
       <GuideSection num="三" title="运营（侧边栏第 2 组）" open={open["三"]} onToggle={() => toggle("三")}>
-        <Module title="3.1 运营中心（/operations）">
-          <p>6 张运营视图，包含经营概览、本周 vs 上周对比、周环比变化趋势、销售利润分析。</p>
+        <Module title="3.1 异常中心（/operations）">
+          <p>按类型列出需要处理的 SKU 清单：利润异常 / 广告异常 / 评分下降 / Review 增长 / 退货率异常 / Listing 待优化 / 新品成长，只显示需要你处理的 SKU，不是 Excel 平铺。清单每行点「诊断」进入该 SKU 的归因分析。原独立的「异常诊断」页已并入此处（旧链接 /diagnosis 自动跳转）。</p>
+          <SubTitle>归因分析（二级下钻）</SubTitle>
+          <p>归因结论大字置顶，一眼看到「为什么」——例如利润下降时直接展示「退货增加侵蚀利润」，下方附本期 vs 上期的关键数字证据与建议动作；诊断过程（决策树每一步的前后对比、命中 / 未命中标记）默认折叠，需要核对依据时再点开。</p>
+          <p>诊断类型四个：利润下降 / 销量下降 / 评分下降 / 费比上升，可在页内随时切换。清单行的「诊断」按钮按问题类型自动映射：利润异常 → 利润下降；广告异常 → 费比上升；评分 / Review / 退货率异常 → 评分下降；断货、库存类告警（运营一览 / 风险中心的「去诊断」）→ 销量下降。</p>
+          <p className="text-[12px] text-foreground-500">评分下降诊断顺序：退货率 +3pp（质量问题）→ 新增评论且降幅 ≥0.2（新差评拉低）→ 按降幅分级（≥0.5 重度 / 0.2~0.5 轻度）。费比上升诊断顺序：销量降 20% 且费比 +5pp（转化下降被动推高）→ 广告花费涨 20% 且销量持平（加投）→ 促销期正常升高 → 涨幅 ≤5pp 波动正常。</p>
+          <SubTitle>对比口径与分享</SubTitle>
+          <p>对比口径可选：「本次 vs 上次导入」（默认）、「近7天 / 近14天 / 近30天 vs 前等长区间」、「自定义天数」（1-730 天）、「指定日期区间」（例如 2026-10-19 ~ 2026-10-25，自动与紧邻其前的等长区间对比）。</p>
+          <p>所有口径都按「区间 vs 区间」对比，而不是单日快照 vs 单日快照：销量 / 费比 / 退货率 / 评分 / 利润取区间内均值，库存 / 在途 / 覆盖天数取区间最后一天。这样能过滤掉某一天漏导入或单日促销造成的假异常。口径旁会显示本期与上期的实际日期，某一侧区间没有快照时会用琥珀色提示，避免误报。</p>
+          <p>诊断页的全部状态（SKU、类型、口径、日期区间）都写在链接里（如 /operations?tab=diag&sku=sku012&type=adRatio），点右上角「复制诊断链接」可直接分享给同事，打开就是同一份归因结论。</p>
+          <SubTitle>诊断备注 · 留痕</SubTitle>
+          <p>诊断结果下方可记录这段时间做了什么（调价 / 加广告 / 改主图 / 断货 / 秒杀等），保存时自动附带当前对比口径，下次回看异常时可直接对上原因，备注纳入全量导出备份。</p>
         </Module>
         <Module title="3.2 SKU 详情（/sku）">
           <p>SPU 产品汇总层 + MSKU 明细层。展开产品查看各 MSKU 独立数据，点击 MSKU 进入详情页。</p>
@@ -289,7 +291,7 @@ export default function GuidePage() {
         </Module>
         <ExampleBox>
           <p><strong>我的待办</strong>：诊断完 sku001 后建一条待办「观察提价后转化率」，关联 sku001、截止周五 → 首页「我的待办」卡片实时显示剩余数量，周五逐条勾销。</p>
-          <p><strong>操作记录</strong>：周五回顾——按日期分组查看本周 8 条操作（调价、开广告、补货），对照 2.3 历史对比的环比变化，判断哪些动作真正带来了改善。</p>
+          <p><strong>操作记录</strong>：周五回顾——按日期分组查看本周 8 条操作（调价、开广告、补货），对照 2.2 历史对比的环比变化，判断哪些动作真正带来了改善。</p>
         </ExampleBox>
         <NoteBox items={[
           <>待办是本地轻量记录，不会弹系统提醒，关键节点需要自己回看</>,

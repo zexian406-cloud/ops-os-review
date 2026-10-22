@@ -13,7 +13,6 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "决策",
     items: [
       { to: "/", label: "运营一览", sub: "今日第一眼", icon: "ri-dashboard-3-line" },
-      { to: "/diagnosis", label: "异常诊断", sub: "原因拆解", icon: "ri-search-eye-line" },
       { to: "/history", label: "历史对比", sub: "本周 vs 上周", icon: "ri-exchange-line" },
       { to: "/shipment", label: "发货决策", sub: "自动补货建议", icon: "ri-truck-line" },
       { to: "/risk", label: "风险中心", sub: "全站异常", icon: "ri-error-warning-line" },
@@ -22,7 +21,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "运营",
     items: [
-      { to: "/operations", label: "运营中心", sub: "6 张运营视图", icon: "ri-line-chart-line" },
+      { to: "/operations", label: "异常中心", sub: "异常清单 · 归因下钻", icon: "ri-search-eye-line" },
       { to: "/sku", label: "SKU 详情", sub: "单品全景", icon: "ri-price-tag-3-line" },
       { to: "/season", label: "旺季模拟", sub: "Prime / BF / Xmas", icon: "ri-calendar-event-line" },
       { to: "/promo-center", label: "促销运营中心", sub: "活动·成本·时间线", icon: "ri-flashlight-line" },

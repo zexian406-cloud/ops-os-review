@@ -145,7 +145,7 @@ export default function AlertList({
                 </Link>
                 {diagType && (
                   <Link
-                    to={`/diagnosis?type=${diagType}&sku=${encodeURIComponent(a.sku)}`}
+                    to={`/operations?tab=diag&type=${diagType}&sku=${encodeURIComponent(a.sku)}`}
                     className="ml-auto inline-flex items-center gap-1 rounded-full border border-primary-300/70 bg-primary-50 px-2.5 py-1 text-[11px] font-medium text-primary-700 hover:bg-primary-100 cursor-pointer whitespace-nowrap transition-colors"
                   >
                     <i className="ri-search-eye-line text-[12px]" aria-hidden />

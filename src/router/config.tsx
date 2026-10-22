@@ -1,5 +1,5 @@
 import type { RouteObject } from "react-router-dom";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { lazy, type ComponentType } from "react";
 import NotFound from "@/pages/NotFound";
 import AppShell from "@/components/layout/AppShell";
@@ -33,9 +33,19 @@ const CalculatorPage = lazyRetry(() => import("@/pages/calculator/page"));
 const TodoPage = lazyRetry(() => import("@/pages/todo/page"));
 const ShopManagementPage = lazyRetry(() => import("@/pages/shop-management/page"));
 const OpsLogsPage = lazyRetry(() => import("@/pages/ops-logs/page"));
-const DiagnosisPage = lazyRetry(() => import("@/pages/diagnosis/page"));
 const DataHealthPage = lazyRetry(() => import("@/pages/data-health/page"));
 const HistoryPage = lazyRetry(() => import("@/pages/history/page"));
+
+/** 旧 /diagnosis 入口重定向：诊断参数原样带到异常中心的归因下钻视图 */
+function DiagnosisRedirect() {
+  const [sp] = useSearchParams();
+  const next = new URLSearchParams({ tab: "diag" });
+  for (const k of ["sku", "type", "basis", "days", "from", "to"]) {
+    const v = sp.get(k);
+    if (v) next.set(k, v);
+  }
+  return <Navigate to={`/operations?${next.toString()}`} replace />;
+}
 
 const routes: RouteObject[] = [
   {
@@ -61,7 +71,7 @@ const routes: RouteObject[] = [
       { path: "calculator", element: <CalculatorPage /> },
       { path: "todo", element: <TodoPage /> },
       { path: "ops-logs", element: <OpsLogsPage /> },
-      { path: "diagnosis", element: <DiagnosisPage /> },
+      { path: "diagnosis", element: <DiagnosisRedirect /> },
       { path: "data-health", element: <DataHealthPage /> },
       { path: "history", element: <HistoryPage /> },
       { path: "shop-management", element: <ShopManagementPage /> },

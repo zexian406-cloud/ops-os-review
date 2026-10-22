@@ -283,7 +283,7 @@ export type AlertType =
 
 export type AlertSeverity = "critical" | "warning" | "info";
 
-/** 告警类型中文名（运营中心/异常诊断共用） */
+/** 告警类型中文名（异常中心/归因诊断共用） */
 export const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   stockout: "断货风险",
   low_stock: "库存紧张",
@@ -298,7 +298,7 @@ export const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   promo_end: "促销即将到期",
 };
 
-/** 告警类型 → 异常诊断 Tab 映射（无映射的类型不显示诊断入口） */
+/** 告警类型 → 归因诊断类型映射（无映射的类型不显示诊断入口） */
 export const ALERT_TYPE_TO_DIAG: Partial<Record<AlertType, "profit" | "sales" | "rating" | "adRatio">> = {
   profit: "profit",
   ad: "adRatio",
