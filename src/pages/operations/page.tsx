@@ -3,18 +3,22 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
 import { computeAll } from "@/domain/calculator";
 import { snapKey } from "@/domain/engine";
-import { getAllShops } from "@/domain/db";
+import { getAllShops, db } from "@/domain/db";
+import { resolveComparison } from "@/domain/diagnosis-period";
+import { diagnoseProfitDecline, diagnoseSalesDecline, diagnoseRatingDecline, diagnoseAdRatioRise } from "@/domain/diagnose";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import AlertList from "@/pages/dashboard/AlertList";
+import type { AlertDiagnostic } from "@/pages/dashboard/AlertList";
+import { ALERT_TYPE_TO_DIAG } from "@/domain/types";
 import type { DailySnapshot, DiagnosisType, SkuMaster, InventoryLayer, Shop, AlertSeverity } from "@/domain/types";
 import DiagnosisView from "./DiagnosisView";
 
 type TabKey = "all" | "profit" | "ad" | "rating" | "review" | "return" | "listing" | "new" | "diag";
 
 const TABS: Array<{ key: TabKey; label: string; icon: string; desc: string }> = [
-  { key: "all", label: "全部异常", icon: "ri-alarm-warning-line", desc: "全站告警 · 严重度分级" },
+  { key: "all", label: "全部异常", icon: "ri-alarm-warning-line", desc: "全站告警 · 自带归因" },
   { key: "profit", label: "利润异常", icon: "ri-money-dollar-circle-line", desc: "利润率 < 阈值 或 环比下降" },
   { key: "ad", label: "广告异常", icon: "ri-megaphone-line", desc: "费比 / TACOS 冲高" },
   { key: "rating", label: "评分下降", icon: "ri-star-half-line", desc: "评分环比或低于健康线" },
@@ -25,6 +29,8 @@ const TABS: Array<{ key: TabKey; label: string; icon: string; desc: string }> = 
 ];
 
 const VALID_TABS = new Set<TabKey>([...TABS.map((t) => t.key), "diag"]);
+
+const fmtDelta = (d: number, unit?: string) => `${d >= 0 ? "+" : ""}${d.toFixed(1)}${unit ?? ""}`;
 
 /** 清单类型 → 归因诊断类型（与 ALERT_TYPE_TO_DIAG 同一套映射；无映射的清单不出诊断按钮） */
 const DIAG_TYPE_BY_TAB: Partial<Record<TabKey, DiagnosisType>> = {
@@ -42,6 +48,19 @@ export default function Operations() {
   const tab: TabKey = rawTab && VALID_TABS.has(rawTab) ? rawTab : "all";
   const [shops, setShops] = useState<Shop[]>([]);
   const [sev, setSev] = useState<"all" | AlertSeverity>("all");
+  // 站点全量快照：诊断需要完整历史，不受顶栏店铺筛选影响
+  const [siteSnapshots, setSiteSnapshots] = useState<DailySnapshot[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    db.dailySnapshot.toArray()
+      .then((rows) => {
+        if (!alive) return;
+        setSiteSnapshots(rows.filter((r) => (r.siteId ?? "site_us") === currentSiteId));
+      })
+      .catch(() => { if (alive) setSiteSnapshots([]); });
+    return () => { alive = false; };
+  }, [currentSiteId, loading]);
 
   useEffect(() => {
     getAllShops().then(setShops);
@@ -175,6 +194,42 @@ export default function Operations() {
     return list.sort((a, b) => (tab === "new" ? a.metric - b.metric : b.metric - a.metric));
   }, [skuMaster, latestSnapshot, latestInventory, tab, config, currentSite, currentSiteId]);
 
+  // 每条告警的诊断摘要：按「本次 vs 上次导入」跑决策树，取命中步骤的对比值 + 归因结论
+  const diagnostics = useMemo(() => {
+    const out: Record<string, AlertDiagnostic> = {};
+    const bySku = new Map<string, DailySnapshot[]>();
+    for (const r of siteSnapshots) {
+      const arr = bySku.get(r.sku);
+      if (arr) arr.push(r);
+      else bySku.set(r.sku, [r]);
+    }
+    const skuMap = new Map(skuMaster.map((s) => [s.sku, s]));
+    for (const a of alerts) {
+      const sku = skuMap.get(a.sku);
+      const dt = ALERT_TYPE_TO_DIAG[a.type];
+      if (!sku || !dt) continue;
+      const cmp = resolveComparison({ rows: bySku.get(a.sku) ?? [], basis: "import" });
+      const diagInput = {
+        sku,
+        latestSnap: cmp.current,
+        previousSnap: cmp.previous,
+        latestInv: latestInventory.get(snapKey(a.sku, currentSiteId)),
+        config,
+      };
+      const result = dt === "profit" ? diagnoseProfitDecline(diagInput)
+        : dt === "sales" ? diagnoseSalesDecline(diagInput)
+          : dt === "rating" ? diagnoseRatingDecline(diagInput)
+            : diagnoseAdRatioRise(diagInput);
+      if (!result.hasHistory) continue;
+      const hit = result.steps.find((s) => s.hit);
+      const compare = hit
+        ? `${hit.checkName.replace(/检查$/, "").trim()} ${hit.before} → ${hit.after}${hit.delta != null ? `（${fmtDelta(hit.delta, hit.unit)}）` : ""}`
+        : result.summary;
+      out[a.id] = { compare, reason: result.reason };
+    }
+    return out;
+  }, [alerts, siteSnapshots, skuMaster, latestInventory, config, currentSiteId]);
+
   if (loading) return <div className="text-sm text-foreground-500">加载中...</div>;
 
   // 归因下钻视图：/operations?tab=diag&sku=xxx&type=xxx
@@ -239,7 +294,7 @@ export default function Operations() {
       {tab === "all" ? (
         <Section
           title="全站异常清单"
-          subtitle={`共 ${alerts.length} 条 · 原风险中心已并入此处`}
+          subtitle={`共 ${alerts.length} 条 · 每条附本期 vs 上期对比与归因`}
           icon="ri-alarm-warning-line"
           action={
             <div className="flex flex-wrap items-center gap-2 text-[12px]">
@@ -267,7 +322,7 @@ export default function Operations() {
               desc="此严重度下暂无异常，继续保持"
             />
           ) : (
-            <AlertList alerts={sevAlerts} skuMaster={skuMaster} />
+            <AlertList alerts={sevAlerts} skuMaster={skuMaster} diagnostics={diagnostics} />
           )}
         </Section>
       ) : (

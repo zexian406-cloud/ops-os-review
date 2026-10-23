@@ -2,7 +2,7 @@ import type { DailySnapshot } from "@/domain/types";
 
 // Latest snapshot for today (通用演示数据)
 export const mockLatestSnapshot: Omit<DailySnapshot, "id" | "date">[] = [
-  { sku: "sku001", siteId: "site_demo", dailySales7d: 10.9, monthlySales: 347, stockOnHand: 685, stockInTransit: 376, daysOfCoverOnHand: 63, daysOfCoverWithTransit: 97.6, adSpend: 12.07, adRatio: 46.46, profit: 4.69, profitMargin: 18.06, totalCost: 21.3, rating: 4.5, returnRate: 1.32 },
+  { sku: "sku001", siteId: "site_demo", dailySales7d: 10.9, monthlySales: 347, stockOnHand: 685, stockInTransit: 376, daysOfCoverOnHand: 63, daysOfCoverWithTransit: 97.6, adSpend: 12.07, adRatio: 46.46, profit: 4.69, profitMargin: 18.06, totalCost: 21.3, rating: 4.5, returnRate: 8 },
   { sku: "sku002", siteId: "site_demo", dailySales7d: 3.0, monthlySales: 153, stockOnHand: 520, stockInTransit: 360, daysOfCoverOnHand: 172.8, daysOfCoverWithTransit: 292.4, adSpend: 7.28, adRatio: 30.35, profit: -0.43, profitMargin: -1.79, totalCost: 24.42, rating: 4.5, returnRate: 0 },
   { sku: "sku003", siteId: "site_demo", dailySales7d: 9.4, monthlySales: 178, stockOnHand: 502, stockInTransit: 245, daysOfCoverOnHand: 53.2, daysOfCoverWithTransit: 79.1, adSpend: 6.42, adRatio: 21.42, profit: -1.87, profitMargin: -6.22, totalCost: 31.86, rating: 4.4, returnRate: 4.55 },
   { sku: "sku004", siteId: "site_demo", dailySales7d: 5.9, monthlySales: 147, stockOnHand: 1620, stockInTransit: 0, daysOfCoverOnHand: 269.6, daysOfCoverWithTransit: 269.6, adSpend: 8.71, adRatio: 21.78, profit: 0.71, profitMargin: 1.78, totalCost: 39.28, rating: 4.4, returnRate: 0 },
@@ -24,6 +24,7 @@ export const mockLatestSnapshot: Omit<DailySnapshot, "id" | "date">[] = [
 // 演示案例定向制造：让部分 SKU 在「今天 vs 历史」对比中稳定触发评分/费比异常，
 // 保证演示环境下问题总览与评分/费比诊断始终有可看的内容
 const demoOverrides: Record<string, { dailyFactor?: number; adSpend?: number; adRatio?: number; rating?: number; returnRate?: number }> = {
+  sku001: { dailyFactor: 1, returnRate: 3 },              // 退货率上升侵蚀利润：3% → 8%
   sku011: { dailyFactor: 1, adSpend: 25, adRatio: 32 },   // 广告加投推高费比：32% → 46.52%
   sku017: { dailyFactor: 1, rating: 5.0, returnRate: 0 }, // 评分重度下滑：5.0 → 4.3
 };

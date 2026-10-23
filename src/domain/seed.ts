@@ -7,7 +7,7 @@ import { mockPromotions } from "@/mocks/promotions";
 import { MOCK_MANUAL_PROMOTIONS } from "@/mocks/manualPromotions";
 import type { DailySnapshot, InventoryLayer, OpsLog, Shop, Site, TodoItem } from "./types";
 
-export const SEED_FLAG = "seeded_v11";
+export const SEED_FLAG = "seeded_v12";
 
 export const DEMO_SITE_ID = "site_demo";
 
@@ -117,11 +117,16 @@ async function refreshDemoContent(today: string): Promise<void> {
   }
   await db.skuMaster.bulkPut(mockSkuMaster);
 
-  // 重写「今天」的演示快照行（补 refundRate 等新演示字段）
-  await db.dailySnapshot.where("date").equals(today).toArray().then((rows) => {
-    const stale = rows.filter((r) => r.siteId === DEMO_SITE_ID).map((r) => r.id!);
-    if (stale.length > 0) return db.dailySnapshot.bulkDelete(stale);
-  });
+  // 重写演示站点的全部快照（历史 + 今天）：让演示归因场景随版本更新，真实站点不受影响
+  const demoSnapshotIds = (await db.dailySnapshot.toArray())
+    .filter((r) => r.siteId === DEMO_SITE_ID)
+    .map((r) => r.id!);
+  if (demoSnapshotIds.length > 0) await db.dailySnapshot.bulkDelete(demoSnapshotIds);
+  const history = buildMockHistory(today).map((s) => ({
+    ...s,
+    adRatio: Math.abs(s.adRatio),
+  }));
+  await db.dailySnapshot.bulkAdd(history);
   const todayRows: Omit<DailySnapshot, "id">[] = mockLatestSnapshot.map((s) => ({
     ...s,
     date: today,

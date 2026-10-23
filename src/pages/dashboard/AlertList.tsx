@@ -32,14 +32,22 @@ const severityConfig = {
 const selectCls =
   "rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] text-foreground-700 focus:border-primary-500 focus:outline-none cursor-pointer";
 
+/** 每条告警的诊断摘要：对比值 + 归因结论（异常中心「全部异常」清单使用） */
+export interface AlertDiagnostic {
+  compare?: string;
+  reason?: string;
+}
+
 export default function AlertList({
   alerts,
   skuMaster,
   limit,
+  diagnostics,
 }: {
   alerts: Alert[];
   skuMaster: SkuMaster[];
   limit?: number;
+  diagnostics?: Record<string, AlertDiagnostic>;
 }) {
   const [typeFilter, setTypeFilter] = useState<"all" | AlertType>("all");
   const [storeFilter, setStoreFilter] = useState<string>("all");
@@ -156,6 +164,21 @@ export default function AlertList({
               <div className="mt-1.5 text-[12px] leading-relaxed text-foreground-500">
                 {a.suggestion}
               </div>
+              {diagnostics?.[a.id] && (
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-background-200/60 pt-2">
+                  {diagnostics[a.id].compare && (
+                    <span className="mono-num rounded-md bg-background-50 px-2 py-0.5 text-[11px] font-medium text-foreground-600">
+                      {diagnostics[a.id].compare}
+                    </span>
+                  )}
+                  {diagnostics[a.id].reason && (
+                    <span className="text-[12px] leading-relaxed text-foreground-800">
+                      <span className="font-semibold text-primary-700">归因：</span>
+                      {diagnostics[a.id].reason}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           );
           })}
