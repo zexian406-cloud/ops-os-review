@@ -150,7 +150,7 @@ export const PAGE_LABELS: Record<PageId, string> = {
   promotions: "促销管理",
   todo: "我的待办",
   calculator: "新品测算",
-  operations: "运营中心",
+  operations: "异常中心",
   risk: "风险中心",
   season: "旺季模拟",
   settings: "参数中心",

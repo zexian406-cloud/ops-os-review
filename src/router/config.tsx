@@ -18,7 +18,6 @@ function lazyRetry(factory: () => Promise<{ default: ComponentType }>) {
 // P0/P1: 页面按需懒加载，避免 recharts / xlsx 等重型依赖被卷进首屏主包。
 const Dashboard = lazyRetry(() => import("@/pages/dashboard/page"));
 const Shipment = lazyRetry(() => import("@/pages/shipment/page"));
-const Risk = lazyRetry(() => import("@/pages/risk/page"));
 const Operations = lazyRetry(() => import("@/pages/operations/page"));
 const SkuList = lazyRetry(() => import("@/pages/sku/page"));
 const SkuDetail = lazyRetry(() => import("@/pages/sku/detail"));
@@ -47,6 +46,22 @@ function DiagnosisRedirect() {
   return <Navigate to={`/operations?${next.toString()}`} replace />;
 }
 
+/** 旧 /risk 入口重定向：风险清单已并入异常中心，库存类问题归发货决策 */
+const RISK_TYPE_TO_TAB: Record<string, string> = {
+  profit: "profit",
+  ad: "ad",
+  rating: "rating",
+  return: "return",
+  listing: "listing",
+};
+
+function RiskRedirect() {
+  const [sp] = useSearchParams();
+  const type = sp.get("type") ?? "";
+  if (type === "stock") return <Navigate to="/shipment" replace />;
+  return <Navigate to={`/operations?tab=${RISK_TYPE_TO_TAB[type] ?? "profit"}`} replace />;
+}
+
 const routes: RouteObject[] = [
   {
     path: "/",
@@ -54,7 +69,7 @@ const routes: RouteObject[] = [
     children: [
       { index: true, element: <Dashboard /> },
       { path: "shipment", element: <Shipment /> },
-      { path: "risk", element: <Risk /> },
+      { path: "risk", element: <RiskRedirect /> },
       { path: "operations", element: <Operations /> },
       { path: "sku", element: <SkuList /> },
       { path: "sku/:sku", element: <SkuDetail /> },

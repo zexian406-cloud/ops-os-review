@@ -83,7 +83,7 @@ export default function GuidePage() {
           打开首页查看运营总览，了解整体状态、风险提醒、待办事项。
         </Step>
         <Step n="3" title="处理异常">
-          库存问题→发货决策；异常分析与归因→异常中心；数据质量→数据健康；风险查看→风险中心。
+          库存问题→发货决策；异常清单与归因分析→异常中心；数据质量→数据健康。
         </Step>
         <SubTitle>本说明书怎么读</SubTitle>
         <p>章节顺序与侧边栏分组完全一致，逐组从上到下讲解；公式自定义、导入模板等深度内容直接内嵌在对应模块小节里，不用来回翻：</p>
@@ -97,7 +97,7 @@ export default function GuidePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-background-200">
-              <tr><td className="px-3 py-2 font-semibold">决策</td><td className="px-3 py-2">运营一览 · 历史对比 · 发货决策 · 风险中心</td><td className="px-3 py-2 text-primary-600 font-semibold">第二章</td></tr>
+              <tr><td className="px-3 py-2 font-semibold">决策</td><td className="px-3 py-2">运营一览 · 历史对比 · 发货决策</td><td className="px-3 py-2 text-primary-600 font-semibold">第二章</td></tr>
               <tr><td className="px-3 py-2 font-semibold">运营</td><td className="px-3 py-2">异常中心 · SKU 详情 · 旺季模拟 · 促销运营中心 · 新品测算</td><td className="px-3 py-2 text-primary-600 font-semibold">第三章</td></tr>
               <tr><td className="px-3 py-2 font-semibold">工具</td><td className="px-3 py-2">我的待办 · 操作记录</td><td className="px-3 py-2 text-primary-600 font-semibold">第四章</td></tr>
               <tr><td className="px-3 py-2 font-semibold">数据</td><td className="px-3 py-2">数据导入 · 数据健康 · 店铺管理 · 参数中心</td><td className="px-3 py-2 text-primary-600 font-semibold">第五章</td></tr>
@@ -203,13 +203,10 @@ export default function GuidePage() {
             </tbody>
           </table>
         </div>
-        <Module title="2.4 风险中心（/risk）">
-          <p>查看所有风险 SKU，按类型 / 店铺筛选，按严重度 / 类型 / SKU 排序；每条告警可一键「去诊断」定位根因。</p>
-        </Module>
         <ExampleBox>
           <p><strong>每日 15 分钟决策流</strong>：</p>
-          <p>① 运营一览看到「库存风险 13 条」→ 点卡片进风险中心，按严重程度排序；</p>
-          <p>② 对断货的演示产品007（总库存 0、日销 5.2）点「去诊断」→ 跳转发货决策，列表按紧急优先，它排第一；</p>
+          <p>① 运营一览看到「库存风险 13 条」→ 点卡片进发货决策，按紧急度排序；</p>
+          <p>② 对断货的演示产品007（总库存 0、日销 5.2）在发货决策列表按紧急优先，它排第一；</p>
           <p>③ 向工厂下单后，把「已下单 500 件」记录到操作记录；</p>
           <p>④ 回到异常中心，在利润异常清单点 sku001（单件利润 -5.16）的「诊断」看归因结论，并把调价动作记入诊断备注。</p>
           <p><strong>发货建议数字算例</strong>（可在 2.3.2 计算器直接复现）：日均 10 件、在库 80、在途 40 → 综合覆盖 (80+40)÷10 = 12 天，低于阈值 25 天（LT 15 + 安全库存 10）触发补货；建议量 = (45+15+10−12)×10 = <strong>580 件</strong>（向上取整）；最晚发货日 = 今天 + (25−12) = 13 天后；13 天落在 11~30 区间 → <strong>常规</strong>优先级。</p>
@@ -226,10 +223,10 @@ export default function GuidePage() {
       {/* 三、运营 */}
       <GuideSection num="三" title="运营（侧边栏第 2 组）" open={open["三"]} onToggle={() => toggle("三")}>
         <Module title="3.1 异常中心（/operations）">
-          <p>按类型列出需要处理的 SKU 清单：利润异常 / 广告异常 / 评分下降 / Review 增长 / 退货率异常 / Listing 待优化 / 新品成长，只显示需要你处理的 SKU，不是 Excel 平铺。清单每行点「诊断」进入该 SKU 的归因分析。原独立的「异常诊断」页已并入此处（旧链接 /diagnosis 自动跳转）。</p>
+          <p>按类型列出需要处理的 SKU 清单：利润异常 / 广告异常 / 评分下降 / Review 增长 / 退货率异常 / Listing 待优化 / 新品成长，只显示需要你处理的 SKU，不是 Excel 平铺。清单每行点「诊断」进入该 SKU 的归因分析。原独立的「异常诊断」与「风险中心」两个页面均已并入此处（旧链接 /diagnosis、/risk 自动跳转；库存类问题归发货决策，运营一览的库存风险卡片直接跳发货决策）。</p>
           <SubTitle>归因分析（二级下钻）</SubTitle>
           <p>归因结论大字置顶，一眼看到「为什么」——例如利润下降时直接展示「退货增加侵蚀利润」，下方附本期 vs 上期的关键数字证据与建议动作；诊断过程（决策树每一步的前后对比、命中 / 未命中标记）默认折叠，需要核对依据时再点开。</p>
-          <p>诊断类型四个：利润下降 / 销量下降 / 评分下降 / 费比上升，可在页内随时切换。清单行的「诊断」按钮按问题类型自动映射：利润异常 → 利润下降；广告异常 → 费比上升；评分 / Review / 退货率异常 → 评分下降；断货、库存类告警（运营一览 / 风险中心的「去诊断」）→ 销量下降。</p>
+          <p>诊断类型四个：利润下降 / 销量下降 / 评分下降 / 费比上升，可在页内随时切换。清单行的「诊断」按钮按问题类型自动映射：利润异常 → 利润下降；广告异常 → 费比上升；评分 / Review / 退货率异常 → 评分下降；断货、库存类告警（运营一览「去诊断」）→ 销量下降。</p>
           <p className="text-[12px] text-foreground-500">评分下降诊断顺序：退货率 +3pp（质量问题）→ 新增评论且降幅 ≥0.2（新差评拉低）→ 按降幅分级（≥0.5 重度 / 0.2~0.5 轻度）。费比上升诊断顺序：销量降 20% 且费比 +5pp（转化下降被动推高）→ 广告花费涨 20% 且销量持平（加投）→ 促销期正常升高 → 涨幅 ≤5pp 波动正常。</p>
           <SubTitle>对比口径与分享</SubTitle>
           <p>对比口径可选：「本次 vs 上次导入」（默认）、「近7天 / 近14天 / 近30天 vs 前等长区间」、「自定义天数」（1-730 天）、「指定日期区间」（例如 2026-10-19 ~ 2026-10-25，自动与紧邻其前的等长区间对比）。</p>

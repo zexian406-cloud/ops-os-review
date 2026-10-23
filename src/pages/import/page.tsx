@@ -1634,7 +1634,7 @@ export default function ImportPage() {
               <li><strong>产品链接/竞品链接：</strong>在「SKU 标识符」或「周销量」表中填写，竞品链接多个用换行分隔，导入后 SKU 详情页可点击跳转</li>
               <li><strong>仓库映射：</strong>首次导入仓库明细前，在「仓库映射」Tab 检查仓库名称→区域映射是否正确，未映射的仓库会自动猜测</li>
               <li><strong>促销报名后：</strong>去「促销运营中心」添加促销活动并录入成本，促销时间线自动生成</li>
-              <li><strong>日常：</strong>打开 Dashboard 看今天需要处理的事，风险中心看异常，发货决策中心看补货建议</li>
+              <li><strong>日常：</strong>打开 Dashboard 看今天需要处理的事，异常中心看异常并下钻归因，发货决策中心看补货建议</li>
               <li><strong>每周备份：</strong>在下方 GitHub 配置里点「保存到 GitHub 云端」，防止本地数据丢失</li>
               <li><strong>模板下载：</strong>每个导入 Tab 下方可下载 Excel/CSV 模板，含表头示例和数据验证</li>
             </ul>

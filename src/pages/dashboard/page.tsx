@@ -305,7 +305,7 @@ export default function Dashboard() {
     tone: "danger" | "warn" | "primary" | "accent" | "secondary";
     types: AlertType[]; href: string;
   }> = [
-    { key: "stock", title: "库存风险", icon: "ri-inbox-2-line", tone: "danger", types: ["stockout", "low_stock", "overstock"], href: "/risk?type=stock" },
+    { key: "stock", title: "库存风险", icon: "ri-inbox-2-line", tone: "danger", types: ["stockout", "low_stock", "overstock"], href: "/shipment" },
     { key: "profit", title: "利润异常", icon: "ri-money-dollar-circle-line", tone: "warn", types: ["profit"], href: "/operations?tab=profit" },
     { key: "ad", title: "广告异常", icon: "ri-megaphone-line", tone: "primary", types: ["ad"], href: "/operations?tab=ad" },
     { key: "rating", title: "评分下降", icon: "ri-star-half-line", tone: "warn", types: ["rating"], href: "/operations?tab=rating" },
@@ -703,7 +703,7 @@ export default function Dashboard() {
               {alertsExpanded ? "收起" : `展开全部（${urgentAlertCount}）`}
             </button>
           ) : (
-            <Link to="/risk" className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer">查看全部 →</Link>
+            <Link to="/operations" className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer">查看全部 →</Link>
           )
         }
       >

@@ -15,7 +15,6 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: "/", label: "运营一览", sub: "今日第一眼", icon: "ri-dashboard-3-line" },
       { to: "/history", label: "历史对比", sub: "本周 vs 上周", icon: "ri-exchange-line" },
       { to: "/shipment", label: "发货决策", sub: "自动补货建议", icon: "ri-truck-line" },
-      { to: "/risk", label: "风险中心", sub: "全站异常", icon: "ri-error-warning-line" },
     ],
   },
   {
