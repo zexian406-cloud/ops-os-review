@@ -24,6 +24,8 @@ const TABS: Array<{ key: TabKey; label: string; icon: string; desc: string }> = 
   { key: "new", label: "新品成长", icon: "ri-seedling-line", desc: "上架 90 天内" },
 ];
 
+const VALID_TABS = new Set<TabKey>([...TABS.map((t) => t.key), "diag"]);
+
 /** 清单类型 → 归因诊断类型（与 ALERT_TYPE_TO_DIAG 同一套映射；无映射的清单不出诊断按钮） */
 const DIAG_TYPE_BY_TAB: Partial<Record<TabKey, DiagnosisType>> = {
   profit: "profit",
@@ -36,8 +38,8 @@ const DIAG_TYPE_BY_TAB: Partial<Record<TabKey, DiagnosisType>> = {
 export default function Operations() {
   const { loading, currentSiteId, currentSite, skuMaster, latestSnapshot, latestInventory, config, alerts } = useOpsData();
   const [params, setParams] = useSearchParams();
-  const initial = (params.get("tab") as TabKey) ?? "all";
-  const [tab, setTab] = useState<TabKey>(initial);
+  const rawTab = params.get("tab") as TabKey | null;
+  const tab: TabKey = rawTab && VALID_TABS.has(rawTab) ? rawTab : "all";
   const [shops, setShops] = useState<Shop[]>([]);
   const [sev, setSev] = useState<"all" | AlertSeverity>("all");
 
@@ -56,7 +58,6 @@ export default function Operations() {
   };
 
   const setTabAndUrl = (t: TabKey) => {
-    setTab(t);
     const next = new URLSearchParams(params);
     next.set("tab", t);
     setParams(next);
