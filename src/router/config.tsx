@@ -46,7 +46,7 @@ function DiagnosisRedirect() {
   return <Navigate to={`/operations?${next.toString()}`} replace />;
 }
 
-/** 旧 /risk 入口重定向：风险清单已并入异常中心，库存类问题归发货决策 */
+/** 旧 /risk 入口重定向：风险清单已并入异常中心的「全部异常」Tab */
 const RISK_TYPE_TO_TAB: Record<string, string> = {
   profit: "profit",
   ad: "ad",
@@ -58,8 +58,7 @@ const RISK_TYPE_TO_TAB: Record<string, string> = {
 function RiskRedirect() {
   const [sp] = useSearchParams();
   const type = sp.get("type") ?? "";
-  if (type === "stock") return <Navigate to="/shipment" replace />;
-  return <Navigate to={`/operations?tab=${RISK_TYPE_TO_TAB[type] ?? "profit"}`} replace />;
+  return <Navigate to={`/operations?tab=${RISK_TYPE_TO_TAB[type] ?? "all"}`} replace />;
 }
 
 const routes: RouteObject[] = [

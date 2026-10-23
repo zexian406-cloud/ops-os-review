@@ -7,12 +7,14 @@ import { getAllShops } from "@/domain/db";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
-import type { DailySnapshot, DiagnosisType, SkuMaster, InventoryLayer, Shop } from "@/domain/types";
+import AlertList from "@/pages/dashboard/AlertList";
+import type { DailySnapshot, DiagnosisType, SkuMaster, InventoryLayer, Shop, AlertSeverity } from "@/domain/types";
 import DiagnosisView from "./DiagnosisView";
 
-type TabKey = "profit" | "ad" | "rating" | "review" | "return" | "listing" | "new" | "diag";
+type TabKey = "all" | "profit" | "ad" | "rating" | "review" | "return" | "listing" | "new" | "diag";
 
 const TABS: Array<{ key: TabKey; label: string; icon: string; desc: string }> = [
+  { key: "all", label: "全部异常", icon: "ri-alarm-warning-line", desc: "全站告警 · 严重度分级" },
   { key: "profit", label: "利润异常", icon: "ri-money-dollar-circle-line", desc: "利润率 < 阈值 或 环比下降" },
   { key: "ad", label: "广告异常", icon: "ri-megaphone-line", desc: "费比 / TACOS 冲高" },
   { key: "rating", label: "评分下降", icon: "ri-star-half-line", desc: "评分环比或低于健康线" },
@@ -32,11 +34,12 @@ const DIAG_TYPE_BY_TAB: Partial<Record<TabKey, DiagnosisType>> = {
 };
 
 export default function Operations() {
-  const { loading, currentSiteId, currentSite, skuMaster, latestSnapshot, latestInventory, config } = useOpsData();
+  const { loading, currentSiteId, currentSite, skuMaster, latestSnapshot, latestInventory, config, alerts } = useOpsData();
   const [params, setParams] = useSearchParams();
-  const initial = (params.get("tab") as TabKey) ?? "profit";
+  const initial = (params.get("tab") as TabKey) ?? "all";
   const [tab, setTab] = useState<TabKey>(initial);
   const [shops, setShops] = useState<Shop[]>([]);
+  const [sev, setSev] = useState<"all" | AlertSeverity>("all");
 
   useEffect(() => {
     getAllShops().then(setShops);
@@ -68,6 +71,8 @@ export default function Operations() {
       tone: "danger" | "warn" | "accent" | "primary";
       note?: string;
     }> = [];
+
+    if (tab === "all" || tab === "diag") return list;
 
     for (const sku of skuMaster) {
       const snap = latestSnapshot.get(snapKey(sku.sku, currentSiteId));
@@ -174,6 +179,11 @@ export default function Operations() {
   // 归因下钻视图：/operations?tab=diag&sku=xxx&type=xxx
   if (tab === "diag") return <DiagnosisView />;
 
+  const sevAlerts = sev === "all" ? alerts : alerts.filter((a) => a.severity === sev);
+  const criticalCount = alerts.filter((a) => a.severity === "critical").length;
+  const warningCount = alerts.filter((a) => a.severity === "warning").length;
+  const infoCount = alerts.filter((a) => a.severity === "info").length;
+
   const activeTab = TABS.find((t) => t.key === tab)!;
 
   return (
@@ -184,11 +194,11 @@ export default function Operations() {
         </div>
         <h1 className="font-heading text-[26px] font-bold text-foreground-950">异常中心</h1>
         <p className="text-[13px] text-foreground-500">
-          按类型列出需要处理的 SKU，点行内「诊断」下钻归因分析
+          全站异常一处看全：先看「全部异常」清单，再按类型筛 SKU，点行内「诊断」下钻归因
         </p>
       </div>
 
-      <div className="grid grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
         {TABS.map((t) => {
           const active = tab === t.key;
           return (
@@ -225,6 +235,41 @@ export default function Operations() {
         })}
       </div>
 
+      {tab === "all" ? (
+        <Section
+          title="全站异常清单"
+          subtitle={`共 ${alerts.length} 条 · 原风险中心已并入此处`}
+          icon="ri-alarm-warning-line"
+          action={
+            <div className="flex flex-wrap items-center gap-2 text-[12px]">
+              <Badge tone="danger">Critical {criticalCount}</Badge>
+              <Badge tone="warn">Warning {warningCount}</Badge>
+              <Badge tone="secondary">Info {infoCount}</Badge>
+              <select
+                value={sev}
+                onChange={(e) => setSev(e.target.value as typeof sev)}
+                className="rounded-md border border-background-300/70 bg-background-50 px-2 py-1 text-[12px] text-foreground-700 focus:border-primary-500 focus:outline-none cursor-pointer"
+                aria-label="筛选严重度"
+              >
+                <option value="all">全部严重度</option>
+                <option value="critical">Critical</option>
+                <option value="warning">Warning</option>
+                <option value="info">Info</option>
+              </select>
+            </div>
+          }
+        >
+          {sevAlerts.length === 0 ? (
+            <EmptyState
+              icon="ri-check-double-line"
+              title="没有匹配的异常"
+              desc="此严重度下暂无异常，继续保持"
+            />
+          ) : (
+            <AlertList alerts={sevAlerts} skuMaster={skuMaster} />
+          )}
+        </Section>
+      ) : (
       <Section
         title={activeTab.label + " · SKU 清单"}
         subtitle={`共 ${rows.length} 个 SKU 需要关注`}
@@ -298,6 +343,7 @@ export default function Operations() {
           </div>
         )}
       </Section>
+      )}
     </div>
   );
 }
