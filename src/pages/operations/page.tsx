@@ -48,6 +48,7 @@ export default function Operations() {
   const tab: TabKey = rawTab && VALID_TABS.has(rawTab) ? rawTab : "all";
   const [shops, setShops] = useState<Shop[]>([]);
   const [sev, setSev] = useState<"all" | AlertSeverity>("all");
+  const [rulesOpen, setRulesOpen] = useState(false);
   // 站点全量快照：诊断需要完整历史，不受顶栏店铺筛选影响
   const [siteSnapshots, setSiteSnapshots] = useState<DailySnapshot[]>([]);
 
@@ -322,7 +323,39 @@ export default function Operations() {
               desc="此严重度下暂无异常，继续保持"
             />
           ) : (
-            <AlertList alerts={sevAlerts} skuMaster={skuMaster} diagnostics={diagnostics} />
+            <>
+              <div className="mb-3">
+                <button
+                  type="button"
+                  onClick={() => setRulesOpen((v) => !v)}
+                  className="flex w-full items-center gap-2 rounded-lg border border-background-200/70 bg-background-50 px-3 py-2 text-left text-[12px] text-foreground-600 hover:bg-background-100 cursor-pointer"
+                >
+                  <i className="ri-question-line text-primary-600" />
+                  <span className="font-medium text-foreground-800">判定依据</span>
+                  <span className="text-foreground-400">阈值来自参数中心，可按站点调整</span>
+                  <i className={`${rulesOpen ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"} ml-auto text-foreground-400`} />
+                </button>
+                {rulesOpen && (
+                  <div className="mt-2 rounded-lg border border-background-200/70 bg-background-50/60 p-3">
+                    <div className="grid gap-x-6 gap-y-1.5 text-[12px] leading-relaxed text-foreground-600 sm:grid-cols-2">
+                      <div><span className="font-semibold text-foreground-800">断货</span>：总库存 ≤ 0 → Critical</div>
+                      <div><span className="font-semibold text-foreground-800">库存不足</span>：可售 &lt; {config.defaultLeadTime} + {config.defaultSafetyStockDays} = {config.defaultLeadTime + config.defaultSafetyStockDays} 天，其中 &lt; {config.defaultSafetyStockDays} 天为 Critical</div>
+                      <div><span className="font-semibold text-foreground-800">库存积压</span>：可售 &gt; {config.defaultTargetCoverDays} 天且日销 &lt; 5 → Warning</div>
+                      <div><span className="font-semibold text-foreground-800">利润异常</span>：毛利率 &lt; {config.profitMarginThreshold}%，低于 0 为 Critical</div>
+                      <div><span className="font-semibold text-foreground-800">广告费比</span>：近 30 天费比 &gt; {config.adRatioThreshold}%，&gt; 70% 为 Critical</div>
+                      <div><span className="font-semibold text-foreground-800">评分</span>：较上次导入下降 ≥ {config.ratingDropThreshold}，或当前评分 &lt; 3.8 → Warning</div>
+                      <div><span className="font-semibold text-foreground-800">退货率</span>：近 30 天 &gt; {config.returnRateThreshold}%，&gt; 10% 为 Critical（FBM 看退款率）</div>
+                      <div><span className="font-semibold text-foreground-800">Listing</span>：A+ 页面未完成 → Info</div>
+                      <div><span className="font-semibold text-foreground-800">促销成本</span>：促销成本占售价 &gt; 10%，&gt; 25% 为 Warning</div>
+                    </div>
+                    <div className="mt-2 border-t border-background-200/70 pt-2 text-[11px] text-foreground-400">
+                      归因依据：按「本次 vs 上次导入」对比同一 SKU，命中决策树中的具体原因优先展示（如退货率 3% → 8%）；未命中任何单一原因时显示为多因素综合影响。库存天数用 SKU 自身 Lead Time / 安全库存，未设置时取参数中心默认值。
+                    </div>
+                  </div>
+                )}
+              </div>
+              <AlertList alerts={sevAlerts} skuMaster={skuMaster} diagnostics={diagnostics} />
+            </>
           )}
         </Section>
       ) : (
