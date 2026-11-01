@@ -30,8 +30,10 @@ const BASE_CVR: Record<string, number> = {
 // 注入演示流量/转化数据（sessions/orders）：orders ≈ 日均销量，sessions 按基准 CVR 派生
 export const mockLatestSnapshot: Omit<DailySnapshot, "id" | "date">[] = mockLatestSnapshotBase.map((s) => {
   const baseCvr = BASE_CVR[s.sku] ?? 8.5;
-  const orders = s.dailySales7d;
+  let orders = s.dailySales7d;
   let sessions = orders / (baseCvr / 100) * 1.01;      // 默认：两期都稳 → verdict = none
+  if (s.sku === "sku004") { sessions = 28; orders = 2.38; } // 流量下滑 critical 案例：昨天 ~60-80 → 今天 28（-53%~-65%），CVR 持平 8.5% → 流量端异常
+  if (s.sku === "sku008") { sessions = 65; orders = 5.53; } // 流量下滑 warning 案例：昨天 ~94-127 → 今天 65（-31%~-49%），CVR 持平 → 流量下滑告警（warning 级）
   if (s.sku === "sku005") sessions = 25;               // 流量端案例：Sessions ~29 → 25（-14%），CVR 稳/升（有库存积压告警可展示 Badge）
   if (s.sku === "sku010") sessions = orders / 0.03;    // 转化端案例：CVR 8.6% → 3.0%，Sessions 稳/升
   if (s.sku === "sku015") sessions = 82;               // 流量端案例：Sessions ~101 → 82（-19%），CVR 稳/升

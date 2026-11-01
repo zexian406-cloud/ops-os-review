@@ -15,10 +15,11 @@ import { ALERT_TYPE_TO_DIAG } from "@/domain/types";
 import type { DailySnapshot, DiagnosisType, SkuMaster, InventoryLayer, Shop, AlertSeverity } from "@/domain/types";
 import DiagnosisView from "./DiagnosisView";
 
-type TabKey = "all" | "profit" | "ad" | "rating" | "review" | "return" | "listing" | "new" | "diag";
+type TabKey = "all" | "traffic" | "profit" | "ad" | "rating" | "review" | "return" | "listing" | "new" | "diag";
 
 const TABS: Array<{ key: TabKey; label: string; icon: string; desc: string }> = [
   { key: "all", label: "全部异常", icon: "ri-alarm-warning-line", desc: "全站告警 · 自带归因" },
+  { key: "traffic", label: "流量下滑", icon: "ri-pulse-line", desc: "Sessions 周环比跌幅 ≥30%" },
   { key: "profit", label: "利润异常", icon: "ri-money-dollar-circle-line", desc: "利润率 < 阈值 或 环比下降" },
   { key: "ad", label: "广告异常", icon: "ri-megaphone-line", desc: "费比 / TACOS 冲高" },
   { key: "rating", label: "评分下降", icon: "ri-star-half-line", desc: "评分环比或低于健康线" },
@@ -34,6 +35,7 @@ const fmtDelta = (d: number, unit?: string) => `${d >= 0 ? "+" : ""}${d.toFixed(
 
 /** 清单类型 → 归因诊断类型（与 ALERT_TYPE_TO_DIAG 同一套映射；无映射的清单不出诊断按钮） */
 const DIAG_TYPE_BY_TAB: Partial<Record<TabKey, DiagnosisType>> = {
+  traffic: "sales",
   profit: "profit",
   ad: "adRatio",
   rating: "rating",
@@ -129,7 +131,21 @@ export default function Operations() {
       }
       if (!snap || sku.saleStatus === "discontinued") continue;
 
-      if (tab === "profit") {
+      if (tab === "traffic") {
+        // 流量下滑清单直接复用引擎生成的告警（含两期 Sessions 数值与严重度）
+        const a = alerts.find((x) => x.type === "traffic_drop" && x.sku === sku.sku);
+        if (a) {
+          const drop = Math.abs(a.metric ?? 0);
+          list.push({
+            sku,
+            snap,
+            metric: drop,
+            metricLabel: `${drop.toFixed(1)}%`,
+            tone: a.severity === "critical" ? "danger" : "warn",
+            note: a.detail,
+          });
+        }
+      } else if (tab === "profit") {
         const inv = latestInventory.get(snapKey(sku.sku, currentSiteId));
         const calc = computeAll({ sku, snap, inv, defaultCommissionRate: currentSite?.commissionRate });
         if (calc.grossMargin < config.profitMarginThreshold) {
@@ -193,7 +209,7 @@ export default function Operations() {
       }
     }
     return list.sort((a, b) => (tab === "new" ? a.metric - b.metric : b.metric - a.metric));
-  }, [skuMaster, latestSnapshot, latestInventory, tab, config, currentSite, currentSiteId]);
+  }, [skuMaster, latestSnapshot, latestInventory, tab, config, currentSite, currentSiteId, alerts]);
 
   // 每条告警的诊断摘要：按「本次 vs 上次导入」跑决策树，取命中步骤的对比值 + 归因结论
   const diagnostics = useMemo(() => {

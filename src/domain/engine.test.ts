@@ -110,3 +110,37 @@ describe("computeAlerts · 流量下滑告警（traffic_drop）", () => {
     expect(traffic(run(1200, 900))).toHaveLength(0);
   });
 });
+
+describe("computeAlerts · 演示数据流量下滑案例边界", () => {
+  // 演示库（seeded_v13）固定注入：sku004 今天 28、sku008 今天 65；
+  // 昨天 Sessions 随机区间由历史生成器决定，这里用区间端点锁定严重度恒定
+  const runSku = (sku: string, cur: number, prev: number): Alert[] => {
+    const key = snapKey(sku, "site_demo");
+    const mk = (sessions: number, date: string): DailySnapshot =>
+      ({
+        date, sku, siteId: "site_demo",
+        dailySales7d: 5, monthlySales: 150, adRatio: 0, rating: 4.5,
+        reviewCount: 100, returnRate: 0, sessions, orders: sessions * 0.085,
+      }) as unknown as DailySnapshot;
+    return computeAlerts({
+      skuMaster: [{ sku, name: sku, store: "DEMO-STORE-US", siteId: "site_demo", price: 39.99, costFob: 5, saleStatus: "active", fulfillment: "FBA" }] as unknown as SkuMaster[],
+      latestSnapshot: new Map([[key, mk(cur, "2026-11-01")]]),
+      latestInventory: new Map(),
+      previousSnapshot: new Map([[key, mk(prev, "2026-10-31")]]),
+      config,
+      today: "2026-11-01",
+    }).filter((a) => a.type === "traffic_drop");
+  };
+
+  it("sku004（今天 28）：昨天最低 ~60 时仍为 critical（≥50%）", () => {
+    const alerts = runSku("sku004", 28, 59.5);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].severity).toBe("critical");
+  });
+
+  it("sku008（今天 65）：昨天最高 ~127 时仍为 warning（<50%）且 ≥30%", () => {
+    const alerts = runSku("sku008", 65, 126.7);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].severity).toBe("warning");
+  });
+});

@@ -223,11 +223,15 @@ export default function GuidePage() {
       {/* 三、运营 */}
       <GuideSection num="三" title="运营（侧边栏第 2 组）" open={open["三"]} onToggle={() => toggle("三")}>
         <Module title="3.1 异常中心（/operations）">
-          <p>顶部 8 个 Tab：「全部异常」+ 7 个类型清单。「全部异常」即原「风险中心」的全站告警清单，按 Critical / Warning / Info 分级统计，可按严重度筛选，并支持按类型 / 店铺筛选与按严重度 / 类型 / SKU 排序，每条告警可一键「去诊断」；其余 7 个类型 Tab 按类型列出需要处理的 SKU（利润异常 / 广告异常 / 评分下降 / Review 增长 / 退货率异常 / Listing 待优化 / 新品成长），只显示需要你处理的 SKU，不是 Excel 平铺，点行内「诊断」进入该 SKU 的归因分析。原独立的「异常诊断」「风险中心」两个页面均已并入此处（旧链接 /diagnosis、/risk 自动跳转）。</p>
+          <p>顶部 9 个 Tab：「全部异常」+ 8 个类型清单。「全部异常」即原「风险中心」的全站告警清单，按 Critical / Warning / Info 分级统计，可按严重度筛选，并支持按类型 / 店铺筛选与按严重度 / 类型 / SKU 排序，每条告警可一键「去诊断」；其余 8 个类型 Tab 按类型列出需要处理的 SKU（流量下滑 / 利润异常 / 广告异常 / 评分下降 / Review 增长 / 退货率异常 / Listing 待优化 / 新品成长），只显示需要你处理的 SKU，不是 Excel 平铺，点行内「诊断」进入该 SKU 的归因分析。原独立的「异常诊断」「风险中心」两个页面均已并入此处（旧链接 /diagnosis、/risk 自动跳转）。</p>
           <SubTitle>归因分析（二级下钻）</SubTitle>
           <p>归因结论大字置顶，一眼看到「为什么」——例如利润下降时直接展示「退货增加侵蚀利润」，下方附本期 vs 上期的关键数字证据与建议动作；诊断过程（决策树每一步的前后对比、命中 / 未命中标记）默认折叠，需要核对依据时再点开。</p>
           <p>诊断类型四个：利润下降 / 销量下降 / 评分下降 / 费比上升，可在页内随时切换。清单行的「诊断」按钮按问题类型自动映射：利润异常 → 利润下降；广告异常 → 费比上升；评分 / Review / 退货率异常 → 评分下降；断货、库存类告警（运营一览「去诊断」）→ 销量下降。</p>
           <p className="text-[12px] text-foreground-500">评分下降诊断顺序：退货率 +3pp（质量问题）→ 新增评论且降幅 ≥0.2（新差评拉低）→ 按降幅分级（≥0.5 重度 / 0.2~0.5 轻度）。费比上升诊断顺序：销量降 20% 且费比 +5pp（转化下降被动推高）→ 广告花费涨 20% 且销量持平（加投）→ 促销期正常升高 → 涨幅 ≤5pp 波动正常。</p>
+          <SubTitle>流量下滑告警 · 流量/转化分流诊断</SubTitle>
+          <p>「流量下滑」Tab 列出 Sessions 周环比跌幅 ≥30% 的 SKU（≥50% 升级为 Critical）；上期 Sessions 少于 50 的小样本不告警，避免周度波动误报。只要导入了「运营数据表」的 Sessions(近7天/上期)，销量下滑类告警卡上还会自动出现小号 Badge：<strong className="text-red-600">流量端异常</strong>（Sessions 跌、转化稳）或 <strong className="text-red-600">转化端异常</strong>（Sessions 稳、转化跌），一眼分流不用点进去。</p>
+          <p>点「去诊断」进入销量下降诊断后，「归因结论」会直接给出分流判断（流量端 / 转化端 / 双端 / 数据不足）；展开「4 步对比」可看到并排的 Sessions 与 CVR 变化卡片，并按分流结论给出对应的建议动作——流量端查广告投放与关键词排名（Buy Box 是否丢失），转化端查主图 / 差评 / 价格竞争力，双端同时排查下架与类目整体下滑。</p>
+          <p className="text-[12px] text-foreground-500">分流判定的容忍度为 2%：Sessions 或 CVR 的变化幅度不超过 ±2% 视为「稳」。上期数据来自运营数据表的 Sessions(上期)/订单量(上期) 列，没填上期时诊断显示「数据不足」而不瞎猜。</p>
           <SubTitle>对比口径与分享</SubTitle>
           <p>对比口径可选：「本次 vs 上次导入」（默认）、「近7天 / 近14天 / 近30天 vs 前等长区间」、「自定义天数」（1-730 天）、「指定日期区间」（例如 2026-10-19 ~ 2026-10-25，自动与紧邻其前的等长区间对比）。</p>
           <p>所有口径都按「区间 vs 区间」对比，而不是单日快照 vs 单日快照：销量 / 费比 / 退货率 / 评分 / 利润取区间内均值，库存 / 在途 / 覆盖天数取区间最后一天。这样能过滤掉某一天漏导入或单日促销造成的假异常。口径旁会显示本期与上期的实际日期，某一侧区间没有快照时会用琥珀色提示，避免误报。</p>
@@ -265,6 +269,7 @@ export default function GuidePage() {
           <p className="text-[12px] text-foreground-500">海外仓服务商费率支持自定义计价币种：参数中心 → 海外仓费率，每个服务商可填 CAD / EUR 等（留空 = 按站点币种直接录入）。勾选参与比价时，仓储费自动按汇率图换算到当前站点币种；缺对应汇率时按原值计算并在结果中提示。</p>
         </Module>
         <ExampleBox>
+          <p><strong>流量下滑分流</strong>：异常中心「流量下滑」Tab 看到 sku004 Sessions 跌幅过半（Critical）→ 点「诊断」看归因结论「流量端异常」→ 展开对比卡片确认 Sessions 大跌而 CVR 持平 → 按建议动作先查广告投放与 Buy Box，把处理动作记入诊断备注。sku008 则是跌幅 30%~50% 的 Warning 案例。</p>
           <p><strong>SKU 详情排查</strong>：展开「演示产品003」→ 每个 MSKU 行显示各自的评分/广告费比/利润 → 发现 SHOP2-B 评分跌到 4.2 而其他 MSKU 正常 → 点进该 MSKU 详情看退货率变化 → 用「记录操作」留痕「排查差评链接」。</p>
           <p><strong>促销三合一</strong>：Prime Day 前 2 周在「活动管理」建 BD（8 折，10-20 ~ 10-27）→「促销成本」自动估算活动开销 →「时间线」甘特图确认与 LD 不撞期 → 活动期间发货决策自动按活动倍率放大建议量并追加备货天数。</p>
           <p><strong>旺季模拟</strong>：选 Black Friday 场景按 3 倍销量推演 → 看哪些 SKU 出现库存缺口 → 把缺口 SKU 加进补货计划。</p>
@@ -379,6 +384,31 @@ export default function GuidePage() {
           <li><strong>只补不覆盖</strong>：拉取仅补 SKU 标识与销量库存快照，Excel 已录入的 FOB/售价等成本字段不会被覆盖；两种通道数据口径一致，可与 Excel 混用。</li>
           <li><strong>限流</strong>：领星 MCP 工具调用限 100 次/分钟，常规拉取（3 个工具）不会触发。</li>
         </ul>
+        <SubTitle>5.1.9 极简三表模板与自动计算（推荐流程）</SubTitle>
+        <p>旧版 8 张模板已合并精简为 3 张核心表，「数据导入」页可直接打包下载「三表合一」工作簿，按填写频率分频次维护：</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px] border border-background-200 rounded-lg">
+            <thead className="bg-background-100">
+              <tr>
+                <th className="px-3 py-2 text-left">核心表</th>
+                <th className="px-3 py-2 text-left">频率</th>
+                <th className="px-3 py-2 text-left">列（均已极简）</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-background-200">
+              <tr><td className="px-3 py-2 font-semibold">基础档案</td><td className="px-3 py-2">低频 · 填一次</td><td className="px-3 py-2">SKU / MSKU / ASIN / 店铺 / 售价 / FOB / 头程费 / 配送费 / 包裹尺寸重量 / 工厂名</td></tr>
+              <tr><td className="px-3 py-2 font-semibold">库存物流</td><td className="px-3 py-2">中频 · 发货时</td><td className="px-3 py-2">SKU / FBA在库 / FBM库存 / 在途件数 / 目的仓 / 预计到仓</td></tr>
+              <tr><td className="px-3 py-2 font-semibold">运营数据</td><td className="px-3 py-2">高频 · 每周</td><td className="px-3 py-2">SKU(或MSKU) / 7天·30天销量 / Sessions(近7天·上期) / 订单量(近7天·上期)或CVR / 评分 / 评论数 / 广告花费 / 退货率</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul className="list-disc pl-5 space-y-1 mt-2">
+          <li><strong>自动计算</strong>：导入后系统自动算日均销量（7天销量 ÷ 7）、毛利率（售价 − 佣金估 − 配送费 − FOB − 头程费，成本缺失时不算以免虚高）、CVR（订单量 ÷ Sessions）、广告费比（广告花费 ÷ 销售额，旧版「广告费比」列仍直接兼容）。</li>
+          <li><strong>自动关联（Upsert）</strong>：运营数据表通常只填 MSKU——系统用 MSKU 自动匹配基础档案转成内部 SKU 存储；库内存在则更新、不存在则自动新建主档。</li>
+          <li><strong>上期流量快照</strong>：Sessions(上期)/订单量(上期) 自动写入 7 天前的快照行，供流量/转化分流诊断使用；诊断均值会自动跳过这类只含流量的稀疏行，不污染销量统计。</li>
+          <li><strong>少填的字段去哪了</strong>：品名 / 上架日期 / 近7天日均 / 综合表人工拼凑列全部移除——日均系统自己算，品名等属性在「参数中心 → SKU 供应链参数」双击单元格直接改（Lead Time、安全库存等中高频字段同样支持双击编辑，不必导出导入）。</li>
+        </ul>
+        <p className="text-[12px] text-foreground-500">旧版综合运营表 / 单表入口仍保留兼容（导入页「旧版模板」区），列名模糊匹配对新表同样生效：Sessions(近7天) / 本期会话数 / 访客数 均可识别。</p>
         <Module title="5.2 数据健康（/data-health）">
           <p>检查数据导入质量，展示各字段完整度，识别缺失或异常数据。</p>
         </Module>
@@ -387,6 +417,7 @@ export default function GuidePage() {
         </Module>
         <Module title="5.4 参数中心（/settings）">
           <p>供应链参数（Lead Time、安全库存、目标库存）、活动参数、利润率/广告费比/退货率阈值，以及「利润公式」Tab（详见下方）。</p>
+          <p className="text-[12px] text-foreground-500">「SKU 供应链参数」表格支持双击编辑：直接双击 Lead Time / 安全库存单元格改数并回车即保存（Esc 取消），工厂名等档案字段改动频繁的中高频参数不必再走导出导入。</p>
         </Module>
         <SubTitle>5.4.1 常用设置（一般改这些就够了）</SubTitle>
         <p>入口：「参数中心」→「利润公式」Tab。默认按下面的公式计算，多数场景只需动两处：</p>

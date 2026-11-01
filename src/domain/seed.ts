@@ -7,7 +7,7 @@ import { mockPromotions } from "@/mocks/promotions";
 import { MOCK_MANUAL_PROMOTIONS } from "@/mocks/manualPromotions";
 import type { DailySnapshot, InventoryLayer, OpsLog, Shop, Site, TodoItem } from "./types";
 
-export const SEED_FLAG = "seeded_v12";
+export const SEED_FLAG = "seeded_v13";
 
 export const DEMO_SITE_ID = "site_demo";
 
