@@ -8,7 +8,7 @@ import { useNavigate } from "react-router-dom";
 import SiteSwitcher from "./SiteSwitcher";
 import ShopFilter from "./ShopFilter";
 
-export default function Topbar() {
+export default function Topbar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void }) {
   const navigate = useNavigate();
   const [cloud, setCloud] = useState<CloudConfig | null>(null);
   const [saving, setSaving] = useState(false);
@@ -97,8 +97,20 @@ export default function Topbar() {
   const weekLabel = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][today.getDay()];
 
   return (
-    <header className="sticky top-0 z-40 flex h-[52px] shrink-0 items-center gap-3 border-b border-background-200/60 bg-background-50/75 px-6 backdrop-blur-2xl">
-      <div className="flex flex-col leading-tight">
+    <header className="sticky top-0 z-40 flex h-[52px] shrink-0 items-center gap-2 border-b border-background-200/60 bg-background-50/75 px-3 backdrop-blur-2xl sm:gap-3 sm:px-6">
+      {/* 移动端汉堡菜单（<768px 显示） */}
+      {onOpenMobileMenu && (
+        <button
+          type="button"
+          onClick={onOpenMobileMenu}
+          className="apple-btn-ghost inline-flex h-8 w-8 shrink-0 items-center justify-center md:hidden"
+          aria-label="打开导航菜单"
+        >
+          <i className="ri-menu-line text-lg" aria-hidden />
+        </button>
+      )}
+
+      <div className="hidden flex-col leading-tight sm:flex">
         <div className="font-heading text-[14px] font-semibold text-foreground-950 tracking-tight">
           今日运营
         </div>
@@ -108,8 +120,8 @@ export default function Topbar() {
       </div>
 
       <SiteSwitcher />
-        <ShopFilter />
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        <div className="hidden sm:block"><ShopFilter /></div>
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
         <span className="hidden items-center gap-1.5 rounded-full bg-white/50 backdrop-blur-md px-3 py-1 text-[11px] font-medium text-foreground-500 border border-black/5 lg:inline-flex">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent-500" />
           本地已自动保存
@@ -124,7 +136,7 @@ export default function Topbar() {
         <button
           type="button"
           onClick={toggleTheme}
-          className="apple-btn-ghost inline-flex items-center gap-1.5 px-3 py-1.5 whitespace-nowrap"
+          className="apple-btn-ghost inline-flex h-8 w-8 items-center justify-center px-0 whitespace-nowrap md:px-3 md:w-auto"
           title={dark ? "切换到日间模式" : "切换到夜间模式"}
         >
           <i className={dark ? "ri-sun-line" : "ri-moon-line"} aria-hidden />
@@ -134,10 +146,10 @@ export default function Topbar() {
           type="button"
           onClick={handleCloudSave}
           disabled={saving}
-          className="apple-btn-ghost inline-flex items-center gap-1.5 px-3 py-1.5 whitespace-nowrap"
+          className="apple-btn-ghost inline-flex h-8 items-center justify-center gap-1.5 px-2 whitespace-nowrap md:px-3"
         >
           <i className={saving ? "ri-loader-4-line animate-spin" : "ri-cloud-line"} aria-hidden />
-          {cloud ? (saving ? "保存中..." : "云端保存") : "配置云端"}
+          <span className="hidden md:inline">{cloud ? (saving ? "保存中..." : "云端保存") : "配置云端"}</span>
         </button>
 
         <div className="relative" ref={exportMenuRef}>
@@ -145,11 +157,11 @@ export default function Topbar() {
             type="button"
             onClick={() => setShowExportMenu(!showExportMenu)}
             disabled={exporting || exportCsv}
-            className="apple-btn-ghost inline-flex items-center gap-1.5 px-3 py-1.5 whitespace-nowrap"
+            className="apple-btn-ghost inline-flex h-8 items-center justify-center gap-1.5 px-2 whitespace-nowrap md:px-3"
           >
             <i className={exporting || exportCsv ? "ri-loader-4-line animate-spin" : "ri-download-2-line"} aria-hidden />
-            {exporting ? "导出中..." : exportCsv ? "CSV导出中..." : "导出数据"}
-            <i className="ri-arrow-down-s-line text-[10px] ml-0.5" aria-hidden />
+            <span className="hidden md:inline">{exporting ? "导出中..." : exportCsv ? "CSV导出中..." : "导出数据"}</span>
+            <i className="ri-arrow-down-s-line hidden text-[10px] ml-0.5 md:inline" aria-hidden />
           </button>
           {showExportMenu && (
             <div className="absolute right-0 top-full mt-1.5 w-56 rounded-[14px] border border-background-200/60 bg-background-50/85 backdrop-blur-2xl py-1 shadow-lg shadow-black/5 z-50">
@@ -176,17 +188,17 @@ export default function Topbar() {
         <button
           type="button"
           onClick={() => navigate("/import")}
-          className="apple-btn inline-flex items-center gap-1.5 px-4 py-1.5 whitespace-nowrap"
+          className="apple-btn inline-flex h-8 items-center justify-center gap-1.5 px-2.5 whitespace-nowrap md:px-4"
         >
           <i className="ri-upload-2-line" aria-hidden />
-          导入运营表
+          <span className="hidden md:inline">导入运营表</span>
         </button>
       </div>
 
       {toast && (
         <div
           className={[
-            "fixed right-6 top-20 z-50 rounded-[14px] border px-4 py-2.5 text-sm shadow-lg backdrop-blur-xl",
+            "fixed right-4 top-16 z-[60] rounded-[14px] border px-4 py-2.5 text-sm shadow-lg backdrop-blur-xl sm:right-6 sm:top-20",
             toast.tone === "ok"
               ? "border-emerald-200/60 bg-emerald-50/80 text-emerald-700"
               : "border-red-200/60 bg-red-50/80 text-red-600",

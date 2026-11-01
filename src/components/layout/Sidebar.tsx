@@ -193,6 +193,7 @@ export default function Sidebar({
 
       {/* 底部区域 */}
       <div className="border-t border-sidebar-border shrink-0">
+        {!mobile && (
         <button
           type="button"
           onClick={onToggle}
@@ -216,6 +217,7 @@ export default function Sidebar({
             </span>
           )}
         </button>
+        )}
 
         <div className={`px-5 pb-4 overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.25,0.8,0.25,1)] ${
           effectiveExpanded ? "max-h-16 opacity-100" : "max-h-0 opacity-0"
