@@ -15,7 +15,9 @@ import {
   diagnoseRatingDecline,
   diagnoseAdRatioRise,
   type DiagnosisOutput,
+  type ListingAttribution,
 } from "@/domain/diagnose";
+import { getVerdictText } from "@/domain/listingVerdict";
 import {
   resolveComparison,
   shiftDate,
@@ -523,6 +525,10 @@ function DiagnosisResultView({
           {result.reason}
         </div>
         <div className="mt-2 text-[13px] font-medium text-foreground-700">{result.summary}</div>
+        {/* Listing 归因分流结论（销量下降诊断且有数据时展示） */}
+        {result.listing && result.listing.verdict !== "insufficient" && (
+          <ListingVerdictPill listing={result.listing} />
+        )}
         {result.evidence.length > 0 && (
           <ul className="mt-3 space-y-1">
             {result.evidence.map((e, idx) => (
@@ -571,6 +577,10 @@ function DiagnosisResultView({
           </button>
           {stepsOpen && (
             <div className="mt-3 space-y-2">
+              {/* 流量端 vs 转化端 并排对比（销量下降诊断且有数据时展示） */}
+              {result.listing && result.listing.verdict !== "insufficient" && (
+                <ListingCompareCard listing={result.listing} />
+              )}
               {result.steps.map((step, idx) => (
                 <div
                   key={idx}
@@ -626,6 +636,86 @@ function DiagnosisResultView({
           查看 SKU 详情
         </Link>
       </div>
+    </div>
+  );
+}
+
+/* ────────── Listing 分流：结论 Pill + 流量端/转化端并排对比卡 ────────── */
+
+const VERDICT_META: Record<string, { pill: string; icon: string }> = {
+  visibility: { pill: "bg-red-100 text-red-700", icon: "ri-eye-off-line" },
+  detail_page: { pill: "bg-violet-100 text-violet-700", icon: "ri-pages-line" },
+  both: { pill: "bg-red-100 text-red-700", icon: "ri-alert-line" },
+  none: { pill: "bg-emerald-100 text-emerald-700", icon: "ri-shield-check-line" },
+};
+
+/** 归因结论卡内的分流结论胶囊（verdict=insufficient 不渲染） */
+function ListingVerdictPill({ listing }: { listing: ListingAttribution }) {
+  const meta = VERDICT_META[listing.verdict] ?? VERDICT_META.none;
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-bold ${meta.pill}`}>
+        <i className={meta.icon} aria-hidden />
+        分流结论：{getVerdictText(listing.verdict)}
+      </span>
+      <span className="text-[11px] text-foreground-500">Sessions 与 CVR 两期对比见下方「诊断过程」</span>
+    </div>
+  );
+}
+
+/** 「诊断过程」展开区的并排对比：左侧流量端（Sessions），右侧转化端（CVR） */
+function ListingCompareCard({ listing }: { listing: ListingAttribution }) {
+  const { verdict, sessionsCurrent, sessionsPrevious, cvrCurrent, cvrPrevious } = listing;
+  const sDelta = sessionsPrevious && sessionsPrevious > 0 && sessionsCurrent != null
+    ? ((sessionsCurrent - sessionsPrevious) / sessionsPrevious) * 100
+    : null;
+  const cDelta = cvrCurrent != null && cvrPrevious != null ? cvrCurrent - cvrPrevious : null;
+  const fmtN = (v: number | undefined) => (v == null ? "-" : Math.round(v).toLocaleString("zh-CN"));
+  const fmtCvr = (v: number | undefined) => (v == null ? "-" : `${v.toFixed(1)}%`);
+  const deltaCls = (v: number | null) =>
+    v == null ? "text-foreground-400" : v < 0 ? "text-red-600" : v > 0 ? "text-emerald-600" : "text-foreground-500";
+
+  const advice: Record<string, string> = {
+    visibility: "流量端问题：优先检查关键词自然排名、广告投放与 Buy Box 状态",
+    detail_page: "转化端问题：优先检查主图 / 价格 / 差评，并查看退货报告",
+    both: "两端同时下滑：先排除 Listing 下架或类目整体下滑，再分别处理",
+    none: "Sessions 与 CVR 均无明显异常，下滑可能来自其他因素",
+  };
+
+  return (
+    <div className="rounded-lg border border-primary-200/70 bg-primary-50/40 p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <i className="ri-split-lines-2 text-[14px] text-primary-700" aria-hidden />
+        <span className="text-[12px] font-semibold text-foreground-900">流量端 vs 转化端对比（两期快照）</span>
+        <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold ${(VERDICT_META[verdict] ?? VERDICT_META.none).pill}`}>
+          {getVerdictText(verdict)}
+        </span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="rounded-md border border-background-200 bg-background-50 p-2.5">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-foreground-400">流量端 · Sessions</div>
+          <div className="mt-1 text-[15px] font-bold text-foreground-950 mono-num">
+            {fmtN(sessionsPrevious)} → {fmtN(sessionsCurrent)}
+            {sDelta != null && (
+              <span className={`ml-1.5 text-[12px] font-semibold ${deltaCls(sDelta)}`}>
+                （{sDelta > 0 ? "+" : ""}{sDelta.toFixed(1)}%）
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="rounded-md border border-background-200 bg-background-50 p-2.5">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-foreground-400">转化端 · CVR</div>
+          <div className="mt-1 text-[15px] font-bold text-foreground-950 mono-num">
+            {fmtCvr(cvrPrevious)} → {fmtCvr(cvrCurrent)}
+            {cDelta != null && (
+              <span className={`ml-1.5 text-[12px] font-semibold ${deltaCls(cDelta)}`}>
+                （{cDelta > 0 ? "+" : ""}{cDelta.toFixed(1)}pt）
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="mt-2 text-[12px] leading-relaxed text-foreground-600">{advice[verdict] ?? advice.none}</div>
     </div>
   );
 }

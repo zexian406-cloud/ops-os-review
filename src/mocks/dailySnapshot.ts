@@ -1,7 +1,7 @@
 import type { DailySnapshot } from "@/domain/types";
 
 // Latest snapshot for today (通用演示数据)
-export const mockLatestSnapshot: Omit<DailySnapshot, "id" | "date">[] = [
+const mockLatestSnapshotBase: Omit<DailySnapshot, "id" | "date">[] = [
   { sku: "sku001", siteId: "site_demo", dailySales7d: 10.9, monthlySales: 347, stockOnHand: 685, stockInTransit: 376, daysOfCoverOnHand: 63, daysOfCoverWithTransit: 97.6, adSpend: 12.07, adRatio: 46.46, profit: 4.69, profitMargin: 18.06, totalCost: 21.3, rating: 4.5, returnRate: 8 },
   { sku: "sku002", siteId: "site_demo", dailySales7d: 3.0, monthlySales: 153, stockOnHand: 520, stockInTransit: 360, daysOfCoverOnHand: 172.8, daysOfCoverWithTransit: 292.4, adSpend: 7.28, adRatio: 30.35, profit: -0.43, profitMargin: -1.79, totalCost: 24.42, rating: 4.5, returnRate: 0 },
   { sku: "sku003", siteId: "site_demo", dailySales7d: 9.4, monthlySales: 178, stockOnHand: 502, stockInTransit: 245, daysOfCoverOnHand: 53.2, daysOfCoverWithTransit: 79.1, adSpend: 6.42, adRatio: 21.42, profit: -1.87, profitMargin: -6.22, totalCost: 31.86, rating: 4.4, returnRate: 4.55 },
@@ -20,6 +20,23 @@ export const mockLatestSnapshot: Omit<DailySnapshot, "id" | "date">[] = [
   { sku: "sku016", siteId: "site_demo", dailySales7d: 2.7, monthlySales: 87, stockOnHand: 397, stockInTransit: 570, daysOfCoverOnHand: 145.7, daysOfCoverWithTransit: 355.0, adSpend: 51.06, adRatio: 17.61, profit: 53.15, profitMargin: 18.33, totalCost: 236.84, rating: 3.4, returnRate: 5.26, refundRate: 8.62 },
   { sku: "sku017", siteId: "site_demo", dailySales7d: 0.7, monthlySales: 31, stockOnHand: 234, stockInTransit: 99, daysOfCoverOnHand: 323.1, daysOfCoverWithTransit: 459.8, adSpend: 4.14, adRatio: 10.36, profit: -4.65, profitMargin: -11.63, totalCost: 44.64, rating: 4.3, returnRate: 0 },
 ];
+
+/** 演示基准转化率（%）：历史期稳定值；今天的偏离用于制造分流案例（流量端 / 转化端） */
+const BASE_CVR: Record<string, number> = {
+  sku010: 8.6,   // 转化端案例：Sessions 大涨但 CVR 崩（差评/退货场景自洽）
+  sku015: 8.0,   // 流量端案例：Sessions 下跌、CVR 稳定
+};
+
+// 注入演示流量/转化数据（sessions/orders）：orders ≈ 日均销量，sessions 按基准 CVR 派生
+export const mockLatestSnapshot: Omit<DailySnapshot, "id" | "date">[] = mockLatestSnapshotBase.map((s) => {
+  const baseCvr = BASE_CVR[s.sku] ?? 8.5;
+  const orders = s.dailySales7d;
+  let sessions = orders / (baseCvr / 100) * 1.01;      // 默认：两期都稳 → verdict = none
+  if (s.sku === "sku005") sessions = 25;               // 流量端案例：Sessions ~29 → 25（-14%），CVR 稳/升（有库存积压告警可展示 Badge）
+  if (s.sku === "sku010") sessions = orders / 0.03;    // 转化端案例：CVR 8.6% → 3.0%，Sessions 稳/升
+  if (s.sku === "sku015") sessions = 82;               // 流量端案例：Sessions ~101 → 82（-19%），CVR 稳/升
+  return { ...s, orders: Number(orders.toFixed(2)), sessions: Math.round(sessions) };
+});
 
 // 演示案例定向制造：让部分 SKU 在「今天 vs 历史」对比中稳定触发评分/费比异常，
 // 保证演示环境下问题总览与评分/费比诊断始终有可看的内容
@@ -59,6 +76,9 @@ export function buildMockHistory(today: string): DailySnapshot[] {
         totalCost: s.totalCost,
         rating: Math.max(0, Math.min(5, ov.rating ?? s.rating + (Math.random() - 0.5) * 0.1)),
         returnRate: ov.returnRate ?? s.returnRate,
+        // 历史期流量/转化：CVR 恒等于基准转化率（今天的偏离即分流案例）
+        orders: Number(daily.toFixed(2)),
+        sessions: Math.round(daily / ((BASE_CVR[s.sku] ?? 8.5) / 100)),
       });
     }
   }

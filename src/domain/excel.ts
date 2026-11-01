@@ -327,6 +327,7 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
       sales7d: number[]; sales30d: number[];
       rating: number[]; reviewCount: number[]; adRatio: number[];
       returnRate: number[]; refundRate: number[];
+      sessions: number[]; orders: number[];
     }>();
     // FIX: 合并原运营数据导入功能：收集品名/店铺/ASIN/链接信息（first-wins）
     const infoAgg = new Map<string, {
@@ -380,9 +381,12 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
       const adRatio = pct(pickCell(row, c.adRatio));
       const returnRate = pct(pickCell(row, c.returnRate));
       const refundRate = pct(pickCell(row, c.refundRate));
+      // 可选流量/转化字段（业务报告）：会话数 / 订单数 → Listing 分流诊断
+      const sessions = num(pickCell(row, c.sessions));
+      const orders = num(pickCell(row, c.orders));
       // FIX: 收集各 MSKU 的指标值到聚合 Map（而非直接 push 导致同 SKU 多条快照互相覆盖）
       if (!skuAgg.has(sku)) {
-        skuAgg.set(sku, { sales7d: [], sales30d: [], rating: [], reviewCount: [], adRatio: [], returnRate: [], refundRate: [] });
+        skuAgg.set(sku, { sales7d: [], sales30d: [], rating: [], reviewCount: [], adRatio: [], returnRate: [], refundRate: [], sessions: [], orders: [] });
       }
       const agg = skuAgg.get(sku)!;
       agg.sales7d.push(daily7d);
@@ -392,6 +396,8 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
       agg.adRatio.push(adRatio);
       agg.returnRate.push(returnRate);
       agg.refundRate.push(refundRate);
+      agg.sessions.push(sessions);
+      agg.orders.push(orders);
       // FIX: 按 MSKU 行保留独立指标（不取平均）——这是修复"展开列表显示相同数据"的关键
       // MSKU 列可能是逗号分隔多值（如 "BFRS258,BFRS258-GM"），需拆分后分别记录
       // 当 MSKU 为空时，按优先级查找：SKU+店铺 → ASIN → 不记录
@@ -453,6 +459,9 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
       const adRatio = avgNonZero(agg.adRatio);
       const returnRate = avgNonZero(agg.returnRate);
       const refundRate = avgNonZero(agg.refundRate);
+      // 流量/转化为总量：多 MSKU 求和；无数据（列缺失或全 0）时保持 undefined
+      const sessionsTotal = sumArr(agg.sessions);
+      const ordersTotal = sumArr(agg.orders);
       dailySnapshot.push({
         date: today,
         sku,
@@ -472,6 +481,8 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
         reviewCount: reviewCount > 0 ? Math.round(reviewCount) : undefined,
         returnRate: Math.round(returnRate * 100) / 100 || 0,
         refundRate: refundRate > 0 ? Math.round(refundRate * 100) / 100 : undefined,
+        sessions: sessionsTotal > 0 ? Math.round(sessionsTotal) : undefined,
+        orders: ordersTotal > 0 ? Math.round(ordersTotal * 100) / 100 : undefined,
       });
     }
     // FIX: 把各 MSKU 独立指标合并到父 SKU 的 mskuMetrics 字段（保留 Step 1 写入的 price/shippingFee/listPrice）

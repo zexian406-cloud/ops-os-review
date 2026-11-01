@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { db, getCurrentSiteId } from "@/domain/db";
 import { ALERT_TYPE_LABELS, ALERT_TYPE_TO_DIAG } from "@/domain/types";
-import type { Alert, AlertType, SkuMaster, TodoItem } from "@/domain/types";
+import type { Alert, AlertType, ListingVerdict, SkuMaster, TodoItem } from "@/domain/types";
+import { getVerdictText } from "@/domain/listingVerdict";
 
 const SEVERITY_ORDER: Record<Alert["severity"], number> = { critical: 0, warning: 1, info: 2 };
 
@@ -32,6 +33,13 @@ const severityConfig = {
 
 const selectCls =
   "rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] text-foreground-700 focus:border-primary-500 focus:outline-none cursor-pointer";
+
+/** 分流结论 Badge 配色：仅在数据明确（visibility/detail_page/both）时展示 */
+const VERDICT_BADGE: Partial<Record<ListingVerdict, string>> = {
+  visibility: "bg-red-100/80 text-red-700 border-red-200",
+  detail_page: "bg-violet-100/80 text-violet-700 border-violet-200",
+  both: "bg-red-100/80 text-red-700 border-red-200",
+};
 
 /** 每条告警的诊断摘要：对比值 + 归因结论（异常中心「全部异常」清单使用） */
 export interface AlertDiagnostic {
@@ -175,6 +183,14 @@ export default function AlertList({
                 <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-wider ${cfg.badgeClass}`}>
                   {cfg.badge}
                 </span>
+                {a.listingVerdict && VERDICT_BADGE[a.listingVerdict] && (
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${VERDICT_BADGE[a.listingVerdict]}`}
+                    title={`Sessions ${a.sessionsPrevious ?? "-"} → ${a.sessionsCurrent ?? "-"} · CVR ${(a.cvrPrevious ?? 0).toFixed(1)}% → ${(a.cvrCurrent ?? 0).toFixed(1)}%`}
+                  >
+                    {getVerdictText(a.listingVerdict)}
+                  </span>
+                )}
                 <Link
                   to={`/sku/${encodeURIComponent(a.sku)}`}
                   className="text-[12px] font-medium text-foreground-500 hover:text-foreground-900 hover:underline cursor-pointer whitespace-nowrap"

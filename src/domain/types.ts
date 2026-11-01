@@ -144,7 +144,13 @@ export interface DailySnapshot {
   discountTotalCost?: number;
   discountProfit?: number;
   discountMargin?: number;
+  // 流量 & 转化（业务报告字段，可选——用于「流量端 vs 转化端」归因分流）
+  sessions?: number;         // 当期会话数（Sessions）
+  orders?: number;           // 当期订单数（Units Ordered）；CVR = orders / sessions
 }
+
+/** Listing 归因分流结论：销量/转化下降时，定位问题在流量端还是详情页 */
+export type ListingVerdict = "visibility" | "detail_page" | "both" | "none" | "insufficient";
 
 /** 履约计算模式 */
 export type FulfillmentMode = "FBA_ONLY" | "FBM_ONLY" | "FBA_FBM_COMBINED";
@@ -323,6 +329,12 @@ export interface Alert {
   metric?: number;
   suggestion?: string;
   status: "open" | "handled" | "ignored";
+  // Listing 归因分流（展示层动态计算注入，见 domain/listingVerdict.ts；存储层可不落盘）
+  listingVerdict?: ListingVerdict;
+  sessionsCurrent?: number;
+  sessionsPrevious?: number;
+  cvrCurrent?: number;
+  cvrPrevious?: number;
 }
 
 /** 发货建议 */

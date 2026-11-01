@@ -3,8 +3,9 @@
 // 不用 AI，完全基于上次导入 vs 本次导入的快照对比
 // =========================================================
 
-import type { DailySnapshot, GlobalConfig, InventoryLayer, SkuMaster } from "./types";
+import type { DailySnapshot, GlobalConfig, InventoryLayer, ListingVerdict, SkuMaster } from "./types";
 import { computeAll } from "./calculator";
+import { computeListingVerdict, extractListingInput } from "./listingVerdict";
 
 /** 诊断步骤（决策树每一层检查） */
 export interface DiagnosisStep {
@@ -33,6 +34,17 @@ export interface DiagnosisOutput {
   suggestions: string[];
   /** 诊断过程（决策树每一层检查，含命中/未命中标记） */
   steps: DiagnosisStep[];
+  /** Listing 归因分流（仅销量下降诊断注入；数据缺失时 verdict = "insufficient"） */
+  listing?: ListingAttribution;
+}
+
+/** Listing 归因分流数据（流量端 Sessions vs 转化端 CVR） */
+export interface ListingAttribution {
+  verdict: ListingVerdict;
+  sessionsCurrent?: number;
+  sessionsPrevious?: number;
+  cvrCurrent?: number;
+  cvrPrevious?: number;
 }
 
 /** 诊断输入参数 */
@@ -239,6 +251,27 @@ export function diagnoseProfitDecline(input: DiagnosisInput): DiagnosisOutput {
  * 6. 以上都不命中                     → 多因素综合影响
  */
 export function diagnoseSalesDecline(input: DiagnosisInput): DiagnosisOutput {
+  const out = diagnoseSalesDeclineRules(input);
+  if (!out.hasHistory) return out;
+
+  // ── Listing 归因分流：流量端（Sessions）vs 转化端（CVR）──
+  // 快照无 sessions/orders 时 verdict = "insufficient"，不硬造结论
+  const li = extractListingInput(input.latestSnap, input.previousSnap);
+  const verdict = computeListingVerdict(li.sessionsCurrent, li.sessionsPrevious, li.cvrCurrent, li.cvrPrevious);
+  out.listing = { verdict, ...li };
+  // 按分流结论把最可执行的建议动作提到最前
+  if (verdict === "detail_page") {
+    out.suggestions.unshift("检查主图 / 价格 / 差评；查看退货报告");
+  } else if (verdict === "visibility") {
+    out.suggestions.unshift("检查关键词自然排名与广告投放；排查 Buy Box 是否被抢占");
+  } else if (verdict === "both") {
+    out.suggestions.unshift("先排除 Listing 下架或类目整体下滑，再分别检查流量端与转化端");
+  }
+  return out;
+}
+
+/** 销量下降诊断规则本体（决策树），由 diagnoseSalesDecline 包装注入分流结论 */
+function diagnoseSalesDeclineRules(input: DiagnosisInput): DiagnosisOutput {
   const { sku, latestSnap, previousSnap, latestInv, config } = input;
 
   // 无历史数据 → 无法诊断

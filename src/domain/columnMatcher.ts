@@ -81,6 +81,10 @@ export const SYNONYMS: Record<string, string[]> = {
     "退款率（FBM）", "退款率（FBA）", "Refund Rate (FBM)"
   ],
 
+  // ── 流量 / 转化（业务报告字段，用于 Listing 分流诊断）──
+  sessions: ["会话数", "访客数", "Sessions", "sessions", "session", "Session Count", "访问量"],
+  orders: ["订单数", "Orders", "orders", "Units Ordered", "下单量", "订单量"],
+
   // ── 包裹尺寸 / 重量 / 单箱数 ──
   packageLength: ["包裹长cm", "包裹长", "长cm", "length", "包裹长度", "长(cm)"],
   packageWidth: ["包裹宽cm", "包裹宽", "宽cm", "width", "包裹宽度", "宽(cm)"],

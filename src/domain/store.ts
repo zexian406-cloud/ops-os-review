@@ -38,6 +38,7 @@ import {
   type WowDelta,
 } from "./engine";
 import { filterSkuMasterByShop } from "./shopFilter";
+import { attachListingVerdicts } from "./listingVerdict";
 
 const SITE_CHANGE_EVENT = "ops-site-change";
 const SHOP_CHANGE_EVENT = "ops-shop-change";
@@ -241,8 +242,10 @@ export function useOpsData() {
       today,
       defaultCommissionRate: currentSite?.commissionRate,
     });
-    return [...base, ...promotionAlerts];
-  }, [skuMaster, latestSnapshot, latestInventory, manualPromotions, previousSnapshot, config, today, promotionAlerts, currentSite]);
+    const merged = [...base, ...promotionAlerts];
+    // Listing 归因分流：按两期快照动态注入 Sessions/CVR 对比与 verdict（无数据则不注入）
+    return attachListingVerdicts(merged, latestSnapshot, previousSnapshot ?? new Map(), currentSiteId);
+  }, [skuMaster, latestSnapshot, latestInventory, manualPromotions, previousSnapshot, config, today, promotionAlerts, currentSite, currentSiteId]);
 
   useEffect(() => {
     setAlerts(computedAlerts);
