@@ -93,6 +93,8 @@ interface CanvasLayoutProps {
   onResetItemPosition?: (key: string) => void;
   /** 内容变更版本号：父组件递增此值可触发重新测高（如编辑表单展开/折叠） */
   contentVersion?: number;
+  /** 用户手动调整过高度的模块 key（持久化单一数据源，传入后自动测高跳过这些卡片） */
+  manualKeys?: string[];
 }
 
 /**
@@ -134,6 +136,7 @@ export default function CanvasLayout({
   onResetItemSize,
   onResetItemPosition,
   contentVersion = 0,
+  manualKeys,
 }: CanvasLayoutProps) {
   const { width, containerRef, mounted } = useContainerWidth();
 
@@ -161,10 +164,32 @@ export default function CanvasLayout({
   const layoutKey = JSON.stringify(layout);
   useEffect(() => {
     setInternalLayout(layout);
-    // 外部布局变化视为一次重置：清空手动调整记录，重新启用自动测高
-    manuallyResizedRef.current = new Set();
-    setLayoutVersion((v) => v + 1);
-  }, [layoutKey]);
+    if (manualKeys === undefined) {
+      // 未接持久化的调用方：保持原行为——外部变化清空手动调整记录
+      manuallyResizedRef.current = new Set();
+      setLayoutVersion((v) => v + 1);
+      return;
+    }
+    // 接了持久化：手动调整记录以 manualKeys prop 为单一数据源（下方 effect 同步），
+    // 这里只负责触发重测。自己 drag/resize 持久化后的「回声」（父组件把内部布局
+    // 原样存回又传下来）不算外部变化，不触发重测——否则用户刚拖完的高度会被
+    // 自动测高立即改回内容自然高度（表现为紧急告警等长内容卡片松手后弹回）。
+    const cur = internalLayoutRef.current;
+    const isEcho =
+      layout.length === cur.length &&
+      layout.every((l) => {
+        const c = cur.find((x) => x.i === l.i);
+        return !!c && c.x === l.x && c.y === l.y && c.w === l.w && c.h === l.h;
+      });
+    if (!isEcho) setLayoutVersion((v) => v + 1);
+  }, [layoutKey, manualKeys]);
+
+  // 手动调整记录同步：持久化状态（localStorage → prefs → manualKeys）变化时，
+  // 让内部 ref 与之保持一致（用户拖拽完成后 props 回流、重置布局、恢复单个尺寸）。
+  // handleResizeStop 中的 ref.add 只是对回流前的乐观更新，两者最终一致。
+  useEffect(() => {
+    manuallyResizedRef.current = new Set(manualKeys);
+  }, [manualKeys]);
 
   // Safety: never render GridLayout with width=0 — causes all cards to collapse
   const safeWidth = width > 0 ? width : 0;

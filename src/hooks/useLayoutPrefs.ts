@@ -297,10 +297,13 @@ interface LayoutPrefs {
     visible: DashboardSectionKey[];
     kpiSlots: KpiMetricKey[];
     gridLayout: Record<string, GridItemLayout>;
+    /** 用户手动拖拽过高度的模块 key：自动测高跳过这些卡片，尊重手动设定 */
+    manuallyResized?: string[];
   };
   skuDetail: {
     visible: SkuDetailSectionKey[];
     gridLayout: Record<string, GridItemLayout>;
+    manuallyResized?: string[];
   };
   shipment: {
     kpiSlots: ShipmentKpiMetricKey[];
@@ -373,6 +376,12 @@ function sanitizeVisible<T extends string>(visible: T[] | undefined, all: T[]): 
   return out;
 }
 
+/** 清洗手动调整记录：只保留仍存在的模块 key，剔除损坏数据 */
+function sanitizeManualKeys(keys: unknown, all: Record<string, unknown>): string[] {
+  if (!Array.isArray(keys)) return [];
+  return keys.filter((k): k is string => typeof k === "string" && k in all);
+}
+
 function loadPrefs(): LayoutPrefs {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -392,10 +401,12 @@ function loadPrefs(): LayoutPrefs {
           visible: sanitizeVisible(parsed.dashboard?.visible, DEFAULT_DASHBOARD_VISIBLE),
           kpiSlots: parsed.dashboard?.kpiSlots ?? [...DEFAULT_KPI_SLOTS],
           gridLayout: dashboardGrid,
+          manuallyResized: sanitizeManualKeys(parsed.dashboard?.manuallyResized, DEFAULT_DASHBOARD_GRID_LAYOUT),
         },
         skuDetail: {
           visible: sanitizeVisible(parsed.skuDetail?.visible, DEFAULT_SKU_VISIBLE),
           gridLayout: skuGrid,
+          manuallyResized: sanitizeManualKeys(parsed.skuDetail?.manuallyResized, DEFAULT_SKU_GRID_LAYOUT),
         },
         shipment: {
           kpiSlots: parsed.shipment?.kpiSlots ?? [...DEFAULT_SHIPMENT_KPI_SLOTS],
@@ -450,12 +461,16 @@ export function useDashboardLayout() {
   const setGridLayout = useCallback((layout: { i: string; x: number; y: number; w: number; h: number }[]) => {
     setPrefs((prev) => {
       const gridLayout = { ...prev.dashboard.gridLayout };
+      const manual = new Set(prev.dashboard.manuallyResized ?? []);
       for (const item of layout) {
         // Normalize: clamp w >= 1, h >= 1, x >= 0, y >= 0 before saving
         const fallback = DEFAULT_DASHBOARD_GRID_LAYOUT[item.i as DashboardSectionKey] ?? { x: 0, y: 0, w: 12, h: 6 };
-        gridLayout[item.i] = normalizeLayoutItem(item, fallback);
+        const next = normalizeLayoutItem(item, fallback);
+        // 高度发生变化 → 用户手动拖拽过，标记后自动测高将跳过此卡片（拖拽结果不再被弹回）
+        if (gridLayout[item.i] && next.h !== gridLayout[item.i].h) manual.add(item.i);
+        gridLayout[item.i] = next;
       }
-      const next = { ...prev, dashboard: { ...prev.dashboard, gridLayout } };
+      const next = { ...prev, dashboard: { ...prev.dashboard, gridLayout, manuallyResized: [...manual] } };
       savePrefs(next);
       return next;
     });
@@ -464,7 +479,7 @@ export function useDashboardLayout() {
   const reset = useCallback(() => {
     // Completely overwrite — do not merge with existing (potentially corrupted) data
     const next: LayoutPrefs = {
-      dashboard: { visible: [...DEFAULT_DASHBOARD_VISIBLE], kpiSlots: [...DEFAULT_KPI_SLOTS], gridLayout: { ...DEFAULT_DASHBOARD_GRID_LAYOUT } },
+      dashboard: { visible: [...DEFAULT_DASHBOARD_VISIBLE], kpiSlots: [...DEFAULT_KPI_SLOTS], gridLayout: { ...DEFAULT_DASHBOARD_GRID_LAYOUT }, manuallyResized: [] },
       skuDetail: { ...loadPrefs().skuDetail },
       shipment: { ...loadPrefs().shipment },
     };
@@ -478,7 +493,9 @@ export function useDashboardLayout() {
       if (!defaultItem) return prev;
       const current = prev.dashboard.gridLayout[key] ?? { x: 0, y: 0, w: 12, h: 6 };
       const gridLayout = { ...prev.dashboard.gridLayout, [key]: { ...current, w: defaultItem.w, h: defaultItem.h } };
-      const next = { ...prev, dashboard: { ...prev.dashboard, gridLayout } };
+      // 恢复默认尺寸的同时清除手动标记，让自动测高重新接管
+      const manuallyResized = (prev.dashboard.manuallyResized ?? []).filter((k) => k !== key);
+      const next = { ...prev, dashboard: { ...prev.dashboard, gridLayout, manuallyResized } };
       savePrefs(next);
       return next;
     });
@@ -499,6 +516,7 @@ export function useDashboardLayout() {
   const visibleKeys = prefs.dashboard.visible;
   const kpiSlots = prefs.dashboard.kpiSlots;
   const gridLayout = prefs.dashboard.gridLayout;
+  const manuallyResized = prefs.dashboard.manuallyResized ?? [];
 
   return {
     customizing,
@@ -507,6 +525,7 @@ export function useDashboardLayout() {
     setKpiSlot,
     setGridLayout,
     gridLayout,
+    manuallyResized,
     reset,
     resetItemSize,
     resetItemPosition,
@@ -540,7 +559,7 @@ export function useSkuDetailLayout() {
     // Completely overwrite — do not merge with existing (potentially corrupted) data
     const next: LayoutPrefs = {
       dashboard: { ...loadPrefs().dashboard },
-      skuDetail: { visible: [...DEFAULT_SKU_VISIBLE], gridLayout: { ...DEFAULT_SKU_GRID_LAYOUT } },
+      skuDetail: { visible: [...DEFAULT_SKU_VISIBLE], gridLayout: { ...DEFAULT_SKU_GRID_LAYOUT }, manuallyResized: [] },
       shipment: { ...loadPrefs().shipment },
     };
     savePrefs(next);
@@ -550,12 +569,16 @@ export function useSkuDetailLayout() {
   const setGridLayout = useCallback((layout: { i: string; x: number; y: number; w: number; h: number }[]) => {
     setPrefs((prev) => {
       const gridLayout = { ...prev.skuDetail.gridLayout };
+      const manual = new Set(prev.skuDetail.manuallyResized ?? []);
       for (const item of layout) {
         // Normalize: clamp w >= 1, h >= 1, x >= 0, y >= 0 before saving
         const fallback = DEFAULT_SKU_GRID_LAYOUT[item.i as SkuDetailSectionKey] ?? { x: 0, y: 0, w: 12, h: 6 };
-        gridLayout[item.i] = normalizeLayoutItem(item, fallback);
+        const next = normalizeLayoutItem(item, fallback);
+        // 高度发生变化 → 用户手动拖拽过，标记后自动测高将跳过此卡片（拖拽结果不再被弹回）
+        if (gridLayout[item.i] && next.h !== gridLayout[item.i].h) manual.add(item.i);
+        gridLayout[item.i] = next;
       }
-      const next = { ...prev, skuDetail: { ...prev.skuDetail, gridLayout } };
+      const next = { ...prev, skuDetail: { ...prev.skuDetail, gridLayout, manuallyResized: [...manual] } };
       savePrefs(next);
       return next;
     });
@@ -563,6 +586,7 @@ export function useSkuDetailLayout() {
 
   const visibleKeys = prefs.skuDetail.visible;
   const gridLayout = prefs.skuDetail.gridLayout;
+  const manuallyResized = prefs.skuDetail.manuallyResized ?? [];
 
   const resetItemSize = useCallback((key: string) => {
     setPrefs((prev) => {
@@ -570,7 +594,9 @@ export function useSkuDetailLayout() {
       if (!defaultItem) return prev;
       const current = prev.skuDetail.gridLayout[key] ?? { x: 0, y: 0, w: 12, h: 6 };
       const gridLayout = { ...prev.skuDetail.gridLayout, [key]: { ...current, w: defaultItem.w, h: defaultItem.h } };
-      const next = { ...prev, skuDetail: { ...prev.skuDetail, gridLayout } };
+      // 恢复默认尺寸的同时清除手动标记，让自动测高重新接管
+      const manuallyResized = (prev.skuDetail.manuallyResized ?? []).filter((k) => k !== key);
+      const next = { ...prev, skuDetail: { ...prev.skuDetail, gridLayout, manuallyResized } };
       savePrefs(next);
       return next;
     });
@@ -594,6 +620,7 @@ export function useSkuDetailLayout() {
     toggleSection,
     setGridLayout,
     gridLayout,
+    manuallyResized,
     reset,
     resetItemSize,
     resetItemPosition,

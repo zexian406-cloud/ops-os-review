@@ -116,7 +116,7 @@ export default function Dashboard() {
   const {
     customizing, setCustomizing, toggleSection, reset, setKpiSlot,
     visibleKeys, kpiSlots, gridLayout, setGridLayout, allKeys,
-    resetItemSize, resetItemPosition,
+    resetItemSize, resetItemPosition, manuallyResized,
   } = useDashboardLayout();
 
   // ── 构建 ReactGridLayout 布局数组 ──
@@ -901,6 +901,7 @@ export default function Dashboard() {
         onResetItemSize={resetItemSize}
         onResetItemPosition={resetItemPosition}
         contentVersion={contentVersion}
+        manualKeys={manuallyResized}
       >
         {visibleKeys.map((key) => {
           const node = sections[key as DashboardSectionKey];

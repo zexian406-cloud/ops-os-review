@@ -218,7 +218,7 @@ export default function SkuDetail() {
   const {
     customizing, setCustomizing, toggleSection, reset: resetLayout,
     visibleKeys, allKeys, gridLayout, setGridLayout,
-    resetItemSize, resetItemPosition,
+    resetItemSize, resetItemPosition, manuallyResized,
   } = useSkuDetailLayout();
 
   // ── renderedKeys / rglLayout / handleLayoutChange 移至 calc 解构之后定义 ──
@@ -730,6 +730,7 @@ export default function SkuDetail() {
         onResetItemSize={resetItemSize}
         onResetItemPosition={resetItemPosition}
         contentVersion={contentVersion}
+        manualKeys={manuallyResized}
       >
       {/* ═══════ 1. 头部信息 ═══════ */}
       {visibleKeys.includes("header") && (
