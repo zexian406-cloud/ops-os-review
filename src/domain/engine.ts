@@ -23,6 +23,11 @@ import { computeAll, computeWarehouseTotals, computeWeeklyPromoCost } from "./ca
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
+/** Sessions 周环比告警阈值：跌幅 ≥30% 告警（warning），≥50% 升级 critical；上期 <50 Sessions 不告警（小样本噪音） */
+const SESSIONS_DROP_WARN_PCT = 30;
+const SESSIONS_DROP_CRITICAL_PCT = 50;
+const SESSIONS_DROP_MIN_PREV = 50;
+
 export const snapKey = (sku: string, siteId?: string): string =>
   `${sku}__${siteId ?? "site_us"}`;
 
@@ -308,6 +313,34 @@ export function computeAlerts(input: {
           detail: `毛利率 ${calc.grossMargin.toFixed(1)}%，低于阈值 ${config.profitMarginThreshold}%（单件利润 $${calc.grossProfit.toFixed(2)}）`,
           metric: calc.grossMargin,
           suggestion: "检查广告 / 佣金 / 头程成本",
+          status: "open",
+        });
+      }
+    }
+
+    // 2.5 流量下滑 — Sessions 周环比（流量端问题主动告警，而非仅靠销量告警上的被动分流标注）
+    // 上期数据来自极简运营数据表的 Sessions(上期) 稀疏快照行（today-7）。
+    // 阈值远严于分流判定的 2% 容忍度，且要求上期 ≥50 Sessions，规避小样本周度噪音。
+    if (
+      prev &&
+      snap.sessions != null &&
+      prev.sessions != null &&
+      prev.sessions >= SESSIONS_DROP_MIN_PREV &&
+      snap.sessions > 0
+    ) {
+      const sessDelta = ((snap.sessions - prev.sessions) / prev.sessions) * 100;
+      if (sessDelta <= -SESSIONS_DROP_WARN_PCT) {
+        alerts.push({
+          id: uid(),
+          date: today,
+          sku: sku.sku,
+          skuName: sku.name,
+          type: "traffic_drop",
+          severity: sessDelta <= -SESSIONS_DROP_CRITICAL_PCT ? "critical" : "warning",
+          title: `流量下滑 · ${Math.abs(sessDelta).toFixed(0)}%`,
+          detail: `Sessions ${prev.sessions} → ${snap.sessions}（周环比 ${sessDelta.toFixed(0)}%）`,
+          metric: Math.round(sessDelta * 10) / 10,
+          suggestion: "检查广告投放与关键词排名，确认 Buy Box 是否丢失",
           status: "open",
         });
       }

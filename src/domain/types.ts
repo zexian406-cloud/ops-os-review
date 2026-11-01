@@ -285,6 +285,7 @@ export type AlertType =
   | "review"
   | "return"
   | "listing"
+  | "traffic_drop"     // 流量下滑（Sessions 周环比）
   | "promo_start"      // 促销即将开始
   | "promo_end";        // 促销即将到期
 
@@ -301,6 +302,7 @@ export const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   return: "退货异常",
   review: "差评激增",
   listing: "Listing 待优化",
+  traffic_drop: "流量下滑",
   promo_start: "促销即将开始",
   promo_end: "促销即将到期",
 };
@@ -315,6 +317,7 @@ export const ALERT_TYPE_TO_DIAG: Partial<Record<AlertType, "profit" | "sales" | 
   stockout: "sales",
   low_stock: "sales",
   overstock: "sales",
+  traffic_drop: "sales",
 };
 
 export interface Alert {

@@ -307,6 +307,7 @@ export default function Dashboard() {
   }> = [
     { key: "stock", title: "库存风险", icon: "ri-inbox-2-line", tone: "danger", types: ["stockout", "low_stock", "overstock"], href: "/operations?tab=all" },
     { key: "profit", title: "利润异常", icon: "ri-money-dollar-circle-line", tone: "warn", types: ["profit"], href: "/operations?tab=profit" },
+    { key: "traffic", title: "流量下滑", icon: "ri-pulse-line", tone: "danger", types: ["traffic_drop"], href: "/operations?tab=all" },
     { key: "ad", title: "广告异常", icon: "ri-megaphone-line", tone: "primary", types: ["ad"], href: "/operations?tab=ad" },
     { key: "rating", title: "评分下降", icon: "ri-star-half-line", tone: "warn", types: ["rating"], href: "/operations?tab=rating" },
     { key: "return", title: "退货异常", icon: "ri-arrow-go-back-line", tone: "secondary", types: ["return", "review"], href: "/operations?tab=return" },

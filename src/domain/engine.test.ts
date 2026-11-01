@@ -1,0 +1,112 @@
+import { describe, expect, it } from "vitest";
+import { computeAlerts, snapKey } from "./engine";
+import type { Alert, DailySnapshot, GlobalConfig, InventoryLayer, SkuMaster } from "./types";
+
+/** 最小可用配置：阈值取宽松值，确保除 traffic_drop 外不触发其他告警干扰断言 */
+const config = {
+  profitMarginThreshold: 10,
+  adRatioThreshold: 50,
+  ratingDropThreshold: 0.3,
+  returnRateThreshold: 10,
+  defaultLeadTime: 40,
+  defaultSafetyStockDays: 30,
+  defaultTargetCoverDays: 60,
+} as unknown as GlobalConfig;
+
+const sku = {
+  sku: "TSKU-1",
+  name: "测试品",
+  store: "Test Store",
+  siteId: "site_us",
+  price: 39.99,
+  costFob: 5,
+  saleStatus: "active",
+  fulfillment: "FBA",
+} as unknown as SkuMaster;
+
+const snap = (sessions?: number): DailySnapshot =>
+  ({
+    date: "2026-11-01",
+    sku: "TSKU-1",
+    siteId: "site_us",
+    dailySales7d: 7,
+    monthlySales: 210,
+    adRatio: 0,
+    rating: 0,
+    reviewCount: 0,
+    returnRate: 0,
+    refundRate: 0,
+    sessions,
+    orders: 10,
+  }) as unknown as DailySnapshot;
+
+const prevSnap = (sessions?: number): DailySnapshot =>
+  ({ ...snap(sessions), date: "2026-10-25" }) as unknown as DailySnapshot;
+
+const inv = {
+  sku: "TSKU-1",
+  siteId: "site_us",
+  fbaStock: 700,
+  fbmStock: 0,
+  warehouseBreakdown: [],
+} as unknown as InventoryLayer;
+
+const run = (curSessions?: number, prevSessions?: number): Alert[] => {
+  const latestSnapshot = new Map([[snapKey("TSKU-1", "site_us"), snap(curSessions)]]);
+  const previousSnapshot = new Map([[snapKey("TSKU-1", "site_us"), prevSnap(prevSessions)]]);
+  return computeAlerts({
+    skuMaster: [sku],
+    latestSnapshot,
+    latestInventory: new Map([[snapKey("TSKU-1", "site_us"), inv]]),
+    previousSnapshot,
+    config,
+    today: "2026-11-01",
+  });
+};
+
+const traffic = (alerts: Alert[]) => alerts.filter((a) => a.type === "traffic_drop");
+
+describe("computeAlerts · 流量下滑告警（traffic_drop）", () => {
+  it("Sessions 900 → 500（-44%）→ 触发 warning 告警，明细含两期数值", () => {
+    const alerts = traffic(run(500, 900));
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].severity).toBe("warning");
+    expect(alerts[0].title).toBe("流量下滑 · 44%");
+    expect(alerts[0].detail).toBe("Sessions 900 → 500（周环比 -44%）");
+    expect(alerts[0].metric).toBeCloseTo(-44.4, 1);
+  });
+
+  it("跌幅 ≥50% → 升级 critical", () => {
+    const alerts = traffic(run(400, 900));
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].severity).toBe("critical");
+  });
+
+  it("跌幅 10%（低于 30% 阈值）→ 不告警", () => {
+    expect(traffic(run(810, 900))).toHaveLength(0);
+  });
+
+  it("上期 <50 Sessions（小样本）→ 即使跌幅超阈值也不告警", () => {
+    expect(traffic(run(10, 30))).toHaveLength(0);
+  });
+
+  it("本期或上期 Sessions 缺失 → 不告警（等价数据不足）", () => {
+    expect(traffic(run(undefined, 900))).toHaveLength(0);
+    expect(traffic(run(500, undefined))).toHaveLength(0);
+  });
+
+  it("无上期快照 → 不告警", () => {
+    const alerts = computeAlerts({
+      skuMaster: [sku],
+      latestSnapshot: new Map([[snapKey("TSKU-1", "site_us"), snap(500)]]),
+      latestInventory: new Map([[snapKey("TSKU-1", "site_us"), inv]]),
+      config,
+      today: "2026-11-01",
+    });
+    expect(traffic(alerts)).toHaveLength(0);
+  });
+
+  it("Sessions 上升 → 不告警", () => {
+    expect(traffic(run(1200, 900))).toHaveLength(0);
+  });
+});
