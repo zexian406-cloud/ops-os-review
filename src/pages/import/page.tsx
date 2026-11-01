@@ -7,7 +7,7 @@ import { parseOperationExcel, type ImportResult } from "@/domain/excel";
 import { validateImportData, type ValidationResult } from "@/domain/data-health";
 import { buildColumnMap, headersOf, matchColumn, pickCell } from "@/domain/columnMatcher";
 import { applyIncrementalCostUpdate } from "@/domain/cost-merge";
-import { SEED_FLAG } from "@/domain/seed";
+import { SEED_FLAG, ensureSeedData, DEMO_SITE_ID } from "@/domain/seed";
 import {
   clearAllData,
   db,
@@ -289,6 +289,8 @@ export default function ImportPage() {
   const [guideOpen, setGuideOpen] = useState(false);
 
   const [clearModal, setClearModal] = useState(false);
+  // 清空弹窗两阶段：confirm=确认清空 → choice=询问是否加载演示站点
+  const [clearStage, setClearStage] = useState<"confirm" | "choice">("confirm");
   const [clearing, setClearing] = useState(false);
   const [clearMsg, setClearMsg] = useState<string | null>(null);
 
@@ -1187,7 +1189,7 @@ export default function ImportPage() {
     setClearing(true);
     setClearMsg(null);
     try {
-      // 1. 先清空所有表数据（inline 方式，不依赖 clearAllData 函数）
+      // 1. 清空所有表数据（sites 保留真实站点；站点属于参数配置）
       await db.transaction("rw", [
         db.skuMaster, db.dailySnapshot, db.inventoryLayer,
         db.campaigns, db.promotions, db.manualPromotions,
@@ -1209,40 +1211,40 @@ export default function ImportPage() {
           await db.shops.clear();
         }
       );
-      // 2. 设置种子数据标记，防止刷新后自动填充演示数据
+      // 2. 先按「不提供演示」处理：设置种子标记，防止刷新后自动填充演示数据
+      //    （若用户下一步选择加载演示站点，会先删除此标记再种入）
+      //    注意：绝不能 deleteDatabase——删库会把标记一起删掉，刷新后演示数据会复活
       await db.config.put({ key: SEED_FLAG, value: true });
-      // 3. 关闭 Dexie 连接
-      db.close();
-      // 3. 尝试删除数据库（可能被其他标签页阻塞，但不影响结果）
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const req = indexedDB.deleteDatabase('amazon-ops-os');
-          req.onsuccess = () => resolve();
-          req.onerror = () => reject(new Error(req.error?.message ?? '删除失败'));
-          req.onblocked = () => setTimeout(() => reject(new Error('blocked')), 300);
-        });
-      } catch {
-        // 即使 deleteDatabase 被阻塞，clearAllData 已经清空了所有数据
-      }
-      // 4. 刷新页面（数据已清空，刷新后用户看到空状态）
-      setClearMsg("已清空全部数据，即将刷新...");
-      setTimeout(() => window.location.reload(), 500);
+      // 3. 进入选择阶段：由用户决定是否加载演示站点
+      setClearing(false);
+      setClearStage("choice");
+      setClearMsg(null);
     } catch (err) {
-      // clearAllData 本身失败时的兜底方案
-      try {
-        db.close();
-        await new Promise<void>((resolve, reject) => {
-          const req = indexedDB.deleteDatabase('amazon-ops-os');
-          req.onsuccess = () => resolve();
-          req.onerror = () => reject(new Error(req.error?.message ?? '删除失败'));
-          req.onblocked = () => setTimeout(() => reject(new Error('blocked')), 300);
-        });
+      setClearMsg(`清空失败: ${err instanceof Error ? err.message : String(err)}`);
+      setClearing(false);
+    }
+  };
+
+  /* 清空后的选择：是否加载演示站点 */
+  const chooseDemo = async (wantDemo: boolean) => {
+    setClearing(true);
+    setClearMsg(null);
+    try {
+      if (wantDemo) {
+        // 删除「跳过种入」标记后，在空库上种入全量演示数据（独立演示站点，不与真实站点混合），
+        // 并自动切换到演示站点
+        await db.config.delete(SEED_FLAG);
+        await ensureSeedData();
+        setClearMsg("演示数据已加载，即将刷新...");
+      } else {
+        // 保持空数据：移除演示站点，种子标记已设置，刷新后不再出现演示内容
+        await db.sites.delete(DEMO_SITE_ID);
         setClearMsg("已清空全部数据，即将刷新...");
-        setTimeout(() => window.location.reload(), 500);
-      } catch (e) {
-        setClearMsg(`清空失败: ${e instanceof Error ? e.message : String(e)}`);
-        setClearing(false);
       }
+      setTimeout(() => window.location.reload(), 600);
+    } catch (err) {
+      setClearMsg(`操作失败: ${err instanceof Error ? err.message : String(err)}`);
+      setClearing(false);
     }
   };
 
@@ -1718,7 +1720,7 @@ export default function ImportPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setClearModal(true)}
+                  onClick={() => { setClearStage("confirm"); setClearMsg(null); setClearModal(true); }}
                   className="inline-flex items-center gap-1.5 rounded-md border border-background-300/70 bg-background-50 px-4 py-2 text-[13px] font-medium text-foreground-700 hover:bg-background-200 cursor-pointer whitespace-nowrap"
                 >
                   <i className="ri-delete-bin-line" aria-hidden />
@@ -1958,46 +1960,89 @@ export default function ImportPage() {
       </Section>
       </>)}
 
-      {/* ── 清空数据确认弹窗 ── */}
+      {/* ── 清空数据确认弹窗（confirm）→ 是否加载演示站点（choice）── */}
       {clearModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => { if (!clearing) setClearModal(false); }} />
-          <div className="relative w-full max-w-sm rounded-2xl bg-background-50 p-6 shadow-xl">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 mx-auto">
-              <i className="ri-delete-bin-line text-[22px] text-red-500" aria-hidden />
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => { if (!clearing && clearStage === "confirm") setClearModal(false); }}
+          />
+          {clearStage === "confirm" ? (
+            <div className="relative w-full max-w-sm rounded-2xl bg-background-50 p-6 shadow-xl">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 mx-auto">
+                <i className="ri-delete-bin-line text-[22px] text-red-500" aria-hidden />
+              </div>
+              <div className="mt-4 text-center">
+                <h3 className="text-[16px] font-bold text-foreground-950">确定清空所有本地数据？</h3>
+                <p className="mt-2 text-[13px] text-foreground-600">
+                  此操作不可恢复，将清除：<br />
+                  <strong className="text-foreground-900">SKU主档 · 库存快照(历史) · 分仓库存 · 在途批次 · 工厂批次 · 促销活动 · 运营参数 · 海外仓配置 · 新品测算 · 待办事项</strong>
+                </p>
+                {clearMsg && (
+                  <div className={`mt-3 rounded-md border px-3 py-2 text-[12px] ${clearMsg.includes("失败") ? "border-red-200 bg-red-50 text-red-800" : "border-accent-200 bg-accent-100/60 text-accent-900"}`}>
+                    {clearMsg}
+                  </div>
+                )}
+              </div>
+              <div className="mt-5 flex gap-2">
+                <button
+                  type="button"
+                  disabled={clearing}
+                  onClick={() => setClearModal(false)}
+                  className="flex-1 rounded-lg border border-background-200 py-2 text-[13px] font-medium text-foreground-600 hover:bg-background-100 disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  disabled={clearing}
+                  onClick={handleClear}
+                  className="flex-1 rounded-[9px] bg-red-500 py-2 text-[13px] font-semibold text-white hover:bg-red-600 disabled:opacity-60 cursor-pointer whitespace-nowrap"
+                >
+                  <i className={clearing ? "ri-loader-4-line animate-spin mr-1" : "ri-delete-bin-line mr-1"} aria-hidden />
+                  {clearing ? "清空中..." : "确认清空"}
+                </button>
+              </div>
             </div>
-            <div className="mt-4 text-center">
-              <h3 className="text-[16px] font-bold text-foreground-950">确定清空所有本地数据？</h3>
-              <p className="mt-2 text-[13px] text-foreground-600">
-                此操作不可恢复，将清除：<br />
-                <strong className="text-foreground-900">SKU主档 · 库存快照(历史) · 分仓库存 · 在途批次 · 工厂批次 · 促销活动 · 运营参数 · 海外仓配置 · 新品测算 · 待办事项</strong>
-              </p>
-              {clearMsg && (
-                <div className={`mt-3 rounded-md border px-3 py-2 text-[12px] ${clearMsg.includes("失败") ? "border-red-200 bg-red-50 text-red-800" : "border-accent-200 bg-accent-100/60 text-accent-900"}`}>
-                  {clearMsg}
-                </div>
-              )}
+          ) : (
+            <div className="relative w-full max-w-sm rounded-2xl bg-background-50 p-6 shadow-xl">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 mx-auto">
+                <i className="ri-question-line text-[22px] text-primary-700" aria-hidden />
+              </div>
+              <div className="mt-4 text-center">
+                <h3 className="text-[16px] font-bold text-foreground-950">数据已清空，是否加载演示站点？</h3>
+                <p className="mt-2 text-[13px] text-foreground-600">
+                  <strong className="text-foreground-900">加载演示数据</strong>：含示例 SKU、库存快照、促销活动与待办，方便体验各功能；<br />
+                  <strong className="text-foreground-900">保持空数据</strong>：完全空白，直接开始导入你自己的数据。
+                </p>
+                {clearMsg && (
+                  <div className={`mt-3 rounded-md border px-3 py-2 text-[12px] ${clearMsg.includes("失败") ? "border-red-200 bg-red-50 text-red-800" : "border-accent-200 bg-accent-100/60 text-accent-900"}`}>
+                    {clearMsg}
+                  </div>
+                )}
+              </div>
+              <div className="mt-5 flex gap-2">
+                <button
+                  type="button"
+                  disabled={clearing}
+                  onClick={() => chooseDemo(false)}
+                  className="flex-1 rounded-lg border border-background-200 py-2 text-[13px] font-medium text-foreground-600 hover:bg-background-100 disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                >
+                  <i className="ri-file-add-line mr-1" aria-hidden />
+                  {clearing ? "处理中..." : "否，保持空数据"}
+                </button>
+                <button
+                  type="button"
+                  disabled={clearing}
+                  onClick={() => chooseDemo(true)}
+                  className="flex-1 rounded-[9px] bg-primary-600 py-2 text-[13px] font-semibold text-white hover:bg-primary-700 disabled:opacity-60 cursor-pointer whitespace-nowrap"
+                >
+                  <i className={clearing ? "ri-loader-4-line animate-spin mr-1" : "ri-play-circle-line mr-1"} aria-hidden />
+                  {clearing ? "加载中..." : "是，加载演示站点"}
+                </button>
+              </div>
             </div>
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                disabled={clearing}
-                onClick={() => setClearModal(false)}
-                className="flex-1 rounded-lg border border-background-200 py-2 text-[13px] font-medium text-foreground-600 hover:bg-background-100 disabled:opacity-50 cursor-pointer whitespace-nowrap"
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                disabled={clearing}
-                onClick={handleClear}
-                className="flex-1 rounded-[9px] bg-red-500 py-2 text-[13px] font-semibold text-white hover:bg-red-600 disabled:opacity-60 cursor-pointer whitespace-nowrap"
-              >
-                <i className={clearing ? "ri-loader-4-line animate-spin mr-1" : "ri-delete-bin-line mr-1"} aria-hidden />
-                {clearing ? "清空中..." : "确认清空"}
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
