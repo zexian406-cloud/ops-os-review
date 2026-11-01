@@ -1613,6 +1613,15 @@ export default function ImportPage() {
           使用说明
           <i className={guideOpen ? "ri-arrow-up-s-line ml-0.5 text-[10px]" : "ri-arrow-down-s-line ml-0.5 text-[10px]"} aria-hidden />
         </button>
+        {/* 清空本地数据：页面级危险操作，常驻 Tab 栏右侧（所有 Tab 可见） */}
+        <button
+          type="button"
+          onClick={() => { setClearStage("confirm"); setClearMsg(null); setClearModal(true); }}
+          className="ml-0 rounded-full border border-red-200/70 bg-background-50 px-3.5 py-1.5 text-[12px] font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors cursor-pointer whitespace-nowrap"
+        >
+          <i className="ri-delete-bin-line mr-1 text-[13px]" aria-hidden />
+          清空本地数据
+        </button>
       </div>
 
       {/* ── 使用说明 ── */}
@@ -1800,14 +1809,6 @@ export default function ImportPage() {
                 >
                   <i className="ri-file-text-line" aria-hidden />
                   下载 CSV 模板
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setClearStage("confirm"); setClearMsg(null); setClearModal(true); }}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-background-300/70 bg-background-50 px-4 py-2 text-[13px] font-medium text-foreground-700 hover:bg-background-200 cursor-pointer whitespace-nowrap"
-                >
-                  <i className="ri-delete-bin-line" aria-hidden />
-                  清空本地数据
                 </button>
               </div>
             </div>
