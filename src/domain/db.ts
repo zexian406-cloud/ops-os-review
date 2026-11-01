@@ -560,7 +560,7 @@ export async function upsertSkuMasterPartial(rows: SkuMaster[]): Promise<void> {
   const strFields: (keyof SkuMaster)[] = [
     "name", "asin", "upc", "category", "launchDate", "parentGroup",
     "parentAsin", "parentSku", "productUrl", "marketplace", "image",
-    "composeFormula",
+    "composeFormula", "factoryName",
   ];
 
   const merged: SkuMaster[] = coerced.map((row) => {
@@ -681,6 +681,9 @@ export async function upsertSnapshots(rows: DailySnapshot[]): Promise<void> {
         profit: row.profit || old.profit,
         profitMargin: row.profitMargin || old.profitMargin,
         totalCost: row.totalCost || old.totalCost,
+        // 流量/转化字段（新模板 Sessions/订单量）：新值非 0 才覆盖，避免重导入时被旧值或 0 冲掉
+        sessions: row.sessions || old.sessions,
+        orders: row.orders || old.orders,
       });
     } else {
       merged.push(row);

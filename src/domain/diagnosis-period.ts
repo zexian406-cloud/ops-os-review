@@ -57,12 +57,18 @@ export function aggregateSnapshots(rows: DailySnapshot[]): DailySnapshot | undef
   const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
   const last = sorted[sorted.length - 1];
 
+  // 过滤「流量稀疏行」：只写入 Sessions/订单量、销量字段为 0 的占位快照（来自极简模板的上期列）。
+  // 这类行不能参与销量/费比等均值计算，否则会把均值拉成 0。
+  const stat = sorted.filter(
+    (r) => !(r.dailySales7d <= 0 && ((r.sessions ?? 0) > 0 || (r.orders ?? 0) > 0)),
+  );
+
   const avg = (pick: (r: DailySnapshot) => number | undefined): number => {
-    const vals = sorted.map(pick).filter(finite);
+    const vals = stat.map(pick).filter(finite);
     return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0;
   };
   const avgOpt = (pick: (r: DailySnapshot) => number | undefined): number | undefined => {
-    const vals = sorted.map(pick).filter(finite);
+    const vals = stat.map(pick).filter(finite);
     return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : undefined;
   };
   const lastVal = (pick: (r: DailySnapshot) => number | undefined): number => {

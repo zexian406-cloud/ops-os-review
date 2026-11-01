@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
 import { computeWarehouseTotals } from "@/domain/calculator";
@@ -6,8 +6,9 @@ import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
+import InlineEditCell from "@/components/ui/InlineEditCell";
 import ShipmentFormulaSettings from "@/components/layout/ShipmentFormulaSettings";
-import { getShipmentFormulaConfig, getWarehouseAliasMap, WAREHOUSE_MAPPING_EVENT } from "@/domain/db";
+import { getShipmentFormulaConfig, getWarehouseAliasMap, WAREHOUSE_MAPPING_EVENT, db } from "@/domain/db";
 import { DEFAULT_SHIPMENT_FORMULA } from "@/domain/types";
 import type { ShipmentFormulaConfig } from "@/domain/types";
 import {
@@ -34,7 +35,7 @@ const SORT_LABELS: Record<SortMode, string> = {
 };
 
 export default function Shipment() {
-  const { loading, currentSiteId, skuMaster, snapshots, activeCampaigns, config, latestSnapshot, latestInventory } = useOpsData();
+  const { loading, currentSiteId, skuMaster, snapshots, activeCampaigns, config, latestSnapshot, latestInventory, reload } = useOpsData();
   const [filter, setFilter] = useState<"all" | "urgent" | "high" | "normal" | "low">("all");
   const [keyword, setKeyword] = useState("");
   const [formula, setFormula] = useState<ShipmentFormulaConfig>(DEFAULT_SHIPMENT_FORMULA);
@@ -138,6 +139,14 @@ export default function Shipment() {
     }
     return sorted;
   }, [skuMaster, latestSnapshot, latestInventory, shipmentSuggestions, filter, keyword, salesBasis, sortMode, config, formula]);
+
+  // 表内直接编辑：双击修改 LT / 安全库存天数，立即写库并刷新（减少导出→导入循环）
+  const updateSkuParams = useCallback(async (sku: string, patch: { leadTimeDays?: number; safetyStockDays?: number }) => {
+    const cur = await db.skuMaster.get([sku, currentSiteId]);
+    if (!cur) return;
+    await db.skuMaster.put({ ...cur, ...patch });
+    reload();
+  }, [currentSiteId, reload]);
 
   const urgentCount = shipmentSuggestions.filter((s) => s.priority === "urgent").length;
   const totalQty = shipmentSuggestions.reduce((s, r) => s + r.suggestQty, 0);
@@ -333,7 +342,7 @@ export default function Shipment() {
             <EmptyState icon="ri-check-double-line" title="没有匹配的发货建议" desc="调整筛选条件或前往参数中心调整目标库存天数" />
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {skuSuggestions.map((item) => <ShipmentCard key={item.sku.sku} item={item} salesBasis={salesBasis} aliasMap={aliasMap} />)}
+              {skuSuggestions.map((item) => <ShipmentCard key={item.sku.sku} item={item} salesBasis={salesBasis} aliasMap={aliasMap} onUpdateParams={updateSkuParams} />)}
             </div>
           )}
         </Section>
@@ -361,7 +370,7 @@ type ItemType = {
   leadTime: number; safetyDays: number; dynamicThreshold: number;
 };
 
-function ShipmentCard({ item, salesBasis, aliasMap }: { item: ItemType; salesBasis: "7d" | "30d"; aliasMap: Map<string, string> }) {
+function ShipmentCard({ item, salesBasis, aliasMap, onUpdateParams }: { item: ItemType; salesBasis: "7d" | "30d"; aliasMap: Map<string, string>; onUpdateParams?: (sku: string, patch: { leadTimeDays?: number; safetyStockDays?: number }) => Promise<void> }) {
   const sm = item.sku;
   const inv = item.inv;
   const targetProgress = Math.min((item.coverWithTransit / item.target) * 100, 100);
@@ -450,7 +459,21 @@ function ShipmentCard({ item, salesBasis, aliasMap }: { item: ItemType; salesBas
           <div className="rounded-lg bg-background-100/70 px-2.5 py-2 text-center">
             <div className="text-[11px] text-foreground-500 mb-0.5">参考线</div>
             <div className="mono-num text-[18px] font-bold text-foreground-800">{item.dynamicThreshold}</div>
-            <div className="text-[10px] text-foreground-400">LT{item.leadTime}+安全{item.safetyDays}天</div>
+            <div className="text-[10px] text-foreground-400 flex items-center justify-center gap-0.5">
+              <span>LT</span>
+              <InlineEditCell
+                value={item.leadTime}
+                onCommit={(v) => { if (v != null) onUpdateParams?.(item.sku.sku, { leadTimeDays: v }); }}
+                className="!px-0.5 !text-[10px]"
+              />
+              <span>+安全</span>
+              <InlineEditCell
+                value={item.safetyDays}
+                onCommit={(v) => { if (v != null) onUpdateParams?.(item.sku.sku, { safetyStockDays: v }); }}
+                className="!px-0.5 !text-[10px]"
+              />
+              <span>天</span>
+            </div>
           </div>
         </div>
         <div className="relative">

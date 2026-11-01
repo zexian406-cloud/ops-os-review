@@ -3,6 +3,7 @@ import { db, DEFAULT_GLOBAL_CONFIG, getGlobalConfig, setGlobalConfig, getCurrent
 import { setProfitFormulaCache } from "@/domain/calculator";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
+import InlineEditCell from "@/components/ui/InlineEditCell";
 import { COMMON_CURRENCIES, SYMBOL_MAP } from "@/components/layout/SiteManager";
 import type { GlobalConfig, SkuMaster, WarehouseProvider, RateTier, ProfitFormulaConfig, ProfitFormulaKey } from "@/domain/types";
 import { DEFAULT_PROFIT_FORMULA, PROFIT_FORMULA_META } from "@/domain/types";
@@ -330,7 +331,7 @@ export default function Settings() {
 
       {/* SKU params */}
       {tab === "sku" && (
-        <Section title="SKU 供应链参数" icon="ri-truck-line" subtitle="Lead Time / 安全库存 / 生命周期">
+        <Section title="SKU 供应链参数" icon="ri-truck-line" subtitle="Lead Time / 安全库存 / 生命周期 · 双击单元格可直接编辑">
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">
               <thead>
@@ -341,6 +342,7 @@ export default function Settings() {
                   <th className="border-b border-background-200 px-3 py-2.5">生命周期</th>
                   <th className="border-b border-background-200 px-3 py-2.5 text-right">Lead Time</th>
                   <th className="border-b border-background-200 px-3 py-2.5 text-right">安全库存</th>
+                  <th className="border-b border-background-200 px-3 py-2.5">工厂</th>
                   <th className="border-b border-background-200 px-3 py-2.5 text-right">头程 / 配送费 / 产品成本</th>
                 </tr>
               </thead>
@@ -371,20 +373,21 @@ export default function Settings() {
                       </select>
                     </td>
                     <td className="border-b border-background-200/70 px-3 py-2 text-right">
-                      <input
-                        type="number"
+                      <InlineEditCell
                         value={s.leadTimeDays ?? 40}
-                        onChange={(e) => updateSkuField(s.sku, { leadTimeDays: Number(e.target.value) })}
-                        className="w-16 rounded-md border border-background-300/70 bg-background-50 px-2 py-1 text-right text-sm focus:border-primary-500 focus:outline-none"
+                        onCommit={(v) => updateSkuField(s.sku, { leadTimeDays: v })}
+                        suffix="天"
                       />
                     </td>
                     <td className="border-b border-background-200/70 px-3 py-2 text-right">
-                      <input
-                        type="number"
+                      <InlineEditCell
                         value={s.safetyStockDays ?? 30}
-                        onChange={(e) => updateSkuField(s.sku, { safetyStockDays: Number(e.target.value) })}
-                        className="w-16 rounded-md border border-background-300/70 bg-background-50 px-2 py-1 text-right text-sm focus:border-primary-500 focus:outline-none"
+                        onCommit={(v) => updateSkuField(s.sku, { safetyStockDays: v })}
+                        suffix="天"
                       />
+                    </td>
+                    <td className="border-b border-background-200/70 px-3 py-2 text-[12px] text-foreground-500">
+                      {s.factoryName || <span className="text-foreground-400">—</span>}
                     </td>
                     <td className="border-b border-background-200/70 px-3 py-2 text-right">
                       <div className="flex items-center justify-end gap-1 text-[11px] text-foreground-500">

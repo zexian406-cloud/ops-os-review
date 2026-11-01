@@ -82,8 +82,18 @@ export const SYNONYMS: Record<string, string[]> = {
   ],
 
   // ── 流量 / 转化（业务报告字段，用于 Listing 分流诊断）──
-  sessions: ["会话数", "访客数", "Sessions", "sessions", "session", "Session Count", "访问量"],
-  orders: ["订单数", "Orders", "orders", "Units Ordered", "下单量", "订单量"],
+  // 「本期」列：兼容领星/后台的 会话数/订单数，以及极简运营数据表的 Sessions(近7天)/订单量(近7天)
+  sessions: ["会话数", "访客数", "Sessions", "sessions", "session", "Session Count", "访问量", "Sessions(近7天)", "本期Sessions", "本期会话数", "本期访客数", "近7天Sessions"],
+  orders: ["订单数", "Orders", "orders", "Units Ordered", "下单量", "订单量", "订单量(近7天)", "本期订单量", "本期订单数", "近7天订单量"],
+  // 「上期」列：极简运营数据表支持一次填本期+上期，导入时自动写入 today-7 快照供分流对比
+  sessionsPrev: ["Sessions(上期)", "上期Sessions", "上期会话数", "上期访客数", "前7天Sessions", "上期会话"],
+  ordersPrev: ["订单量(上期)", "上期订单量", "上期订单数", "前7天订单量", "上期订单"],
+  // 转化率：填 CVR 不填订单量时，自动反推 订单量 = Sessions × CVR%
+  cvr: ["CVR", "cvr", "转化率", "CVR%(可选)", "CVR%"],
+  // 广告花费（绝对值）。注意不含 "广告费"——避免模糊命中 "广告费比" 列
+  adSpend: ["广告花费", "广告支出", "广告投入", "广告费用", "adSpend", "Ad Spend"],
+  // FBM 库存（极简库存物流表）
+  fbmStock: ["FBM库存", "FBM在库", "fbmStock", "FBM Inventory"],
 
   // ── 包裹尺寸 / 重量 / 单箱数 ──
   packageLength: ["包裹长cm", "包裹长", "长cm", "length", "包裹长度", "长(cm)"],

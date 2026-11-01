@@ -65,6 +65,14 @@ const resolveSiteId = (v: unknown): string | undefined => {
   return undefined;
 };
 
+/** 日期偏移（本地时区安全）：d 为 "YYYY-MM-DD"，n 可为负。避免 toISOString 的 UTC 偏移错一天 */
+const shiftDays = (d: string, n: number): string => {
+  const dt = new Date(`${d}T00:00:00`);
+  dt.setDate(dt.getDate() + n);
+  const p = (x: number) => String(x).padStart(2, "0");
+  return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+};
+
 /** 按前缀匹配 Sheet 名，返回第一个匹配的 Sheet */
 function findSheet(wb: XLSX.WorkBook, names: string[]): XLSX.WorkSheet | undefined {
   return findSheets(wb, names)[0];
@@ -123,7 +131,11 @@ export interface ImportResult {
  * 列名全部走 matchColumn 模糊匹配（规则 H）：领星 / Amazon 后台导出的列名
  * 可能是 FOB / 采购价 / 产品成本 / 含税成本 等，不再写死精确列名。
  */
-export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): ImportResult {
+export function parseOperationExcel(
+  buffer: ArrayBuffer,
+  customDate?: string,
+  opts?: { existingMasters?: SkuMaster[] },
+): ImportResult {
   const wb = XLSX.read(buffer, { type: "array" });
   const today = customDate || new Date().toISOString().slice(0, 10);
 
@@ -140,7 +152,7 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
   // 支持多MSKU：同一SKU出现多次时，首次为父SKU，后续为子MSKU（设groupSku）
   const skuMaster: SkuMaster[] = [];
   const composeMap = new Map<string, string>();
-  const idSheet = findSheet(wb, ["SKU标识符", "SKU标识符(一次性迁移)"]);
+  const idSheet = findSheet(wb, ["SKU标识符", "SKU标识符(一次性迁移)", "基础档案"]);
   const idSheetPresent = !!idSheet;
   if (idSheet) {
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(idSheet, { defval: "" });
@@ -150,7 +162,8 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
         "sku", "msku", "name", "asin", "store", "price", "shippingFee", "fob", "costStorage",
         "fulfillment", "upc", "category", "launchDate", "linkType",
         "packageLength", "packageWidth", "packageHeight", "packageWeight", "unitsPerBox",
-        "productUrl", "competitorUrls", "site", "composeFormula",
+        "productUrl", "competitorUrls", "site", "composeFormula", "factoryName",
+        "shipping", "delivery",
       ],
       idHeaders,
     );
@@ -188,6 +201,11 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
       const competitorUrls = competitorUrlsRaw
         ? competitorUrlsRaw.split(/[\n;；|]+/).map((s) => s.trim()).filter(Boolean)
         : undefined;
+      // 极简基础档案表：默认工厂名（仅首次记录，后续行不覆盖）
+      const factoryNameVal = str(pickCell(row, c.factoryName)) || undefined;
+      // 极简基础档案表：头程费/配送费（成本侧，旧 SKU标识符表无此两列，由头程更新 Sheet 提供）
+      const costShippingVal = num(pickCell(row, c.shipping)) > 0 ? num(pickCell(row, c.shipping)) : undefined;
+      const costDeliveryVal = num(pickCell(row, c.delivery)) > 0 ? num(pickCell(row, c.delivery)) : undefined;
 
       if (!seenSku.has(sku)) {
         // 首次出现 → 父SKU
@@ -211,10 +229,13 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
           unitsPerBox,
           costFob,
           costStorage,
+          costShipping: costShippingVal,
+          costDelivery: costDeliveryVal,
           fulfillment,
           linkType,
           saleStatus: "active",
           productUrl,
+          factoryName: factoryNameVal,
           competitorUrls: competitorUrls && competitorUrls.length > 0 ? competitorUrls : undefined,
         };
         // 父行 MSKU 也按行保留店铺（多 MSKU 场景各店铺不同）
@@ -244,6 +265,8 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
           recordMskuPrice(existing, msku, price, shippingFee, listPrice);
           // FIX: 各 MSKU 独立链接类型：按行保留到 mskuLinkTypes（首次出现为准）
           recordMskuLinkType(existing, msku, linkType);
+          // 极简基础档案表：工厂名仅补空，不覆盖已有值
+          if (!existing.factoryName && factoryNameVal) existing.factoryName = factoryNameVal;
           // 父级 store 回填：首行店铺为空/占位（'-'）时，用后续行的店铺补齐
           if ((!existing.store || existing.store === "-") && store && store !== "-") {
             existing.store = store;
@@ -257,6 +280,9 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
           if (!existing.launchDate && launchDate) existing.launchDate = launchDate;
           if (existing.costFob == null && costFob != null) existing.costFob = costFob;
           if (!existing.costStorage && costStorage) existing.costStorage = costStorage;
+          // 极简基础档案表：头程费/配送费仅补空，不覆盖已有值（头程更新 Sheet 优先）
+          if (existing.costShipping == null && costShippingVal != null) existing.costShipping = costShippingVal;
+          if (existing.costDelivery == null && costDeliveryVal != null) existing.costDelivery = costDeliveryVal;
           if (!existing.fulfillment && fulfillment) existing.fulfillment = fulfillment;
           if (!existing.unitsPerBox && unitsPerBox) existing.unitsPerBox = unitsPerBox;
           if (!existing.packageLength && packageLength) existing.packageLength = packageLength;
@@ -279,7 +305,7 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
   // 兼容"销量导入"、"周销量导入"、"运营数据导入"三张Sheet（新旧模板）。
   // FIX: 若文件同时含"销量导入"+"运营数据导入"，需合并两者：销量/链接来自前者，
   //      ACoAS广告费比/退款率/退货率/评分/评论数/品名来自后者——只读一张会丢字段（广告费比恒0）。
-  const salesSheets = findSheets(wb, ["销量导入", "周销量导入", "运营数据导入"]);
+  const salesSheets = findSheets(wb, ["销量导入", "周销量导入", "运营数据导入", "运营数据"]);
   const salesSheetPresent = salesSheets.length > 0;
   if (salesSheets.length > 0) {
     const rows: Record<string, unknown>[] = [];
@@ -287,14 +313,50 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
       rows.push(...XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" }));
     }
     const salesHeaders = headersOf(rows);
-    // 合并原运营数据导入的独有字段：name(品名)、productUrl(产品链接)、competitorUrls(竞品链接)
-    const c = buildColumnMap(
-      ["sku", "msku", "asin", "store", "sales7d", "sales30d", "rating", "reviewCount", "adRatio", "returnRate", "refundRate", "name", "productUrl", "competitorUrls"],
-      salesHeaders,
+    // 「上期」列先映射并占为己有（排除法）：防止 sessions/orders 的 "Sessions"/"订单量" 同义词
+    // 模糊命中 "Sessions(上期)"/"订单量(上期)" 列，导致本期/上期串列
+    const cP = buildColumnMap(["sessionsPrev", "ordersPrev"], salesHeaders);
+    const claimedPrev = new Set(
+      [cP.sessionsPrev, cP.ordersPrev].filter((x): x is string => !!x),
     );
+    const restHeaders = salesHeaders.filter((h) => !claimedPrev.has(h));
+    // 合并原运营数据导入的独有字段：name(品名)、productUrl(产品链接)、competitorUrls(竞品链接)
+    // 极简运营数据表新增：sessions/orders(本期)、cvr(转化率反推订单量)、adSpend(广告花费)
+    const c = buildColumnMap(
+      ["sku", "msku", "asin", "store", "sales7d", "sales30d", "rating", "reviewCount", "adRatio", "returnRate", "refundRate", "name", "productUrl", "competitorUrls", "sessions", "orders", "cvr", "adSpend"],
+      restHeaders,
+    );
+    noteCols(cP);
     noteCols(c);
+    // 防误判：若 adSpend 命中的是 "广告花费占比" 这类费比列（旧文件），改判为 adRatio
+    if (c.adSpend && !c.adRatio && /占比|费比|ratio|%/i.test(c.adSpend)) {
+      c.adRatio = c.adSpend;
+      c.adSpend = undefined;
+    }
+    // 防误判（反向）：adRatio 同义词 "广告花费占比" 模糊包含 "广告花费" 表头，
+    // 极简运营数据表只有花费列时 adRatio 会误命中同列。两字段命中同列时按表头语义裁决：
+    // 含 占比/费比/ratio 标记 → 费比列；否则 → 花费列
+    if (c.adRatio && c.adSpend && c.adRatio === c.adSpend) {
+      if (/占比|费比|ratio|%/i.test(c.adRatio)) {
+        c.adSpend = undefined;
+      } else {
+        c.adRatio = undefined;
+      }
+    }
     // FIX: 构建 msku → sku 反查映射（当表中只有 MSKU 列时用）
     const mskuToSku = new Map<string, string>();
+    // 极简运营数据表通常只有 MSKU：额外用数据库已有主档反查（调用方传入 existingMasters）
+    const existingMskuToSku = new Map<string, string>();
+    for (const s of opts?.existingMasters ?? []) {
+      if (s.msku) {
+        for (const m of s.msku.split(",")) {
+          const trimmed = m.trim();
+          if (trimmed) existingMskuToSku.set(trimmed, s.sku);
+        }
+      }
+      if (s.mskuStores) for (const ms of Object.keys(s.mskuStores)) existingMskuToSku.set(ms, s.sku);
+      if (s.mskuMetrics) for (const ms of Object.keys(s.mskuMetrics)) existingMskuToSku.set(ms, s.sku);
+    }
     // FIX: 构建 ASIN → 子记录 sku 映射（MSKU 为空时按 ASIN 关联独立指标）
     const asinToChildSku = new Map<string, string>();
     // FIX: 构建 SKU|店铺 → MSKU 映射（MSKU为空时用店铺匹配，这是最可靠的匹配方式）
@@ -328,6 +390,7 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
       rating: number[]; reviewCount: number[]; adRatio: number[];
       returnRate: number[]; refundRate: number[];
       sessions: number[]; orders: number[];
+      sessionsPrev: number[]; ordersPrev: number[]; adSpend: number[];
     }>();
     // FIX: 合并原运营数据导入功能：收集品名/店铺/ASIN/链接信息（first-wins）
     const infoAgg = new Map<string, {
@@ -342,13 +405,20 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
     for (const row of rows) {
       let sku = str(pickCell(row, c.sku));
       const msku = str(pickCell(row, c.msku));
-      // FIX: 当 sku 为空时，用 msku 反查父 SKU
+      // FIX: 当 sku 为空时，用 msku 反查父 SKU（先查本文件主档，再查数据库已有主档）
       if (!sku && msku) {
-        sku = mskuToSku.get(msku) ?? "";
+        sku = mskuToSku.get(msku) ?? existingMskuToSku.get(msku) ?? "";
       }
       // FIX: 当 sku 实际是 MSKU 编码时（销量导入表中 SKU 列可能存的是 MSKU 而非家族码），反查父 SKU
       if (sku && mskuToSku.has(sku)) {
         sku = mskuToSku.get(sku)!;
+      }
+      // Upsert 兜底「不存在则新增」：MSKU 在本文件和数据库都匹配不上时，
+      // 以 MSKU 作为内部 SKU 自动建档（后续基础档案/标识符导入可补全属性）
+      if (!sku && msku) {
+        sku = msku;
+        skuMaster.push({ sku, name: msku, store: "-", price: 0, saleStatus: "active", fulfillment: "FBM", msku });
+        existingMskuToSku.set(msku, sku);
       }
       if (!sku) continue;
       // 合并原运营数据导入：收集品名/店铺/ASIN/链接（first-wins）
@@ -381,12 +451,22 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
       const adRatio = pct(pickCell(row, c.adRatio));
       const returnRate = pct(pickCell(row, c.returnRate));
       const refundRate = pct(pickCell(row, c.refundRate));
-      // 可选流量/转化字段（业务报告）：会话数 / 订单数 → Listing 分流诊断
+      // 可选流量/转化字段（业务报告）：本期会话数 / 订单数 → Listing 分流诊断。
+      // 仅填 CVR 不填订单量时自动反推：订单量 = Sessions × CVR%（CVR% Excel 存小数 0.082 → pct() 转 8.2）
       const sessions = num(pickCell(row, c.sessions));
-      const orders = num(pickCell(row, c.orders));
+      const cvrPct = pct(pickCell(row, c.cvr));
+      const ordersRaw = num(pickCell(row, c.orders));
+      const orders = ordersRaw > 0
+        ? ordersRaw
+        : (cvrPct > 0 && sessions > 0 ? Math.round(sessions * (cvrPct / 100) * 100) / 100 : 0);
+      // 上期流量/转化（极简运营数据表）：写入 today-7 稀疏快照，供「本期 vs 上期」分流对比
+      const sessionsPrev = num(pickCell(row, cP.sessionsPrev));
+      const ordersPrev = num(pickCell(row, cP.ordersPrev));
+      // 广告花费（绝对值）：本期行聚合后按 7天销量×售价 近似折算费比
+      const adSpendVal = num(pickCell(row, c.adSpend));
       // FIX: 收集各 MSKU 的指标值到聚合 Map（而非直接 push 导致同 SKU 多条快照互相覆盖）
       if (!skuAgg.has(sku)) {
-        skuAgg.set(sku, { sales7d: [], sales30d: [], rating: [], reviewCount: [], adRatio: [], returnRate: [], refundRate: [], sessions: [], orders: [] });
+        skuAgg.set(sku, { sales7d: [], sales30d: [], rating: [], reviewCount: [], adRatio: [], returnRate: [], refundRate: [], sessions: [], orders: [], sessionsPrev: [], ordersPrev: [], adSpend: [] });
       }
       const agg = skuAgg.get(sku)!;
       agg.sales7d.push(daily7d);
@@ -398,6 +478,9 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
       agg.refundRate.push(refundRate);
       agg.sessions.push(sessions);
       agg.orders.push(orders);
+      agg.sessionsPrev.push(sessionsPrev);
+      agg.ordersPrev.push(ordersPrev);
+      agg.adSpend.push(adSpendVal);
       // FIX: 按 MSKU 行保留独立指标（不取平均）——这是修复"展开列表显示相同数据"的关键
       // MSKU 列可能是逗号分隔多值（如 "BFRS258,BFRS258-GM"），需拆分后分别记录
       // 当 MSKU 为空时，按优先级查找：SKU+店铺 → ASIN → 不记录
@@ -462,6 +545,30 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
       // 流量/转化为总量：多 MSKU 求和；无数据（列缺失或全 0）时保持 undefined
       const sessionsTotal = sumArr(agg.sessions);
       const ordersTotal = sumArr(agg.orders);
+      const sessionsPrevTotal = sumArr(agg.sessionsPrev);
+      const ordersPrevTotal = sumArr(agg.ordersPrev);
+      const adSpendTotal = sumArr(agg.adSpend);
+      // ── 自动计算：毛利率（近似口径）──
+      // 毛利率 = (售价 − 佣金估 − 配送费 − FOB − 头程费) / 售价；佣金缺省按佣金率(默认15%)估算。
+      // 仅当售价和任一成本项(FOB/配送费)有效时计算，避免只有售价时算出虚高 100%。
+      const master = skuMaster.find((s) => s.sku === sku);
+      const priceVal = num(master?.price);
+      let profitEst = 0, marginEst = 0, costEst = 0;
+      if (priceVal > 0 && (num(master?.costFob) > 0 || num(master?.costDelivery) > 0)) {
+        const commission = num(master?.costCommission) > 0
+          ? num(master?.costCommission)
+          : priceVal * (num(master?.commissionRate) > 0 ? num(master?.commissionRate) : 15) / 100;
+        costEst = commission + num(master?.costDelivery) + num(master?.costFob) + num(master?.costShipping);
+        profitEst = Math.round((priceVal - costEst) * 100) / 100;
+        marginEst = Math.round((profitEst / priceVal) * 1000) / 10;
+      }
+      // ── 自动计算：广告花费 → 费比（近似）──
+      // 费比 ≈ 广告花费 / (7天销量 × 售价) × 100；Excel 已填费比列时以填写的为准
+      const adRatioFinal = adRatio > 0
+        ? adRatio
+        : (adSpendTotal > 0 && priceVal > 0 && daily7d > 0
+          ? Math.round((adSpendTotal / (daily7d * 7 * priceVal)) * 10000) / 100
+          : 0);
       dailySnapshot.push({
         date: today,
         sku,
@@ -472,11 +579,12 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
         stockInTransit: 0,
         daysOfCoverOnHand: daily7d > 0 ? Number((0 / daily7d).toFixed(1)) : Infinity,
         daysOfCoverWithTransit: daily7d > 0 ? Number((0 / daily7d).toFixed(1)) : Infinity,
-        adSpend: 0,
-        adRatio: Math.round(adRatio * 100) / 100 || 0,
-        profit: 0,
-        profitMargin: 0,
-        totalCost: 0,
+        adSpend: adSpendTotal > 0 ? Math.round(adSpendTotal * 100) / 100 : 0,
+        adRatio: Math.round(adRatioFinal * 100) / 100 || 0,
+        profit: profitEst,
+        profitMargin: marginEst,
+        profitSource: profitEst !== 0 ? "ESTIMATED" : undefined,
+        totalCost: Math.round(costEst * 100) / 100,
         rating: Math.round(rating * 10) / 10 || 0,
         reviewCount: reviewCount > 0 ? Math.round(reviewCount) : undefined,
         returnRate: Math.round(returnRate * 100) / 100 || 0,
@@ -484,6 +592,29 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
         sessions: sessionsTotal > 0 ? Math.round(sessionsTotal) : undefined,
         orders: ordersTotal > 0 ? Math.round(ordersTotal * 100) / 100 : undefined,
       });
+      // ── 上期快照（稀疏行）：仅含 Sessions/订单量，写入 today-7 ──
+      // 供「销量下滑分流」本期 vs 上期对比；销量字段保持 0（诊断均值会跳过这类稀疏行）
+      if (sessionsPrevTotal > 0 || ordersPrevTotal > 0) {
+        dailySnapshot.push({
+          date: shiftDays(today, -7),
+          sku,
+          dailySales7d: 0,
+          monthlySales: 0,
+          stockOnHand: 0,
+          stockInTransit: 0,
+          daysOfCoverOnHand: Infinity,
+          daysOfCoverWithTransit: Infinity,
+          adSpend: 0,
+          adRatio: 0,
+          profit: 0,
+          profitMargin: 0,
+          totalCost: 0,
+          rating: 0,
+          returnRate: 0,
+          sessions: sessionsPrevTotal > 0 ? Math.round(sessionsPrevTotal) : undefined,
+          orders: ordersPrevTotal > 0 ? Math.round(ordersPrevTotal * 100) / 100 : undefined,
+        });
+      }
     }
     // FIX: 把各 MSKU 独立指标合并到父 SKU 的 mskuMetrics 字段（保留 Step 1 写入的 price/shippingFee/listPrice）
     for (const [sku, metrics] of mskuMetricsAgg) {
@@ -636,6 +767,37 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
     }
   }
 
+  // ── Step 7.5: Parse 库存物流（极简模板）→ fbaMap / fbmMap / transitBatches ──
+  // 新模板「库存物流表」：SKU, FBA在库, FBM库存, 在途件数, 目的仓, 预计到仓
+  const fbmMap = new Map<string, number>();
+  const logisticsSheet = findSheet(wb, ["库存物流"]);
+  if (logisticsSheet) {
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(logisticsSheet, { defval: "" });
+    const c = buildColumnMap(["sku", "fbaStock", "fbmStock", "qty", "dest", "etaDate"], headersOf(rows));
+    noteCols(c);
+    for (const row of rows) {
+      const sku = str(pickCell(row, c.sku));
+      if (!sku) continue;
+      const fbaVal = num(pickCell(row, c.fbaStock));
+      const fbmVal = num(pickCell(row, c.fbmStock));
+      if (fbaVal > 0 && !fbaMap.has(sku)) fbaMap.set(sku, fbaVal);
+      if (fbmVal > 0 && !fbmMap.has(sku)) fbmMap.set(sku, fbmVal);
+      const qtyVal = num(pickCell(row, c.qty));
+      if (qtyVal > 0) {
+        const dest = str(pickCell(row, c.dest));
+        const list = transitBatches.get(sku) ?? [];
+        list.push({
+          warehouse: dest || "在途",
+          qty: qtyVal,
+          etaDate: str(pickCell(row, c.etaDate)),
+          shipMethod: "sea",
+          status: "in_transit",
+        });
+        transitBatches.set(sku, list);
+      }
+    }
+  }
+
   // ── Step 8: 组合款成本自动累加（组合公式: 组件A×数量+组件B×数量）──
   // 公式语法：组件用 SKU 编码（如 "BFEXA72-51-A×1"），也支持数字字面量直接写固定成本
   // （如 "25.64" = 组件固定 FOB，无需为组件单独建 SKU）。
@@ -690,12 +852,13 @@ export function parseOperationExcel(buffer: ArrayBuffer, customDate?: string): I
   for (const sku of warehouseMap.keys()) allSkus.add(sku);
   for (const sku of transitBatches.keys()) allSkus.add(sku);
   for (const sku of factoryBatches.keys()) allSkus.add(sku);
+  for (const sku of fbmMap.keys()) allSkus.add(sku);
 
   const inventoryLayer: InventoryLayer[] = [];
   for (const sku of allSkus) {
     const fba = fbaMap.get(sku) ?? 0;
     const warehouses = warehouseMap.get(sku);
-    const fbm = warehouses ? warehouses.reduce((s, w) => s + w.qty, 0) : 0;
+    const fbm = warehouses ? warehouses.reduce((s, w) => s + w.qty, 0) : (fbmMap.get(sku) ?? 0);
     const tb = transitBatches.get(sku);
     const fb = factoryBatches.get(sku);
     const factoryQty = fb ? fb.reduce((s, b) => s + b.qty, 0) : 0;

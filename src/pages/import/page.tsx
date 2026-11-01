@@ -89,6 +89,13 @@ const RECOGNITION_FIELDS: { key: string; label: string }[] = [
   { key: "store", label: "店铺" },
   { key: "sales7d", label: "近7天销量" },
   { key: "sales30d", label: "近30天销量" },
+  { key: "sessions", label: "Sessions(本期)" },
+  { key: "sessionsPrev", label: "Sessions(上期)" },
+  { key: "orders", label: "订单量(本期)" },
+  { key: "ordersPrev", label: "订单量(上期)" },
+  { key: "cvr", label: "CVR" },
+  { key: "adSpend", label: "广告花费" },
+  { key: "factoryName", label: "工厂名" },
   { key: "fulfillment", label: "发货方式" },
   { key: "costStorage", label: "仓租" },
   { key: "asin", label: "ASIN" },
@@ -97,13 +104,38 @@ const RECOGNITION_FIELDS: { key: string; label: string }[] = [
 /* ────────── 模板生成 ────────── */
 const autoCols = (headers: string[]) => headers.map((h) => ({ wch: Math.max(10, Math.min(28, h.length * 2.2 + 2)) }));
 
-const downloadTemplate = (name: string, headers: string[], exampleRow: (string | number)[], dataValidations?: Record<string, unknown>[]) => {
+const downloadTemplate = (name: string, headers: string[], exampleRow: (string | number)[], dataValidations?: Record<string, unknown>[], sheetName = "Sheet1") => {
   const sheet = XLSX.utils.aoa_to_sheet([headers, exampleRow]);
   if (dataValidations) sheet["!dataValidations"] = dataValidations;
   sheet["!cols"] = autoCols(headers);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheet, "Sheet1");
+  XLSX.utils.book_append_sheet(wb, sheet, sheetName);
   XLSX.writeFile(wb, `【模板】${name}.xlsx`);
+};
+
+/* ────────── 极简三表模板（推荐，替代旧 8 模板） ────────── */
+// 基础档案表（低频填一次）：SKU/MSKU/ASIN/店铺/售价/FOB/头程费/配送费/包裹尺寸重量/工厂名
+const BASIC_HEADERS = ["SKU", "MSKU", "ASIN", "店铺", "售价", "FOB", "头程费", "配送费", "包裹长cm", "包裹宽cm", "包裹高cm", "包裹重kg", "工厂名"];
+// 库存物流表（中频发货时填）：SKU/FBA在库/FBM库存/在途件数/目的仓/预计到仓
+const LOGI_HEADERS = ["SKU", "FBA在库", "FBM库存", "在途件数", "目的仓", "预计到仓"];
+// 运营数据表（高频填）：销量 + Sessions/订单量（近7天+上期，供流量/转化分流诊断）
+const OPS_HEADERS = ["SKU", "MSKU", "7天销量", "30天销量", "Sessions(近7天)", "订单量(近7天)", "Sessions(上期)", "订单量(上期)", "CVR%(可选)", "评分", "评论数", "广告花费", "退货率"];
+
+const tmplBasic = () => downloadTemplate("基础档案表", BASIC_HEADERS, ["BFRS258", "BFRS258-GM", "B0GC3HFWHP", "BIFULISAN Store", 39.99, 28.5, 12.3, 4.56, 30, 25, 20, 1.2, "东莞美联"], undefined, "基础档案");
+const tmplLogistics = () => downloadTemplate("库存物流表", LOGI_HEADERS, ["BFRS258", 186, 180, 80, "美西", "2026-08-05"], undefined, "库存物流");
+const tmplOps = () => downloadTemplate("运营数据表", OPS_HEADERS, ["BFRS258", "BFRS258-GM", 24, 102, 1200, 24, 1350, 30, 2.0, 4.2, 156, 45.6, 3.2], undefined, "运营数据");
+
+const tmplCore3 = () => {
+  const wb = XLSX.utils.book_new();
+  const mk = (name: string, headers: string[], row: (string | number)[]) => {
+    const s = XLSX.utils.aoa_to_sheet([headers, row]);
+    s["!cols"] = autoCols(headers);
+    XLSX.utils.book_append_sheet(wb, s, name);
+  };
+  mk("基础档案", BASIC_HEADERS, ["BFRS258", "BFRS258-GM", "B0GC3HFWHP", "BIFULISAN Store", 39.99, 28.5, 12.3, 4.56, 30, 25, 20, 1.2, "东莞美联"]);
+  mk("库存物流", LOGI_HEADERS, ["BFRS258", 186, 180, 80, "美西", "2026-08-05"]);
+  mk("运营数据", OPS_HEADERS, ["BFRS258", "BFRS258-GM", 24, 102, 1200, 24, 1350, 30, 2.0, 4.2, 156, 45.6, 3.2]);
+  XLSX.writeFile(wb, "【模板】三表合一.xlsx");
 };
 
 /* ────────── 略 ────────── */
@@ -175,15 +207,21 @@ const tmplIdentifiers = () =>
   ]);
 
 /* ────────── 标签页配置 ────────── */
+/* 极简三表（维度1 模板瘦身）：运营数据 / 库存物流 / 基础档案 / 三表合一；
+   旧 8 模板保留为 legacy 折叠入口，不删代码，兼容历史文件。 */
 const tabDefs = [
-  { key: "bundle", label: "综合运营表", icon: "ri-file-excel-2-line", freq: "首次", desc: "一键下载全部 7 个 Sheet · 周销量(含品名/链接) / FBA / 仓库 / 在途 / 工厂 / 头程 / SKU", tmpl: tmplBundle },
-  { key: "sales", label: "周销量", icon: "ri-bar-chart-line", freq: "每周", desc: "SKU · 近7天日均 · 近30天销量", tmpl: tmplSales },
-  { key: "fba", label: "FBA 库存明细", icon: "ri-archive-line", freq: "每周", desc: "SKU · FBA 在库数量", tmpl: tmplFba },
-  { key: "warehouse", label: "仓库明细(FBM)", icon: "ri-store-2-line", freq: "每周", desc: "SKU · 仓库 · 库存（各海外仓拆分）", tmpl: tmplWarehouse },
-  { key: "transit_detail", label: "在途明细", icon: "ri-ship-line", freq: "每周", desc: "SKU · 承运商 · 目的仓 · 件数 · 预计到仓", tmpl: tmplTransitDetail },
-  { key: "factory", label: "工厂明细", icon: "ri-factory-line", freq: "按需", desc: "SKU · 工厂名 · 件数 · 交期", tmpl: tmplFactory },
-  { key: "shipping", label: "头程更新", icon: "ri-ship-2-line", freq: "每月/手动", desc: "更新头程费 + 配送费", tmpl: tmplShipping },
-  { key: "identifiers", label: "SKU 标识符", icon: "ri-barcode-line", freq: "一次性迁移", desc: "店铺 · SKU · 品名 · MSKU · ASIN · 售价 · FOB", tmpl: tmplIdentifiers },
+  { key: "ops", label: "运营数据", icon: "ri-bar-chart-grouped-line", freq: "每周", desc: "高频：SKU/MSKU · 7天/30天销量 · Sessions与订单量(近7天+上期) · CVR · 评分 · 评论数 · 广告花费 · 退货率。系统自动算日均/CVR/毛利率，MSKU 自动关联主档", tmpl: tmplOps },
+  { key: "logistics", label: "库存物流", icon: "ri-ship-line", freq: "发货时", desc: "中频：SKU · FBA在库 · FBM库存 · 在途件数 · 目的仓 · 预计到仓", tmpl: tmplLogistics },
+  { key: "basic", label: "基础档案", icon: "ri-barcode-line", freq: "低频填一次", desc: "SKU · MSKU · ASIN · 店铺 · 售价 · FOB · 头程费 · 配送费 · 包裹尺寸重量 · 工厂名（无品名/上架日期等冗余列）", tmpl: tmplBasic },
+  { key: "core3", label: "三表合一", icon: "ri-stack-line", freq: "推荐", desc: "基础档案 + 库存物流 + 运营数据 三个 Sheet 打包下载，一个文件一次导入", tmpl: tmplCore3 },
+  { key: "bundle", label: "综合运营表", icon: "ri-file-excel-2-line", freq: "旧版", desc: "旧版 7-Sheet 综合表（保留兼容，建议改用三表合一）", tmpl: tmplBundle, legacy: true },
+  { key: "sales", label: "周销量", icon: "ri-bar-chart-line", freq: "每周", desc: "SKU · 近7天日均 · 近30天销量", tmpl: tmplSales, legacy: true },
+  { key: "fba", label: "FBA 库存明细", icon: "ri-archive-line", freq: "每周", desc: "SKU · FBA 在库数量", tmpl: tmplFba, legacy: true },
+  { key: "warehouse", label: "仓库明细(FBM)", icon: "ri-store-2-line", freq: "每周", desc: "SKU · 仓库 · 库存（各海外仓拆分）", tmpl: tmplWarehouse, legacy: true },
+  { key: "transit_detail", label: "在途明细", icon: "ri-ship-line", freq: "每周", desc: "SKU · 承运商 · 目的仓 · 件数 · 预计到仓", tmpl: tmplTransitDetail, legacy: true },
+  { key: "factory", label: "工厂明细", icon: "ri-factory-line", freq: "按需", desc: "SKU · 工厂名 · 件数 · 交期", tmpl: tmplFactory, legacy: true },
+  { key: "shipping", label: "头程更新", icon: "ri-ship-2-line", freq: "每月/手动", desc: "更新头程费 + 配送费", tmpl: tmplShipping, legacy: true },
+  { key: "identifiers", label: "SKU 标识符", icon: "ri-barcode-line", freq: "一次性迁移", desc: "店铺 · SKU · 品名 · MSKU · ASIN · 售价 · FOB", tmpl: tmplIdentifiers, legacy: true },
   { key: "warehouse_mapping", label: "仓库映射", icon: "ri-map-2-line", freq: "配置", desc: "仓库名称 → 区域映射（美东/美西/东南/中南），导入时自动匹配" },
 ] as const;
 
@@ -272,7 +310,8 @@ export default function ImportPage() {
   const [cloud, setCloud] = useState<CloudConfig | null>(null);
   const [cloudSaving, setCloudSaving] = useState(false);
   const [cloudMsg, setCloudMsg] = useState<{ tone: "ok" | "err"; msg: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<TabKey>("bundle");
+  const [activeTab, setActiveTab] = useState<TabKey>("ops");
+  const [legacyOpen, setLegacyOpen] = useState(false);
 
   /* 数据来源 Tab：Excel 上传（原有功能）/ MCP 一键拉取 / REST API 拉取（ERP 模块） */
   const [sourceTab, setSourceTab] = useState<SourceTab>("excel");
@@ -395,7 +434,9 @@ export default function ImportPage() {
       const invalid = validImportFile(file);
       if (invalid) { setError(invalid); setParsing(false); return; }
       const buf = await file.arrayBuffer();
-      const parsed = parseOperationExcel(buf, importDateStart);
+      // 传入库内已有主档：运营数据表通常只有 MSKU，用其反查内部 SKU（Upsert 自动关联）
+      const existingMasters = await db.skuMaster.toArray();
+      const parsed = parseOperationExcel(buf, importDateStart, { existingMasters });
 
       // 字段识别结果先展示（即使被阻断也展示，供用户确认规则 H 的匹配情况）
       setResult(parsed);
@@ -587,8 +628,18 @@ export default function ImportPage() {
         await applyIncrementalCostUpdate(parsed.shippingMap);
       }
       // 保存销量快照
+      // 注意：极简运营数据表会同时写入本期(today)与上期(today-7)两组快照，
+      // upsertSnapshots 只处理单一日期，必须按日期分组逐日写入
       if (validSnapshots.length > 0) {
-        await upsertSnapshots(validSnapshots);
+        const byDate = new Map<string, DailySnapshot[]>();
+        for (const s of validSnapshots) {
+          const list = byDate.get(s.date) ?? [];
+          list.push(s);
+          byDate.set(s.date, list);
+        }
+        for (const [, rows] of [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+          await upsertSnapshots(rows);
+        }
       }
       // 保存分仓库存
       // 部分更新模式：仅覆盖有值字段，空单元格不清空已有海外仓/FBA/FBM 库存
@@ -1499,9 +1550,9 @@ export default function ImportPage() {
         )}
       </div>
 
-      {/* ── Tab 切换器 ── */}
+      {/* ── Tab 切换器（极简三表为主，旧模板折叠） ── */}
       <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-background-300/70 bg-background-100/70 px-1 py-1">
-        {tabDefs.map((t) => (
+        {tabDefs.filter((t) => !("legacy" in t && t.legacy)).map((t) => (
           <button
             key={t.key}
             type="button"
@@ -1519,6 +1570,37 @@ export default function ImportPage() {
             <i className={`${t.icon} mr-1 text-[13px]`} aria-hidden />
             {t.label}
             <span className="ml-1 text-[10px] opacity-70">{t.freq}</span>
+          </button>
+        ))}
+        {/* 旧版模板折叠入口 */}
+        <button
+          type="button"
+          onClick={() => setLegacyOpen(!legacyOpen)}
+          className={[
+            "rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap",
+            legacyOpen ? "text-primary-700 bg-primary-50" : "text-foreground-400 hover:text-foreground-600",
+          ].join(" ")}
+        >
+          <i className={legacyOpen ? "ri-arrow-down-s-line" : "ri-arrow-right-s-line"} aria-hidden />
+          旧版模板
+        </button>
+        {legacyOpen && tabDefs.filter((t) => "legacy" in t && t.legacy).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => {
+              setActiveTab(t.key);
+              setImportMsg(null);
+            }}
+            className={[
+              "rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap border",
+              activeTab === t.key
+                ? "bg-primary-500 text-background-50 border-primary-500"
+                : "text-foreground-400 hover:text-foreground-700 border-background-300/60",
+            ].join(" ")}
+          >
+            <i className={`${t.icon} mr-1 text-[12px]`} aria-hidden />
+            {t.label}
           </button>
         ))}
         {/* 使用说明切换按钮 */}
@@ -1575,8 +1657,8 @@ export default function ImportPage() {
               },
               {
                 icon: "ri-stack-line",
-                title: "8. 综合运营表一键导入",
-                body: "「综合运营表」Tab 支持把上述 7 个 Sheet 放在一个 Excel 文件里一次性导入。上传后系统自动识别各 Sheet 并分别解析。导入前可选择两种模式：「覆盖导入」= Excel 所有字段直接写入，空单元格会清空已有数据（适合首次导入或全量更新）；「部分更新」= 空单元格不覆盖已有数据，已有的 FOB/售价/头程/配送费等固定信息会保留（适合只改部分参数或补导销量/库存）。建议日常补导用「部分更新」，首次建库用「覆盖导入」。",
+                title: "8. 极简三表模板（推荐）",
+                body: "新流程只用 3 张表：① 基础档案（低频填一次：SKU/MSKU/ASIN/店铺/售价/FOB/头程费/配送费/包裹尺寸/工厂名）；② 库存物流（发货时填：FBA在库/FBM库存/在途件数/目的仓/预计到仓）；③ 运营数据（每周填：7天/30天销量 + Sessions/订单量近7天与上期 + 评分/评论/广告花费/退货率）。「三表合一」Tab 可打包下载一次导入。系统自动算日均销量/CVR/毛利率，MSKU 自动匹配主档（存在更新，不存在新建），上期 Sessions/订单量自动写入昨日-7 快照供流量/转化分流诊断。旧版综合运营表仍保留兼容。",
               },
               {
                 icon: "ri-shield-check-line",
@@ -1626,6 +1708,7 @@ export default function ImportPage() {
               <i className="ri-lightbulb-line mr-1 text-accent-600" aria-hidden /> 每周操作清单（建议）
             </div>
             <ul className="mt-2 space-y-1.5 pl-5 text-[12px]">
+              <li><strong>推荐流程（极简三表）：</strong>首次用「基础档案」建档，每周只填「运营数据」（含 Sessions/订单量近7天+上期），发货时填「库存物流」——或用「三表合一」打包一次导入；双击可直接改 LT/安全库存</li>
               <li><strong>周一上午：</strong>依次导入「周销量」「FBA 库存明细」「仓库明细」「在途明细」（各点一次上传即可）</li>
               <li><strong>数据日期选择：</strong>导入本周数据点「本周」，补导上周点「上周」，补导上上周点「上上周」——日期不同则数据独立保存、不会覆盖，Dashboard 自动生成环比对比</li>
               <li><strong>导入模式选择：</strong>首次建库用「覆盖导入」；日常补导销量/库存用「部分更新」——空单元格不会清空已有的 FOB/售价/头程等固定信息</li>
@@ -1797,7 +1880,9 @@ export default function ImportPage() {
         >
           {renderImportCard(
             activeTab,
-            activeTab === "sales"
+            ["ops", "logistics", "basic", "core3"].includes(activeTab)
+              ? (file: File) => handleBundle(file, "partial")
+              : activeTab === "sales"
               ? handleSalesImport
               : activeTab === "fba"
               ? handleFbaImport
