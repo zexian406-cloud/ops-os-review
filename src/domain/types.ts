@@ -320,6 +320,21 @@ export const ALERT_TYPE_TO_DIAG: Partial<Record<AlertType, "profit" | "sales" | 
   traffic_drop: "sales",
 };
 
+/**
+ * 告警可下钻的归因诊断类型：类型映射优先；
+ * 无映射但带分流结论（流量端/转化端/双端）的告警（如 Listing 待优化）兜底到
+ * 销量下降诊断——其「归因结论」区正是分流判定与 Sessions/CVR 对比卡。
+ * none / insufficient 不给入口（没有可看的异常）。
+ */
+export function resolveAlertDiagType(
+  a: Pick<Alert, "type" | "listingVerdict">,
+): "profit" | "sales" | "rating" | "adRatio" | undefined {
+  if (ALERT_TYPE_TO_DIAG[a.type]) return ALERT_TYPE_TO_DIAG[a.type];
+  return a.listingVerdict === "visibility" || a.listingVerdict === "detail_page" || a.listingVerdict === "both"
+    ? "sales"
+    : undefined;
+}
+
 export interface Alert {
   id: string;
   siteId?: string;           // 站点隔离

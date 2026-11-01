@@ -11,7 +11,7 @@ import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import AlertList from "@/pages/dashboard/AlertList";
 import type { AlertDiagnostic } from "@/pages/dashboard/AlertList";
-import { ALERT_TYPE_TO_DIAG } from "@/domain/types";
+import { resolveAlertDiagType } from "@/domain/types";
 import type { DailySnapshot, DiagnosisType, SkuMaster, InventoryLayer, Shop, AlertSeverity } from "@/domain/types";
 import DiagnosisView from "./DiagnosisView";
 
@@ -223,7 +223,7 @@ export default function Operations() {
     const skuMap = new Map(skuMaster.map((s) => [s.sku, s]));
     for (const a of alerts) {
       const sku = skuMap.get(a.sku);
-      const dt = ALERT_TYPE_TO_DIAG[a.type];
+      const dt = resolveAlertDiagType(a);
       if (!sku || !dt) continue;
       const cmp = resolveComparison({ rows: bySku.get(a.sku) ?? [], basis: "import" });
       const diagInput = {

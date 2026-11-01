@@ -4,14 +4,9 @@
 //       数据缺失/非法 → insufficient；2% 容忍度边界；快照提取与告警注入
 // =========================================================
 import { describe, expect, it } from "vitest";
-import {
-  attachListingVerdicts,
-  computeCvr,
-  computeListingVerdict,
-  extractListingInput,
-  getVerdictText,
-} from "./listingVerdict";
+import { attachListingVerdicts, computeCvr, computeListingVerdict, extractListingInput, getVerdictText } from "./listingVerdict";
 import { snapKey } from "./engine";
+import { resolveAlertDiagType } from "./types";
 import type { Alert, DailySnapshot } from "./types";
 
 describe("computeCvr", () => {
@@ -173,6 +168,30 @@ describe("extractListingInput · 两期快照提取", () => {
     expect(input.cvrPrevious).toBeCloseTo(2.5);
     // Sessions -61%、CVR 稳 → visibility
     expect(computeListingVerdict(input.sessionsCurrent, input.sessionsPrevious, input.cvrCurrent, input.cvrPrevious)).toBe("visibility");
+  });
+});
+
+describe("resolveAlertDiagType · 诊断入口路由", () => {
+  it("类型映射优先：traffic_drop → sales、profit → profit", () => {
+    expect(resolveAlertDiagType({ type: "traffic_drop" })).toBe("sales");
+    expect(resolveAlertDiagType({ type: "profit" })).toBe("profit");
+  });
+
+  it("无映射类型（Listing 待优化）带分流结论 → 兜底 sales（归因结论区展示分流判定）", () => {
+    expect(resolveAlertDiagType({ type: "listing", listingVerdict: "detail_page" })).toBe("sales");
+    expect(resolveAlertDiagType({ type: "listing", listingVerdict: "visibility" })).toBe("sales");
+    expect(resolveAlertDiagType({ type: "listing", listingVerdict: "both" })).toBe("sales");
+  });
+
+  it("无映射类型且结论为 none / insufficient / 无结论 → 不给诊断入口", () => {
+    expect(resolveAlertDiagType({ type: "listing", listingVerdict: "none" })).toBeUndefined();
+    expect(resolveAlertDiagType({ type: "listing", listingVerdict: "insufficient" })).toBeUndefined();
+    expect(resolveAlertDiagType({ type: "listing" })).toBeUndefined();
+  });
+
+  it("有映射的类型即使无分流结论也保留原入口", () => {
+    expect(resolveAlertDiagType({ type: "overstock" })).toBe("sales");
+    expect(resolveAlertDiagType({ type: "ad" })).toBe("adRatio");
   });
 });
 

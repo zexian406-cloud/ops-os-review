@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { db, getCurrentSiteId } from "@/domain/db";
-import { ALERT_TYPE_LABELS, ALERT_TYPE_TO_DIAG } from "@/domain/types";
+import { ALERT_TYPE_LABELS, resolveAlertDiagType } from "@/domain/types";
 import type { Alert, AlertType, ListingVerdict, SkuMaster, TodoItem } from "@/domain/types";
 import { getVerdictText } from "@/domain/listingVerdict";
 
@@ -167,7 +167,7 @@ export default function AlertList({
           )}
           {shown.map((a) => {
           const cfg = severityConfig[a.severity];
-          const diagType = ALERT_TYPE_TO_DIAG[a.type];
+          const diagType = resolveAlertDiagType(a);
           return (
             <div
               key={a.id}
