@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { db, getCurrentSiteId } from "@/domain/db";
 import { ALERT_TYPE_LABELS, ALERT_TYPE_TO_DIAG } from "@/domain/types";
-import type { Alert, AlertType, SkuMaster } from "@/domain/types";
+import type { Alert, AlertType, SkuMaster, TodoItem } from "@/domain/types";
 
 const SEVERITY_ORDER: Record<Alert["severity"], number> = { critical: 0, warning: 1, info: 2 };
 
@@ -52,6 +53,35 @@ export default function AlertList({
   const [typeFilter, setTypeFilter] = useState<"all" | AlertType>("all");
   const [storeFilter, setStoreFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"severity" | "type" | "sku">("severity");
+  // 已加入待办的告警 id（本次会话内，按钮变「已在待办」）
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [todoToast, setTodoToast] = useState<string | null>(null);
+
+  /** 把异常一键转为待办：自动带 SKU + 类型 + 判定结论，人工决定是否跟进 */
+  const handleAddTodo = async (a: Alert) => {
+    const siteId = await getCurrentSiteId();
+    const content = `${a.sku} ${ALERT_TYPE_LABELS[a.type]}：${a.title}${a.suggestion ? `（${a.suggestion}）` : ""}`;
+    // 防重复：同一站点下相同内容且未完成的待办只保留一条
+    const dupCount = await db.todos
+      .filter((t) => !t.completed && t.content === content && (t.siteId ?? "site_us") === siteId)
+      .count();
+    if (dupCount > 0) {
+      setTodoToast("该异常已在待办中，无需重复添加");
+    } else {
+      const item: TodoItem = {
+        id: Math.random().toString(36).slice(2, 10),
+        siteId,
+        content,
+        relatedSku: a.sku,
+        completed: false,
+        createdAt: new Date().toISOString(),
+      };
+      await db.todos.put(item);
+      setTodoToast("已加入待办，可在「我的待办」中跟进");
+    }
+    setAddedIds((prev) => new Set(prev).add(a.id));
+    setTimeout(() => setTodoToast(null), 2400);
+  };
 
   // SKU → 店铺映射（告警本身不带店铺，从主档关联）
   const storeMap = useMemo(() => new Map(skuMaster.map((s) => [s.sku, s.store])), [skuMaster]);
@@ -160,6 +190,20 @@ export default function AlertList({
                     去诊断
                   </Link>
                 )}
+                <button
+                  type="button"
+                  onClick={() => handleAddTodo(a)}
+                  disabled={addedIds.has(a.id)}
+                  title="把这条异常加入我的待办"
+                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium cursor-pointer whitespace-nowrap transition-colors disabled:cursor-default ${
+                    addedIds.has(a.id)
+                      ? "border-accent-300 bg-accent-50 text-accent-700"
+                      : "border-secondary-200/70 bg-secondary-50 text-secondary-700 hover:bg-secondary-100"
+                  } ${diagType ? "" : "ml-auto"}`}
+                >
+                  <i className={addedIds.has(a.id) ? "ri-check-line text-[12px]" : "ri-list-check-3 text-[12px]"} aria-hidden />
+                  {addedIds.has(a.id) ? "已在待办" : "加入待办"}
+                </button>
               </div>
               <div className="mt-1.5 text-[12px] leading-relaxed text-foreground-500">
                 {a.suggestion}
@@ -183,6 +227,12 @@ export default function AlertList({
           );
           })}
         </>
+      )}
+
+      {todoToast && (
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-accent-600 px-5 py-2.5 text-sm font-medium text-white shadow-lg">
+          {todoToast}
+        </div>
       )}
     </div>
   );
