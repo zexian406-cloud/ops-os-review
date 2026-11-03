@@ -117,7 +117,26 @@ export function computeDiagnosis(input: DiagnosisInput): DiagnosisResult {
         factors,
       };
     }
-    case 'return':
+    case 'return': {
+      // 退款率为主口径；缺失时给出补数建议，不再回退到退货率
+      const ret = latestSnap.refundRate;
+      if (ret == null) {
+        return {
+          type,
+          summary: `SKU ${sku.sku} 未导入退款率`,
+          suggestion: '在运营数据表补填「退款率」后再诊断',
+          factors,
+        };
+      }
+      const prevRet = previousSnap?.refundRate;
+      pushFactor('refundRate', '退款率', prevRet, ret, ret > 10 ? 'up_bad' : 'neutral', '%');
+      return {
+        type,
+        summary: `SKU ${sku.sku} 退款率 ${ret.toFixed(1)}%`,
+        suggestion: ret > 10 ? '分析退款原因，优化产品描述或质量' : '退款率正常',
+        factors,
+      };
+    }
     case 'review': {
       // returnRate 同样已是百分数（8 = 8%）
       const ret = latestSnap.returnRate ?? 0;

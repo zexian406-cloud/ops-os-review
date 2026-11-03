@@ -398,21 +398,20 @@ export function computeAlerts(input: {
       });
     }
 
-    // 5. Return rate — uses calculator's returnRate/refundRate for consistency
-    const returnMetric = sku.fulfillment === "FBM" ? calc.refundRate : calc.returnRate;
-    const returnMetricLabel = sku.fulfillment === "FBM" ? "退款率" : "退货率";
-    if (returnMetric > config.returnRateThreshold) {
+    // 5. 退款率异常（主口径）：退款率缺失不告警（由数据健康提示补数据）
+    const refundRate = snap.refundRate;
+    if (refundRate != null && refundRate > config.returnRateThreshold) {
       alerts.push({
         id: uid(),
         date: today,
         sku: sku.sku,
         skuName: sku.name,
         type: "return",
-        severity: returnMetric > 10 ? "critical" : "warning",
-        title: `${returnMetricLabel}高 · ${returnMetric.toFixed(1)}%`,
-        detail: `近 30 天${returnMetricLabel} ${returnMetric.toFixed(1)}% > 阈值 ${config.returnRateThreshold}%`,
-        metric: returnMetric,
-        suggestion: sku.fulfillment === "FBM" ? "分析退款原因（物流 / 描述不符）" : "分析退货原因（质量 / 描述不符）",
+        severity: refundRate > 20 ? "critical" : "warning",
+        title: `退款率高 · ${refundRate.toFixed(1)}%`,
+        detail: `近 30 天退款率 ${refundRate.toFixed(1)}% > 阈值 ${config.returnRateThreshold}%`,
+        metric: refundRate,
+        suggestion: "分析退款原因（物流 / 描述不符 / 质量问题）",
         status: "open",
       });
     }

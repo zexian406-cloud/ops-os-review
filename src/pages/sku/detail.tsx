@@ -23,7 +23,7 @@ import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
 import { useSkuDetailLayout, type SkuDetailSectionKey, type GridItemLayout } from "@/hooks/useLayoutPrefs";
 import { type LayoutItem } from "react-grid-layout";
 import { snapKey, type WowDelta } from "@/domain/engine";
-import type { DailySnapshot, SkuMaster, InventoryLayer, TodoItem, OpsLog, Shop } from "@/domain/types";
+import type { DailySnapshot, SkuMaster, InventoryLayer, TodoItem, OpsLog, Shop, RefundBasis } from "@/domain/types";
 
 const lifecycleLabel: Record<string, string> = { new: "新品", growth: "成长", mature: "成熟", clearance: "清货", eol: "停售" };
 const saleStatusLabel: Record<string, string> = { active: "在售", clearance: "清货", paused: "暂停", discontinued: "停售" };
@@ -98,6 +98,10 @@ export default function SkuDetail() {
 
   const sku = useMemo(() => skuMaster.find((s) => s.sku === skuId), [skuMaster, skuId]);
   const parentSkuId = sku?.groupSku;
+
+  // 退款损失口径：默认跟随参数中心全局设置；详情页可临时切换做对比（不写回配置）
+  const [basisOverride, setBasisOverride] = useState<RefundBasis | null>(null);
+  const effectiveBasis: RefundBasis = basisOverride ?? config?.returnBasis ?? "refund";
 
   // 海外仓自定义别名（仓库名 → 显示名）
   const [whAliasMap, setWhAliasMap] = useState<Map<string, string>>(new Map());
@@ -578,12 +582,13 @@ export default function SkuDetail() {
         defaultSafetyStockDays: config?.defaultSafetyStockDays ?? 30,
         defaultCommissionRate: currentSite?.commissionRate,
         promoCost: weekPromoCost.total,
+        returnBasis: effectiveBasis,
       });
     } catch (err) {
       console.error("[SkuDetail] computeAll threw:", err);
       return null;
     }
-  }, [sku, focusedSnap, inv, activeOrUpcomingPromo, config, weekPromoCost]);
+  }, [sku, focusedSnap, inv, activeOrUpcomingPromo, config, weekPromoCost, effectiveBasis]);
 
   // ── 计算实际渲染的 section keys ──
   // 必须在所有 early return 之前调用 hooks（React hooks 规则）
@@ -674,6 +679,7 @@ export default function SkuDetail() {
     costMissing,
     refundRate: latest?.refundRate,
   });
+  const refundThreshold = config?.returnRateThreshold ?? 5;
 
   // 兼容旧变量
   const allStock = inStockTotal;
@@ -939,11 +945,11 @@ export default function SkuDetail() {
       <CanvasItem key="kpiReturnRate" itemKey="kpiReturnRate">
         {sku.fulfillment === "mixed" ? (
           <div className="grid grid-cols-2 gap-2 h-full">
-            <KpiCard label="退款率" value={refundMissing ? "缺失" : `${(latest.refundRate ?? 0).toFixed(1)}%`} sub={refundMissing ? "未导入" : ((latest.refundRate ?? 0) > 5 ? "⚠ 需关注" : "正常")} icon="ri-refund-2-line" tone={refundMissing ? "secondary" : ((latest.refundRate ?? 0) > 8 ? "danger" : (latest.refundRate ?? 0) > 5 ? "warn" : "accent")} />
+            <KpiCard label="退款率" value={refundMissing ? "缺失" : `${(latest.refundRate ?? 0).toFixed(1)}%`} sub={refundMissing ? "未导入" : ((latest.refundRate ?? 0) > refundThreshold ? "⚠ 需关注" : "正常")} icon="ri-refund-2-line" tone={refundMissing ? "secondary" : ((latest.refundRate ?? 0) > refundThreshold * 2 ? "danger" : (latest.refundRate ?? 0) > refundThreshold ? "warn" : "accent")} />
             <KpiCard label="FBA退货率" value={costMissing ? "缺失" : `${(calcReturnRate ?? 0).toFixed(1)}%`} sub={costMissing ? "成本缺失" : ((calcReturnRate ?? 0) > 5 ? "⚠ 需关注" : "正常")} icon="ri-arrow-go-back-line" tone={costMissing ? "secondary" : ((calcReturnRate ?? 0) > 8 ? "danger" : (calcReturnRate ?? 0) > 5 ? "warn" : "accent")} />
           </div>
         ) : (
-          <KpiCard label="退款率" value={refundMissing ? "缺失" : `${(latest.refundRate ?? 0).toFixed(1)}%`} sub={refundMissing ? "未导入" : ((latest.refundRate ?? 0) > 5 ? "⚠ 需关注" : "正常")} icon="ri-refund-2-line" tone={refundMissing ? "secondary" : ((latest.refundRate ?? 0) > 8 ? "danger" : (latest.refundRate ?? 0) > 5 ? "warn" : "accent")} />
+          <KpiCard label="退款率" value={refundMissing ? "缺失" : `${(latest.refundRate ?? 0).toFixed(1)}%`} sub={refundMissing ? "未导入" : ((latest.refundRate ?? 0) > refundThreshold ? "⚠ 需关注" : "正常")} icon="ri-refund-2-line" tone={refundMissing ? "secondary" : ((latest.refundRate ?? 0) > refundThreshold * 2 ? "danger" : (latest.refundRate ?? 0) > refundThreshold ? "warn" : "accent")} />
         )}
       </CanvasItem>
       )}
@@ -1414,7 +1420,17 @@ export default function SkuDetail() {
                 <ProfitRow label="佣金" value={`-$${(costCommission ?? 0).toFixed(2)}`} inferred={isCommissionInferred} />
                 <ProfitRow label="仓租" value={`-$${(sku.costStorage ?? 0).toFixed(2)}`} />
                 <ProfitRow label="广告费" value={`-$${(costAd ?? 0).toFixed(2)}`} inferred={isAdInferred} />
-                <ProfitRow label="退款损失" value={`-$${(costRefundLoss ?? 0).toFixed(2)}`} />
+                <div className="flex items-center justify-between gap-3 py-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setBasisOverride(effectiveBasis === "refund" ? "return" : "refund")}
+                    className="shrink-0 cursor-pointer text-left text-[12px] text-foreground-500 underline decoration-dotted underline-offset-2 hover:text-primary-700"
+                    title={`当前按${effectiveBasis === "refund" ? "退款率" : "退货率"}估算，点击切换为${effectiveBasis === "refund" ? "退货率" : "退款率"}（仅本页临时生效，不改全局设置）`}
+                  >
+                    退款损失 · 按{effectiveBasis === "refund" ? "退款率" : "退货率"}估算 ⇄
+                  </button>
+                  <span className="mono-num text-right text-[13px] font-medium text-foreground-900">-${(costRefundLoss ?? 0).toFixed(2)}</span>
+                </div>
                 {costCoupon > 0 && <ProfitRow label="优惠券(历史)" value={`($${(costCoupon ?? 0).toFixed(2)})`} />}
                 {costPromo > 0 && <ProfitRow label="促销成本(手动)" value={`-$${(costPromo ?? 0).toFixed(2)}`} />}
                 {weekPromoCost.count > 0 && (
@@ -1458,7 +1474,7 @@ export default function SkuDetail() {
                 <ProfitRow label="折扣佣金" value={`-$${(discountCostCommission ?? 0).toFixed(2)}`} inferred={isCommissionInferred} />
                 <ProfitRow label="仓租" value={`-$${(sku.costStorage ?? 0).toFixed(2)}`} />
                 <ProfitRow label="折扣广告费" value={`-$${(discountCostAd ?? 0).toFixed(2)}`} inferred={isDiscountAdInferred} />
-                <ProfitRow label="折扣退款损失" value={`-$${(discountCostRefundLoss ?? 0).toFixed(2)}`} />
+                <ProfitRow label={`折扣退款损失(${effectiveBasis === "refund" ? "退款率" : "退货率"})`} value={`-$${(discountCostRefundLoss ?? 0).toFixed(2)}`} />
                 <ProfitRow label="优惠券" value={`(${(discountCostCoupon ?? 0).toFixed(2)})`} />
                 <div className="my-1.5 h-px bg-background-200/50" />
                 <ProfitRow label="折扣总成本" value={`$${(discountTotalCost ?? 0).toFixed(2)}`} bold />
@@ -1495,7 +1511,7 @@ export default function SkuDetail() {
             {costCommission > 0 ? <CostWaterfall label="佣金" value={-costCommission} color="bg-secondary-400" /> : null}
             {costStorage > 0 ? <CostWaterfall label="仓租" value={-costStorage} color="bg-secondary-300" /> : null}
             {costAd > 0 ? <CostWaterfall label="广告费" value={-costAd} color="bg-secondary-300" /> : null}
-            {costRefundLoss > 0 ? <CostWaterfall label="退款损失" value={-costRefundLoss} color="bg-secondary-300" /> : null}
+            {costRefundLoss > 0 ? <CostWaterfall label={`退款损失(${effectiveBasis === "refund" ? "退款率" : "退货率"})`} value={-costRefundLoss} color="bg-secondary-300" /> : null}
             {costPromo > 0 ? <CostWaterfall label="促销成本(手动)" value={-costPromo} color="bg-secondary-300" /> : null}
             {costCoupon > 0 ? <CostWaterfall label="优惠券" value={-costCoupon} color="bg-secondary-300" /> : null}
             <div className="my-2 h-px bg-background-200/70" />

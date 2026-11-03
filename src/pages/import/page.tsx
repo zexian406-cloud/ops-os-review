@@ -114,12 +114,12 @@ const BASIC_HEADERS = ["SKU", "MSKU", "ASIN", "店铺", "售价", "FOB", "头程
 // 库存物流表（中频发货时填）：SKU/FBA在库/FBM库存/在途件数/目的仓/预计到仓
 const LOGI_HEADERS = ["SKU", "FBA在库", "FBM库存", "在途件数", "目的仓", "预计到仓"];
 // 运营数据表（高频填）：销量 + Sessions/订单量（近7天+上期，供流量/转化分流诊断）
-// 新增：广告订单数(选填，真实值优先于费比推导)、退款率（空→提示 / >20%→警告）
-const OPS_HEADERS = ["SKU", "MSKU", "7天销量", "30天销量", "Sessions(近7天)", "订单量(近7天)", "Sessions(上期)", "订单量(上期)", "CVR%(可选)", "广告订单数(选填)", "评分", "评论数", "广告花费", "退货率", "退款率"];
+// 退款率为主口径（建议必填）；退货率保留，作为利润计算备选口径（选填）
+const OPS_HEADERS = ["SKU", "MSKU", "7天销量", "30天销量", "Sessions(近7天)", "订单量(近7天)", "Sessions(上期)", "订单量(上期)", "CVR%(可选)", "广告订单数(选填)", "评分", "评论数", "广告花费", "退款率", "退货率"];
 
 const tmplBasic = () => downloadTemplate("基础档案表", BASIC_HEADERS, ["BFRS258", "BFRS258-GM", "B0GC3HFWHP", "BIFULISAN Store", 39.99, 28.5, 12.3, 4.56, 30, 25, 20, 1.2, "东莞美联"], undefined, "基础档案");
 const tmplLogistics = () => downloadTemplate("库存物流表", LOGI_HEADERS, ["BFRS258", 186, 180, 80, "美西", "2026-08-05"], undefined, "库存物流");
-const OPS_EXAMPLE = ["BFRS258", "BFRS258-GM", 24, 102, 1200, 24, 1350, 30, 2.0, 6, 4.2, 156, 45.6, 3.2, 2.1];
+const OPS_EXAMPLE = ["BFRS258", "BFRS258-GM", 24, 102, 1200, 24, 1350, 30, 2.0, 6, 4.2, 156, 45.6, 2.1, 3.2];
 const tmplOps = () => downloadTemplate("运营数据表", OPS_HEADERS, OPS_EXAMPLE, undefined, "运营数据");
 
 const tmplCore3 = () => {
@@ -207,7 +207,7 @@ const tmplIdentifiers = () =>
 /* 极简三表（维度1 模板瘦身）：运营数据 / 库存物流 / 基础档案 / 三表合一；
    旧 8 模板保留为 legacy 折叠入口，不删代码，兼容历史文件。 */
 const tabDefs = [
-  { key: "ops", label: "运营数据", icon: "ri-bar-chart-grouped-line", freq: "每周", desc: "高频：SKU/MSKU · 7天/30天销量 · Sessions与订单量(近7天+上期) · CVR · 评分 · 评论数 · 广告花费 · 退货率。系统自动算日均/CVR/毛利率，MSKU 自动关联主档", tmpl: tmplOps },
+  { key: "ops", label: "运营数据", icon: "ri-bar-chart-grouped-line", freq: "每周", desc: "高频：SKU/MSKU · 7天/30天销量 · Sessions与订单量(近7天+上期) · CVR · 评分 · 评论数 · 广告花费 · 退款率(主口径·建议必填) · 退货率(选填/备选口径)。系统自动算日均/CVR/毛利率，MSKU 自动关联主档", tmpl: tmplOps },
   { key: "logistics", label: "库存物流", icon: "ri-ship-line", freq: "发货时", desc: "中频：SKU · FBA在库 · FBM库存 · 在途件数 · 目的仓 · 预计到仓", tmpl: tmplLogistics },
   { key: "basic", label: "基础档案", icon: "ri-barcode-line", freq: "低频填一次", desc: "SKU · MSKU · ASIN · 店铺 · 售价 · FOB · 头程费 · 配送费 · 包裹尺寸重量 · 工厂名（无品名/上架日期等冗余列）", tmpl: tmplBasic },
   { key: "core3", label: "三表合一", icon: "ri-stack-line", freq: "推荐", desc: "基础档案 + 库存物流 + 运营数据 三个 Sheet 打包下载，一个文件一次导入", tmpl: tmplCore3 },

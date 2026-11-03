@@ -1,6 +1,6 @@
 import type { SkuMaster, DailySnapshot, InventoryLayer, Promotion, ManualPromotion, ProfitFormulaKey } from "./types";
 import { DEFAULT_PROFIT_FORMULA } from "./types";
-import type { ProfitFormulaConfig } from "./types";
+import type { ProfitFormulaConfig, RefundBasis } from "./types";
 import { tryCompileFormula } from "./formulaEval";
 
 // ────────── 利润公式配置（模块级缓存，App 启动时注入，设置页保存时更新） ──────────
@@ -176,6 +176,7 @@ export function computeTotalCost(
   discountPrice?: number,
   promoCost = 0,
   defaultCommissionRate?: number,
+  returnBasis: RefundBasis = "refund",
 ): { total: number; detail: CostDetail; inferred: InferredFlags } {
   const price = discountPrice ?? sku.price;
   const commissionRateFallback = effCommissionRate(defaultCommissionRate);
@@ -217,8 +218,9 @@ export function computeTotalCost(
     isReturnInferred = true;
   }
 
-  // 退货损失（计入总成本）：退款率 × 售价，对所有履约方式生效（FBA 也用上传的 refundRate，不再强制 0）
-  const refundLoss = snap ? (snap.refundRate ?? 0) / 100 * price : 0;
+  // 退货损失（计入总成本）：按当前口径取数（默认退款率，可全局/临时切退货率）× 售价
+  const lossRate = returnBasis === "return" ? n(snap?.returnRate) : n(snap?.refundRate);
+  const refundLoss = snap ? lossRate / 100 * price : 0;
 
   // 优惠券计入总成本（用户拍板：优惠券是真实支出，应纳入成本与净利）
   // 各成本项受利润公式开关控制（设置 → 利润公式），关闭的项按 0 计入
@@ -284,9 +286,10 @@ export function computeDiscountTotalCost(
   normalDetail?: CostDetail,
   promoCost = 0,
   defaultCommissionRate?: number,
+  returnBasis: RefundBasis = "refund",
 ): { total: number; detail: CostDetail; inferred: InferredFlags } {
   const dp = discountPrice ?? sku.discountPrice ?? sku.price;
-  const nd = normalDetail ?? computeTotalCost(sku, snap, dp, promoCost, defaultCommissionRate).detail;
+  const nd = normalDetail ?? computeTotalCost(sku, snap, dp, promoCost, defaultCommissionRate, returnBasis).detail;
 
   // 折扣字段为空 → 用正常字段值替代
   const fob = sku.discountFob != null ? n(sku.discountFob) : nd.fob;
@@ -340,8 +343,9 @@ export function computeDiscountTotalCost(
     ret = nd.ret;
   }
 
-  // 退货损失（计入折扣总成本）：退款率 × 折扣价，对所有履约方式生效
-  const refundLoss = snap ? (snap.refundRate ?? 0) / 100 * dp : 0;
+  // 退货损失（计入折扣总成本）：按当前口径取数（默认退款率，可全局/临时切退货率）× 折扣价
+  const lossRate = returnBasis === "return" ? n(snap?.returnRate) : n(snap?.refundRate);
+  const refundLoss = snap ? lossRate / 100 * dp : 0;
 
   // 优惠券计入折扣总成本（与正常成本口径一致）；各成本项受利润公式开关控制
   const gv = {
@@ -585,19 +589,21 @@ export function computeAll(params: {
   defaultSafetyStockDays?: number;
   promoCost?: number;
   defaultCommissionRate?: number;
+  /** 退款损失取数口径：refund=退款率（默认）/ return=退货率 */
+  returnBasis?: RefundBasis;
 }): CalcResult {
-  const { sku, snap, inv, activePromo, defaultLeadTime = 40, defaultSafetyStockDays = 30, promoCost = 0, defaultCommissionRate } = params;
+  const { sku, snap, inv, activePromo, defaultLeadTime = 40, defaultSafetyStockDays = 30, promoCost = 0, defaultCommissionRate, returnBasis = "refund" } = params;
   const commissionRateFallback = effCommissionRate(defaultCommissionRate);
 
   const discountPrice = activePromo?.discountPrice ?? sku.discountPrice ?? undefined;
   const effectivePrice = discountPrice ?? sku.price;
 
   // Step 1: 正常列总成本
-  const normal = computeTotalCost(sku, snap, undefined, promoCost, commissionRateFallback);
+  const normal = computeTotalCost(sku, snap, undefined, promoCost, commissionRateFallback, returnBasis);
   const totalCost = normal.total;
 
   // Step 2: 折扣列总成本
-  const discount = computeDiscountTotalCost(sku, snap, discountPrice, normal.detail, promoCost, commissionRateFallback);
+  const discount = computeDiscountTotalCost(sku, snap, discountPrice, normal.detail, promoCost, commissionRateFallback, returnBasis);
   const disTotalCost = discount.total;
 
   // Step 3: 单件净利

@@ -491,7 +491,7 @@ export default function Settings() {
         <div>
           <div className="text-[13px] font-semibold text-foreground-900">阈值提醒规则</div>
           <div className="mt-0.5 text-[12px] text-foreground-600">
-            当广告费比 &gt; <strong>{cfg.adRatioThreshold}%</strong> 或 退货率 &gt; <strong>{cfg.returnRateThreshold}%</strong> 时，Dashboard 和 SKU 详情页会显示警告提醒。
+            当广告费比 &gt; <strong>{cfg.adRatioThreshold}%</strong> 或 退款率 &gt; <strong>{cfg.returnRateThreshold}%</strong> 时，Dashboard 和 SKU 详情页会显示警告提醒。
             下方可自定义两个阈值，修改后保存即可生效。
           </div>
         </div>
@@ -511,10 +511,47 @@ export default function Settings() {
               </div>
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <NumField label="广告费比阈值 (%)" value={cfg.adRatioThreshold} onChange={(v) => setCfg({ ...cfg, adRatioThreshold: v })} />
-                <NumField label="退货率阈值 (%)" value={cfg.returnRateThreshold} onChange={(v) => setCfg({ ...cfg, returnRateThreshold: v })} />
+                <NumField label="退款率阈值 (%)" value={cfg.returnRateThreshold} onChange={(v) => setCfg({ ...cfg, returnRateThreshold: v })} />
                 <NumField label="利润率阈值 (%)" value={cfg.profitMarginThreshold} onChange={(v) => setCfg({ ...cfg, profitMarginThreshold: v })} />
                 <NumField label="评分下降阈值" value={cfg.ratingDropThreshold} step={0.1} onChange={(v) => setCfg({ ...cfg, ratingDropThreshold: v })} />
               </div>
+            </div>
+
+            <div className="rounded-xl border border-background-200/70 bg-background-50 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary-100 text-[14px] text-primary-700">
+                  <i className="ri-refund-2-line" aria-hidden />
+                </div>
+                <span className="text-[13px] font-semibold text-foreground-900">利润计算口径</span>
+                <span className="text-[11px] text-foreground-500">决定「退款损失」按哪个指标计入成本，联动净利率 / 瀑布图 / 折扣口径</span>
+              </div>
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                {([
+                  { key: "refund", label: "按退款率算（默认）", desc: "主口径 · 退款率 × 售价计入退款损失" },
+                  { key: "return", label: "按退货率算", desc: "备选口径 · 退货率 × 售价计入退款损失" },
+                ] as const).map((opt) => {
+                  const active = (cfg.returnBasis ?? "refund") === opt.key;
+                  return (
+                    <label
+                      key={opt.key}
+                      className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2.5 text-[12px] ${active ? "border-primary-400 bg-primary-50/70 text-foreground-900" : "border-background-200 bg-background-50 text-foreground-600 hover:border-background-300"}`}
+                    >
+                      <input
+                        type="radio"
+                        name="returnBasis"
+                        checked={active}
+                        onChange={() => setCfg({ ...cfg, returnBasis: opt.key })}
+                        className="mt-0.5 h-3.5 w-3.5 cursor-pointer"
+                      />
+                      <span>
+                        <span className="block font-semibold">{opt.label}</span>
+                        <span className="mt-0.5 block text-[11px] text-foreground-500">{opt.desc}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="mt-2 text-[11px] text-foreground-400">SKU 详情页可在「退款损失」行临时切换口径做对比，不改变这里的全局设置。</div>
             </div>
 
             <div className="rounded-xl border border-background-200/70 bg-background-50 p-4">

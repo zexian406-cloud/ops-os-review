@@ -319,6 +319,7 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   adRatioThreshold: 30,
   ratingDropThreshold: 0.2,
   returnRateThreshold: 5,
+  returnBasis: "refund",
   lifecycleNewDays: 90,
   lifecycleGrowthDays: 180,
 };

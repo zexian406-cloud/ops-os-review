@@ -300,7 +300,7 @@ export const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   profit: "利润异常",
   ad: "广告异常",
   rating: "评分下降",
-  return: "退货异常",
+  return: "退款异常",
   review: "差评激增",
   listing: "Listing 待优化",
   traffic_drop: "流量下滑",
@@ -377,6 +377,9 @@ export interface ShipmentSuggestion {
   campaignBoost?: string;
 }
 
+/** 利润计算中「退款损失」取数口径：退款率（默认，主口径）/ 退货率（备选） */
+export type RefundBasis = "refund" | "return";
+
 /** 全局参数 */
 export interface GlobalConfig {
   defaultLeadTime: number;         // 默认 Lead Time
@@ -386,7 +389,8 @@ export interface GlobalConfig {
   profitMarginThreshold: number;   // 利润率异常阈值 %
   adRatioThreshold: number;        // 费比异常阈值 %
   ratingDropThreshold: number;     // 评分下降阈值
-  returnRateThreshold: number;     // 退货率异常阈值 %
+  returnRateThreshold: number;     // 退款率异常阈值 %
+  returnBasis?: RefundBasis;       // 利润计算退款损失口径（缺省 refund）
   lifecycleNewDays: number;        // 新品期天数
   lifecycleGrowthDays: number;     // 成长期天数
 }

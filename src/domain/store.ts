@@ -123,7 +123,7 @@ export function useOpsData() {
     (async () => {
       setLoading(true);
       try {
-        const [sm, snap, inv, camps, promos, manPromos, siteCfg] = await Promise.all([
+        const [sm, snap, inv, camps, promos, manPromos, siteCfg, globalCfg] = await Promise.all([
           db.skuMaster.toArray(),
           db.dailySnapshot.toArray(),
           db.inventoryLayer.toArray(),
@@ -131,6 +131,7 @@ export function useOpsData() {
           db.promotions.toArray(),
           db.manualPromotions.toArray(),
           getSiteConfig(currentSiteId),
+          getGlobalConfig(),
         ]);
         if (!mounted) return;
         setAllSkuMaster(sm);
@@ -148,6 +149,7 @@ export function useOpsData() {
           adRatioThreshold: siteCfg.adRatioThreshold,
           ratingDropThreshold: siteCfg.ratingDropThreshold,
           returnRateThreshold: siteCfg.returnRateThreshold,
+          returnBasis: globalCfg.returnBasis ?? "refund",
           lifecycleNewDays: siteCfg.lifecycleNewDays,
           lifecycleGrowthDays: siteCfg.lifecycleGrowthDays,
         });

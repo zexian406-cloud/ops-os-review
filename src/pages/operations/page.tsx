@@ -25,7 +25,7 @@ const TABS: Array<{ key: TabKey; label: string; icon: string; desc: string }> = 
   { key: "ad", label: "广告异常", icon: "ri-megaphone-line", desc: "费比 / TACOS 冲高" },
   { key: "rating", label: "评分下降", icon: "ri-star-half-line", desc: "评分环比或低于健康线" },
   { key: "review", label: "Review 增长", icon: "ri-chat-quote-line", desc: "Review 数量变动" },
-  { key: "return", label: "退货率异常", icon: "ri-arrow-go-back-line", desc: "退货率超阈值" },
+  { key: "return", label: "退款率异常", icon: "ri-arrow-go-back-line", desc: "退款率超阈值" },
   { key: "listing", label: "Listing 待优化", icon: "ri-file-edit-line", desc: "A+ / 图片 / 描述" },
   { key: "new", label: "新品成长", icon: "ri-seedling-line", desc: "上架 90 天内" },
 ];
@@ -196,15 +196,16 @@ export default function Operations() {
           });
         }
       } else if (tab === "return") {
-        const returnMetric = sku.fulfillment === "FBM" ? (snap.refundRate ?? 0) : snap.returnRate;
-        if (returnMetric > config.returnRateThreshold) {
+        // 退款率为主口径；缺失不进入清单（数据健康会提示补数据）
+        const refundMetric = snap.refundRate;
+        if (refundMetric != null && refundMetric > config.returnRateThreshold) {
           list.push({
             sku,
             snap,
-            metric: returnMetric,
-            metricLabel: `${returnMetric.toFixed(1)}%`,
-            tone: returnMetric > 10 ? "danger" : "warn",
-            note: "注意退货率增长",
+            metric: refundMetric,
+            metricLabel: `${refundMetric.toFixed(1)}%`,
+            tone: refundMetric > 20 ? "danger" : "warn",
+            note: "注意退款率增长",
           });
         }
       }
@@ -364,7 +365,7 @@ export default function Operations() {
                       <div><span className="font-semibold text-foreground-800">利润异常</span>：毛利率 &lt; {config.profitMarginThreshold}%，低于 0 为 Critical</div>
                       <div><span className="font-semibold text-foreground-800">广告费比</span>：近 30 天费比 &gt; {config.adRatioThreshold}%，&gt; 70% 为 Critical</div>
                       <div><span className="font-semibold text-foreground-800">评分</span>：较上次导入下降 ≥ {config.ratingDropThreshold}，或当前评分 &lt; 3.8 → Warning</div>
-                      <div><span className="font-semibold text-foreground-800">退货率</span>：近 30 天 &gt; {config.returnRateThreshold}%，&gt; 10% 为 Critical（FBM 看退款率）</div>
+                      <div><span className="font-semibold text-foreground-800">退款率</span>：近 30 天 &gt; {config.returnRateThreshold}%，&gt; 20% 为 Critical；退款率缺失不告警（数据健康提示）</div>
                       <div><span className="font-semibold text-foreground-800">Listing</span>：A+ 页面未完成 → Info</div>
                       <div><span className="font-semibold text-foreground-800">促销成本</span>：促销成本占售价 &gt; 10%，&gt; 25% 为 Warning</div>
                     </div>

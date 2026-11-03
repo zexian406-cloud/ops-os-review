@@ -25,17 +25,23 @@ describe("computeDiagnosis · Bug1 回归：百分数不再双重缩放", () => 
     expect(r.summary).toContain("正常");
   });
 
-  it("return 诊断：8% 正常、12% 触发 up_bad（阈值 >10%）", () => {
-    const ok = computeDiagnosis({ type: "return", sku: { sku: "X" }, latestSnap: { returnRate: 8 } });
+  it("return 诊断：退款率 8% 正常、12% 触发 up_bad（阈值 >10%）", () => {
+    const ok = computeDiagnosis({ type: "return", sku: { sku: "X" }, latestSnap: { refundRate: 8 } });
     expect(ok.factors[0].impact).toBe("neutral");
     expect(ok.summary).toContain("8.0%");
-    const bad = computeDiagnosis({ type: "return", sku: { sku: "X" }, latestSnap: { returnRate: 12 } });
+    const bad = computeDiagnosis({ type: "return", sku: { sku: "X" }, latestSnap: { refundRate: 12 } });
     expect(bad.factors[0].impact).toBe("up_bad");
-    expect(bad.suggestion).toContain("分析退货原因");
+    expect(bad.suggestion).toContain("分析退款原因");
+  });
+
+  it("return 诊断：退款率缺失 → 提示补数，不误用退货率", () => {
+    const r = computeDiagnosis({ type: "return", sku: { sku: "X" }, latestSnap: { returnRate: 12 } });
+    expect(r.summary).toContain("未导入退款率");
+    expect(r.suggestion).toContain("补填");
   });
 
   it("return 诊断：800% 拼接 bug 不复现", () => {
-    const r = computeDiagnosis({ type: "return", sku: { sku: "X" }, latestSnap: { returnRate: 8 } });
+    const r = computeDiagnosis({ type: "return", sku: { sku: "X" }, latestSnap: { refundRate: 8 } });
     expect(r.factors[0].after).toBe(8);
     expect(r.summary).not.toContain("800");
     expect(r.summary).not.toContain("4646");

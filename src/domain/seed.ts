@@ -7,7 +7,7 @@ import { buildMockPromotions } from "@/mocks/promotions";
 import { MOCK_MANUAL_PROMOTIONS } from "@/mocks/manualPromotions";
 import type { DailySnapshot, InventoryLayer, OpsLog, Shop, Site, TodoItem } from "./types";
 
-export const SEED_FLAG = "seeded_v14";
+export const SEED_FLAG = "seeded_v15";
 
 export const DEMO_SITE_ID = "site_demo";
 
@@ -152,6 +152,7 @@ async function refreshDemoContent(today: string): Promise<void> {
  * 首次使用（空库）时种入通用演示数据，展示在独立的「演示站点」。
  * 一旦检测到已有任何真实数据，则完全跳过，绝不写入演示数据。
  * v11：已有演示数据的库会做一次幂等内容刷新（补演示店铺/待办/操作记录/新快照字段）。
+ * v15：演示快照补齐 17 个 SKU 的退款率（2%~15%），退款率作为主口径。
  */
 export async function ensureSeedData(): Promise<void> {
   const flag = await db.config.get(SEED_FLAG);
