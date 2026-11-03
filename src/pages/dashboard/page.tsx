@@ -305,13 +305,13 @@ export default function Dashboard() {
     tone: "danger" | "warn" | "primary" | "accent" | "secondary";
     types: AlertType[]; href: string;
   }> = [
-    { key: "stock", title: "库存风险", icon: "ri-inbox-2-line", tone: "danger", types: ["stockout", "low_stock", "overstock"], href: "/operations?tab=all" },
+    { key: "stock", title: "库存风险", icon: "ri-archive-2-line", tone: "danger", types: ["stockout", "low_stock", "overstock"], href: "/operations?tab=all" },
     { key: "profit", title: "利润异常", icon: "ri-money-dollar-circle-line", tone: "warn", types: ["profit"], href: "/operations?tab=profit" },
-    { key: "traffic", title: "流量下滑", icon: "ri-pulse-line", tone: "danger", types: ["traffic_drop"], href: "/operations?tab=all" },
+    { key: "traffic", title: "流量下滑", icon: "ri-line-chart-line", tone: "danger", types: ["traffic_drop"], href: "/operations?tab=all" },
     { key: "ad", title: "广告异常", icon: "ri-megaphone-line", tone: "primary", types: ["ad"], href: "/operations?tab=ad" },
-    { key: "rating", title: "评分下降", icon: "ri-star-half-line", tone: "warn", types: ["rating"], href: "/operations?tab=rating" },
-    { key: "return", title: "退款异常", icon: "ri-arrow-go-back-line", tone: "secondary", types: ["return", "review"], href: "/operations?tab=return" },
-    { key: "listing", title: "Listing 待优化", icon: "ri-file-edit-line", tone: "accent", types: ["listing"], href: "/operations?tab=listing" },
+    { key: "rating", title: "评分下降", icon: "ri-star-line", tone: "warn", types: ["rating"], href: "/operations?tab=rating" },
+    { key: "return", title: "退款异常", icon: "ri-refund-2-line", tone: "secondary", types: ["return", "review"], href: "/operations?tab=return" },
+    { key: "listing", title: "Listing 待优化", icon: "ri-article-line", tone: "accent", types: ["listing"], href: "/operations?tab=listing" },
   ];
 
   // ── Section renderers ──
@@ -671,21 +671,29 @@ export default function Dashboard() {
 
     riskBuckets: (
       <Section title="今日需要处理的事" subtitle="按类型聚合，点击查看详情" icon="ri-flashlight-line">
-        <div className="grid grid-cols-6 gap-3">
+        <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(132px,1fr))]">
           {buckets.map((b) => {
             const count = b.types.reduce((s, t) => s + groupCount(t), 0);
             const badgeBg = b.tone === "danger" ? "bg-red-500" : b.tone === "warn" ? "bg-secondary-500" : b.tone === "primary" ? "bg-foreground-800" : b.tone === "accent" ? "bg-accent-500" : "bg-foreground-400";
+            const tileCls =
+              b.tone === "danger" ? "bg-red-50 text-red-500 ring-red-100"
+                : b.tone === "warn" ? "bg-secondary-100 text-secondary-700 ring-secondary-200"
+                  : b.tone === "primary" ? "bg-foreground-100 text-foreground-700 ring-foreground-200"
+                    : b.tone === "accent" ? "bg-accent-50 text-accent-600 ring-accent-100"
+                      : "bg-background-100 text-foreground-500 ring-background-200";
             return (
-              <Link key={b.key} to={b.href} className="glass-card glass-card-hover group flex flex-col p-4 cursor-pointer">
-                <div className="flex items-center justify-between">
-                  <span className={["flex h-9 w-9 items-center justify-center rounded-[12px] text-[17px] transition-transform group-hover:scale-110",
-                    b.tone === "danger" ? "bg-red-50 text-red-500" : b.tone === "warn" ? "bg-secondary-100 text-secondary-700" : b.tone === "primary" ? "bg-foreground-100 text-foreground-700" : b.tone === "accent" ? "bg-accent-50 text-accent-600" : "bg-background-100 text-foreground-500"
-                  ].join(" ")}>
+              <Link key={b.key} to={b.href} className="glass-card glass-card-hover group flex min-w-0 flex-col p-3.5 cursor-pointer">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={["flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] text-[18px] ring-1 ring-inset transition-transform group-hover:scale-110", tileCls].join(" ")}>
                     <i className={b.icon} aria-hidden />
                   </span>
-                  {count > 0 && <span className={`flex h-6 min-w-[24px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white ${badgeBg}`}>{count}</span>}
+                  {count > 0 ? (
+                    <span className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white ${badgeBg}`}>{count}</span>
+                  ) : (
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-background-100 text-[11px] text-foreground-300"><i className="ri-check-line" aria-hidden /></span>
+                  )}
                 </div>
-                <div className="mt-3 text-[13px] font-semibold text-foreground-800">{b.title}</div>
+                <div className="mt-3 truncate text-[13px] font-semibold text-foreground-800" title={b.title}>{b.title}</div>
                 <div className="mt-0.5 text-[11px] text-foreground-400">{count > 0 ? "点击查看" : "全部正常"}</div>
               </Link>
             );
