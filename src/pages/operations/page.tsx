@@ -14,7 +14,7 @@ import AlertList from "@/pages/dashboard/AlertList";
 import type { AlertDiagnostic } from "@/pages/dashboard/AlertList";
 import { resolveAlertDiagType } from "@/domain/types";
 import type { DailySnapshot, DiagnosisType, SkuMaster, InventoryLayer, Shop, AlertSeverity } from "@/domain/types";
-import { computeAdInsight, type AdInsight } from "@/domain/adInsight";
+import { computeAdInsight, sortAdInsights, summarizeAdInsights, type AdInsight } from "@/domain/adInsight";
 import DiagnosisView from "./DiagnosisView";
 
 type TabKey = "all" | "traffic" | "profit" | "ad" | "rating" | "review" | "return" | "listing" | "new" | "diag";
@@ -276,14 +276,10 @@ export default function Operations() {
         }),
       });
     }
-    return out.sort((a, b) => b.insight.overspend - a.insight.overspend);
+    return sortAdInsights(out);
   }, [skuMaster, latestSnapshot, siteSnapshots, config, currentSiteId]);
 
-  const adSummary = useMemo(() => {
-    const total = adRows.reduce((s, r) => s + r.insight.overspend, 0);
-    const worst = adRows[0];
-    return { count: adRows.length, total, worst };
-  }, [adRows]);
+  const adSummary = useMemo(() => summarizeAdInsights(adRows), [adRows]);
 
   if (loading) return <div className="text-sm text-foreground-500">加载中...</div>;
 

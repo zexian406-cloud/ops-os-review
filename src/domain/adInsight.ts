@@ -54,6 +54,25 @@ export function buildAdSuggestion(input: {
   return "转化正常，核查竞价与关键词竞争";
 }
 
+/** 按「估算日超支」降序排序（异常中心广告 Tab 的排序口径） */
+export function sortAdInsights<T extends { insight: AdInsight }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => b.insight.overspend - a.insight.overspend);
+}
+
+/** 汇总：SKU 数 / 合计估算日超支 / 最严重的一条（已排序时取首行） */
+export function summarizeAdInsights<T extends { insight: AdInsight }>(rows: T[]): {
+  count: number;
+  total: number;
+  worst: T | undefined;
+} {
+  const sorted = sortAdInsights(rows);
+  return {
+    count: sorted.length,
+    total: sorted.reduce((s, r) => s + r.insight.overspend, 0),
+    worst: sorted[0],
+  };
+}
+
 /** 计算单个 SKU 的广告异常指标（本期 vs 上期，均已按区间均值处理） */
 export function computeAdInsight(args: {
   sku: SkuMaster;
