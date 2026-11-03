@@ -19,6 +19,7 @@ import type {
 } from "./types";
 import type { Site, SiteConfig, CrossSiteSummary, CrossSiteReport, ExchangeRate, DiagnosisNote } from "./types";
 import type { ShipmentFormulaConfig, ProfitFormulaConfig } from "./types";
+import { countShopMskus } from "./shopFilter";
 import {
   DEFAULT_WAREHOUSE_REGIONS,
   DEFAULT_SHIPMENT_FORMULA,
@@ -495,10 +496,14 @@ export async function getShopName(id: string): Promise<string> {
   return shop?.name ?? id;
 }
 
+/** 店铺数据量口径：该店铺下的 MSKU 数量。
+ *  mskuStores 按行记录店铺 → 逐个 MSKU 计数；
+ *  无 mskuStores 时回退整条记录的 store 字段，MSKU 列表按逗号拆分计数。 */
 export async function getShopDataCount(shopId: string): Promise<number> {
-  const skuCount = await db.skuMaster.where("store").equals(shopId).count();
-  const promoCount = await db.promotions.where("store").equals(shopId).count();
-  return skuCount + promoCount;
+  const shop = await db.shops.get(shopId);
+  if (!shop) return 0;
+  const skus = await db.skuMaster.toArray();
+  return countShopMskus(skus, shop.name);
 }
 
 // ==================== Bulk operations ====================

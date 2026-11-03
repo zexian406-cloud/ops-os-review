@@ -12,6 +12,7 @@ import {
 import { computeAll, computeWeeklyPromoCost, isCostFullyMissing, isReturnRateMissing, formatCoverDays, COVER_NO_SALES_SUB } from "@/domain/calculator";
 import { useOpsData } from "@/domain/store";
 import { computeDiagnosis, type DiagnosisResult } from "@/domain/diagnosis";
+import { fmtFactor } from "@/domain/format";
 import { upsertSnapshots, db, addOpsLog, deleteOpsLog, getAllShops, ensureDefaultShops, getCurrentSiteId, getWarehouseAliasMap, WAREHOUSE_MAPPING_EVENT } from "@/domain/db";
 import KpiCard from "@/components/ui/KpiCard";
 import Section from "@/components/ui/Section";
@@ -2733,17 +2734,7 @@ function DiagnosisFactorsInline({ result }: { result: DiagnosisResult }) {
   if (result.factors.length === 0) {
     return <div className="mt-3 text-[12px] text-foreground-400">暂无结构化拆解。</div>;
   }
-  // 统一格式化：百分比 1 位小数，其余整数或 1 位小数；禁止裸浮点输出（如 1.3900000000000006）。
-  // 归因项的 before/after/delta 可能是预格式化字符串（直接透传）或数字（格式化）。
-  const fmtFactor = (v: number | string | null | undefined, unit?: string): string => {
-    if (v == null || v === "") return "—";
-    if (typeof v === "string") {
-      return /[^\d.+\-eE]/.test(v) ? v : `${v}${unit ?? ""}`;
-    }
-    if (!Number.isFinite(v)) return "—";
-    if (unit === "%") return `${v.toFixed(1)}%`;
-    return Number.isInteger(v) ? String(v) : v.toFixed(1);
-  };
+  // fmtFactor 从 @/domain/format 引入（Bug2 统一格式化，含单测）
   const impactMeta = (impact?: string) => {
     if (impact === "up_bad" || impact === "down_bad") return "text-red-600";
     if (impact === "up_good" || impact === "down_good") return "text-accent-600";

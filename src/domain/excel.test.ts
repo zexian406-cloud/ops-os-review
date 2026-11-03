@@ -204,3 +204,72 @@ describe("parseOperationExcel · 上期列防串列", () => {
     expect(prev.orders).toBe(30);
   });
 });
+
+describe("parseOperationExcel · 功能4/5：广告订单数（选填）与退款率", () => {
+  it("广告订单数列 → 真实值写入快照 adOrders", () => {
+    const buf = buildXlsx([
+      {
+        name: "运营数据",
+        headers: ["SKU", "7天销量", "订单量(近7天)", "广告订单数(选填)"],
+        rows: [["ADOSKU", 14, 30, 6]],
+      },
+    ]);
+    const r = parseOperationExcel(buf, FIXED_DATE);
+    const cur = r.dailySnapshot.find((s) => s.sku === "ADOSKU" && s.date === FIXED_DATE && s.dailySales7d > 0)!;
+    expect(cur.adOrders).toBe(6);
+    expect(cur.orders).toBe(30);
+  });
+
+  it("无广告订单数列 → adOrders 为 undefined（UI 回退费比推导并标「估算」）", () => {
+    const buf = buildXlsx([
+      { name: "运营数据", headers: ["SKU", "7天销量", "订单量(近7天)"], rows: [["NOAD", 14, 30]] },
+    ]);
+    const r = parseOperationExcel(buf, FIXED_DATE);
+    const cur = r.dailySnapshot.find((s) => s.sku === "NOAD" && s.date === FIXED_DATE && s.dailySales7d > 0)!;
+    expect(cur.adOrders).toBeUndefined();
+  });
+
+  it("退款率真实 0% 与未导入区分：显式 0 记 0，无列记 undefined", () => {
+    const withZero = parseOperationExcel(
+      buildXlsx([
+        { name: "运营数据", headers: ["SKU", "7天销量", "退款率"], rows: [["RF-ZERO", 14, 0]] },
+      ]),
+      FIXED_DATE,
+    );
+    const zero = withZero.dailySnapshot.find((s) => s.sku === "RF-ZERO" && s.date === FIXED_DATE && s.dailySales7d > 0)!;
+    expect(zero.refundRate).toBe(0);
+
+    const withoutCol = parseOperationExcel(
+      buildXlsx([{ name: "运营数据", headers: ["SKU", "7天销量"], rows: [["RF-MISS", 14]] }]),
+      FIXED_DATE,
+    );
+    const miss = withoutCol.dailySnapshot.find((s) => s.sku === "RF-MISS" && s.date === FIXED_DATE && s.dailySales7d > 0)!;
+    expect(miss.refundRate).toBeUndefined();
+  });
+
+  it("退款率正常值写入（聚合保留 2 位小数）", () => {
+    const buf = buildXlsx([
+      { name: "运营数据", headers: ["SKU", "7天销量", "退款率"], rows: [["RF-OK", 14, 2.1]] },
+    ]);
+    const r = parseOperationExcel(buf, FIXED_DATE);
+    const cur = r.dailySnapshot.find((s) => s.sku === "RF-OK" && s.date === FIXED_DATE && s.dailySales7d > 0)!;
+    expect(cur.refundRate).toBeCloseTo(2.1);
+  });
+
+  it("上期稀疏快照不带 adOrders/refundRate（仅 Sessions/订单量）", () => {
+    const buf = buildXlsx([
+      {
+        name: "运营数据",
+        headers: ["SKU", "7天销量", "Sessions(上期)", "订单量(上期)", "广告订单数(选填)", "退款率"],
+        rows: [["SPARSE", 14, 1350, 30, 6, 2.1]],
+      },
+    ]);
+    const r = parseOperationExcel(buf, FIXED_DATE);
+    const prev = r.dailySnapshot.find((s) => s.sku === "SPARSE" && s.date === "2026-10-25")!;
+    expect(prev.dailySales7d).toBe(0);
+    expect(prev.sessions).toBe(1350);
+    expect(prev.orders).toBe(30);
+    expect(prev.adOrders).toBeUndefined();
+    expect(prev.refundRate).toBeUndefined();
+  });
+});
