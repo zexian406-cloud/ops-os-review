@@ -46,6 +46,19 @@ describe("computeAdInsight · 广告异常指标", () => {
     expect(r.prevAdRatio).toBeCloseTo(34.16);
   });
 
+  it("上期为稀疏占位行（日销 0、费比聚合为 0）→ 变化显示「—」，不产生假冲高", () => {
+    const r = computeAdInsight({
+      sku,
+      current: snap({ adRatio: 46, adOrders: 4 }),
+      previous: snap({ dailySales7d: 0, adRatio: 0, adOrders: undefined, sessions: 1350, orders: 30 }),
+      targetAdRatio: 25,
+    });
+    expect(r.deltaPt).toBeNull();
+    expect(r.prevAdRatio).toBeNull();
+    expect(r.prevAdOrderShare).toBeNull();
+    expect(r.suggestion).toContain("核查竞价与关键词");
+  });
+
   it("广告单占比 = 广告订单数 / 日销；未导入为 null", () => {
     const withOrders = computeAdInsight({ sku, current: snap({ adOrders: 4 }), targetAdRatio: 25 });
     expect(withOrders.adOrderShare).toBeCloseTo(40);

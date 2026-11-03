@@ -80,7 +80,10 @@ export function computeAdInsight(args: {
   previous?: DailySnapshot | null;
   targetAdRatio: number;
 }): AdInsight {
-  const { sku, current, previous, targetAdRatio } = args;
+  const { sku, current, targetAdRatio } = args;
+  // 上期可能只有 Sessions/订单 的稀疏占位行（销量为 0、费比被聚合为 0），
+  // 不能拿来算费比变化，否则会凭空出现 +40pt 的假冲高
+  const previous = args.previous && (args.previous.dailySales7d ?? 0) > 0 ? args.previous : null;
   const adRatio = current.adRatio ?? 0;
   const prevAdRatio = num(previous?.adRatio);
   const deltaPt = prevAdRatio == null ? null : adRatio - prevAdRatio;
