@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import * as XLSX from "xlsx";
 import { useOpsData } from "@/domain/store";
 import { computeWarehouseTotals } from "@/domain/calculator";
 import KpiCard from "@/components/ui/KpiCard";
@@ -147,6 +148,43 @@ export default function Shipment() {
     await db.skuMaster.put({ ...cur, ...patch });
     reload();
   }, [currentSiteId, reload]);
+
+  // 导出发货建议：按当前筛选 + 排序结果导出 Excel（供线下跟单 / 对工厂下单）
+  const exportSuggestions = useCallback(() => {
+    const PRIORITY_LABEL: Record<string, string> = { urgent: "紧急", high: "优先", normal: "常规", low: "低优" };
+    const rows = skuSuggestions.map((item) => {
+      const sug = item.sug;
+      const fob = item.sku.costFob ?? 0;
+      const qty = sug?.suggestQty ?? 0;
+      return {
+        "SKU": item.sku.sku,
+        "品名": item.sku.name,
+        "工厂名": item.sku.factoryName ?? "",
+        "优先级": PRIORITY_LABEL[sug?.priority ?? "low"],
+        "建议补货量": qty,
+        "最晚发货日": sug?.latestShipDate ?? "",
+        "日均销量": Math.round(item.daily * 100) / 100,
+        "销量口径": salesBasis === "7d" ? "近7天" : "近30天",
+        "在库合计": item.totalStock,
+        "在途": item.totalTransit,
+        "在库覆盖(天)": item.coverOnHand >= 999 ? "" : item.coverOnHand,
+        "含在途覆盖(天)": item.coverWithTransit >= 999 ? "" : item.coverWithTransit,
+        "补货阈值(天)": item.dynamicThreshold,
+        "目标覆盖(天)": item.target,
+        "LeadTime(天)": item.leadTime,
+        "安全库存(天)": item.safetyDays,
+        "是否需补货": item.needShip ? "是" : "否",
+        "FOB单价": fob,
+        "补货货值(FOB)": Math.round(fob * qty * 100) / 100,
+      };
+    });
+    if (rows.length === 0) return;
+    const sheet = XLSX.utils.json_to_sheet(rows);
+    sheet["!cols"] = Object.keys(rows[0]).map((k) => ({ wch: Math.max(8, Math.min(20, k.length * 2.2 + 2)) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, sheet, "发货建议");
+    XLSX.writeFile(wb, `【发货建议】${today}.xlsx`);
+  }, [skuSuggestions, salesBasis, today]);
 
   const urgentCount = shipmentSuggestions.filter((s) => s.priority === "urgent").length;
   const totalQty = shipmentSuggestions.reduce((s, r) => s + r.suggestQty, 0);
@@ -337,7 +375,13 @@ export default function Shipment() {
       </div>
 
       {/* 发货建议卡片 */}
-        <Section title="发货建议卡片" icon="ri-grid-line" subtitle={`共 ${skuSuggestions.length} 个 SKU · ${SORT_LABELS[sortMode]}`}>
+        <Section title="发货建议卡片" icon="ri-grid-line" subtitle={`共 ${skuSuggestions.length} 个 SKU · ${SORT_LABELS[sortMode]}`}
+          action={skuSuggestions.length > 0 ? (
+            <button type="button" onClick={exportSuggestions}
+              className="rounded-md border border-background-300/70 bg-background-50 px-3 py-1.5 text-[12px] font-medium text-foreground-700 transition-colors hover:border-primary-400 hover:text-primary-700 cursor-pointer">
+              <i className="ri-download-2-line mr-1 align-[-1px]" aria-hidden />导出 Excel
+            </button>
+          ) : undefined}>
           {skuSuggestions.length === 0 ? (
             <EmptyState icon="ri-check-double-line" title="没有匹配的发货建议" desc="调整筛选条件或前往参数中心调整目标库存天数" />
           ) : (
