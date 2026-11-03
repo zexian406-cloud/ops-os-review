@@ -394,6 +394,8 @@ export function parseOperationExcel(
       adOrders: number[];
       /** 该 SKU 是否出现过非空退款率单元格（区分「真实 0%」与「未导入」） */
       refundSeen: boolean;
+      /** 该 SKU 是否出现过非空广告订单数单元格（区分「真实 0 单」与「未导入」） */
+      adOrdersSeen: boolean;
     }>();
     // FIX: 合并原运营数据导入功能：收集品名/店铺/ASIN/链接信息（first-wins）
     const infoAgg = new Map<string, {
@@ -471,7 +473,7 @@ export function parseOperationExcel(
       const adOrdersVal = num(pickCell(row, c.adOrders));
       // FIX: 收集各 MSKU 的指标值到聚合 Map（而非直接 push 导致同 SKU 多条快照互相覆盖）
       if (!skuAgg.has(sku)) {
-        skuAgg.set(sku, { sales7d: [], sales30d: [], rating: [], reviewCount: [], adRatio: [], returnRate: [], refundRate: [], sessions: [], orders: [], sessionsPrev: [], ordersPrev: [], adSpend: [], adOrders: [], refundSeen: false });
+        skuAgg.set(sku, { sales7d: [], sales30d: [], rating: [], reviewCount: [], adRatio: [], returnRate: [], refundRate: [], sessions: [], orders: [], sessionsPrev: [], ordersPrev: [], adSpend: [], adOrders: [], refundSeen: false, adOrdersSeen: false });
       }
       const agg = skuAgg.get(sku)!;
       agg.sales7d.push(daily7d);
@@ -488,6 +490,7 @@ export function parseOperationExcel(
       agg.adSpend.push(adSpendVal);
       agg.adOrders.push(adOrdersVal);
       if (c.refundRate != null && str(pickCell(row, c.refundRate)) !== "") agg.refundSeen = true;
+      if (c.adOrders != null && str(pickCell(row, c.adOrders)) !== "") agg.adOrdersSeen = true;
       // FIX: 按 MSKU 行保留独立指标（不取平均）——这是修复"展开列表显示相同数据"的关键
       // MSKU 列可能是逗号分隔多值（如 "BFRS258,BFRS258-GM"），需拆分后分别记录
       // 当 MSKU 为空时，按优先级查找：SKU+店铺 → ASIN → 不记录
@@ -600,7 +603,7 @@ export function parseOperationExcel(
         refundRate: refundRate > 0 ? Math.round(refundRate * 100) / 100 : (agg.refundSeen ? 0 : undefined),
         sessions: sessionsTotal > 0 ? Math.round(sessionsTotal) : undefined,
         orders: ordersTotal > 0 ? Math.round(ordersTotal * 100) / 100 : undefined,
-        adOrders: adOrdersTotal > 0 ? Math.round(adOrdersTotal) : undefined,
+        adOrders: agg.adOrdersSeen ? Math.round(adOrdersTotal) : undefined,
       });
       // ── 上期快照（稀疏行）：仅含 Sessions/订单量，写入 today-7 ──
       // 供「销量下滑分流」本期 vs 上期对比；销量字段保持 0（诊断均值会跳过这类稀疏行）

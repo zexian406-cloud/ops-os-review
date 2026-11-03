@@ -342,7 +342,7 @@ export default function GuidePage() {
         <SubTitle>5.1.4 产品链接 / 竞品链接</SubTitle>
         <p>在「SKU 标识符」或「运营数据导入」表中填写。产品链接为当前 Listing 的 Amazon URL；竞品链接支持多个，用换行符分隔。导入后可在 SKU 详情页直接点击跳转。</p>
         <SubTitle>5.1.5 自然订单 / 广告订单占比</SubTitle>
-        <p>系统基于广告费比（adRatio）自动推导自然订单与广告订单占比：广告订单占比 ≈ 广告费比；自然订单占比 ≈ 100% - 广告费比。该指标展示在促销时间线和 SKU 详情页中，含可视化进度条。</p>
+        <p>已导入「广告订单数」的 SKU：自然订单占比 =（日销 − 广告订单数）/ 日销，角标显示「按广告订单数」，为真实数据；未导入的 SKU 按广告费比推导（广告占比 ≈ 费比，自然占比 ≈ 100% − 费比），角标显示「估算」。该指标展示在 SKU 详情页与费比诊断中，含可视化进度条。</p>
         <SubTitle>5.1.6 导入模板匹配口径说明</SubTitle>
         <div className="rounded-lg border border-background-200 bg-background-50 p-3 text-[13px] text-foreground-700">
           <table className="w-full text-[12px]">

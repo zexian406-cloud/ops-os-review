@@ -229,6 +229,15 @@ describe("parseOperationExcel · 功能4/5：广告订单数（选填）与退�
     expect(cur.adOrders).toBeUndefined();
   });
 
+  it("广告订单数显式填 0 → 保留真实 0，不回退估算", () => {
+    const buf = buildXlsx([
+      { name: "运营数据", headers: ["SKU", "7天销量", "广告订单数"], rows: [["ZEROAD", 14, 0]] },
+    ]);
+    const r = parseOperationExcel(buf, FIXED_DATE);
+    const cur = r.dailySnapshot.find((s) => s.sku === "ZEROAD" && s.date === FIXED_DATE && s.dailySales7d > 0)!;
+    expect(cur.adOrders).toBe(0);
+  });
+
   it("退款率真实 0% 与未导入区分：显式 0 记 0，无列记 undefined", () => {
     const withZero = parseOperationExcel(
       buildXlsx([

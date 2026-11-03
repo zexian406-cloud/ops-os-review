@@ -167,6 +167,7 @@ function evalNode(nd: Node, vars: Record<string, number>): number {
         case "-": return l - r;
         case "*": return l * r;
         case "/": return l / r;
+        default: throw new FormulaEvalError(`不支持的运算符「${nd.op}」`);
       }
     }
     case "call": {
