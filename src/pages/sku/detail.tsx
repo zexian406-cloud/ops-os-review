@@ -972,11 +972,13 @@ export default function SkuDetail() {
       {latest && visibleKeys.includes("kpiOrderRatio") && (
       <CanvasItem key="kpiOrderRatio" itemKey="kpiOrderRatio">
         {(() => {
-            // 广告订单占比：有导入的真实「广告订单数」且总订单>0 → 真实值；
-            // 否则回退广告费比推导（花费口径 ≠ 订单口径，数学上不相等，标「估算」）
+            // 自然占比口径：已导入「广告订单数」→ (日销 − 广告订单数) / 日销；
+            // 未导入 → 回退广告费比推导（花费口径 ≠ 订单口径，标「估算」）
             const ordersTotal = latest.orders ?? 0;
-            const realAd = (latest.adOrders ?? 0) > 0 && ordersTotal > 0
-              ? Math.min(100, ((latest.adOrders as number) / ordersTotal) * 100)
+            const dailyTotal = (latest.dailySales7d ?? 0) > 0 ? latest.dailySales7d : ordersTotal;
+            const adOrders = latest.adOrders;
+            const realAd = adOrders != null && dailyTotal > 0
+              ? Math.max(0, Math.min(100, (adOrders / dailyTotal) * 100))
               : null;
             const estimated = realAd == null;
             const ad = realAd ?? (latest.adRatio ?? 0);
@@ -988,13 +990,20 @@ export default function SkuDetail() {
               >
                 估算
               </span>
-            ) : null;
+            ) : (
+              <span
+                className="ml-1 inline-flex cursor-help items-center rounded-full bg-accent-100 px-1.5 py-0.5 align-[1px] text-[9px] font-semibold normal-case tracking-normal text-accent-700"
+                title="按导入的「广告订单数」计算"
+              >
+                按广告订单数
+              </span>
+            );
             return (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 <KpiCard
                   label={<>自然订单占比{estBadge}</>}
                   value={`${organic.toFixed(1)}%`}
-                  sub={estimated ? `广告占比 ${ad.toFixed(1)}% · 基于广告费比推导` : `广告占比 ${ad.toFixed(1)}% · 真实订单数据`}
+                  sub={estimated ? `广告占比 ${ad.toFixed(1)}% · 基于广告费比推导` : `广告占比 ${ad.toFixed(1)}% · 按广告订单数`}
                   icon="ri-leaf-line"
                   tone={organic > 70 ? "accent" : organic > 40 ? "primary" : "warn"}
                   tooltip={estimated ? "基于广告费比推导，非后台真实订单数据" : "来自导入的「广告订单数」真实数据"}
@@ -1002,7 +1011,7 @@ export default function SkuDetail() {
                 <KpiCard
                   label={<>广告订单占比{estBadge}</>}
                   value={`${ad.toFixed(1)}%`}
-                  sub={estimated ? `自然占比 ${organic.toFixed(1)}% · 阈值 ${config?.adRatioThreshold ?? 10}%` : `自然占比 ${organic.toFixed(1)}% · 真实订单数据`}
+                  sub={estimated ? `自然占比 ${organic.toFixed(1)}% · 阈值 ${config?.adRatioThreshold ?? 10}%` : `自然占比 ${organic.toFixed(1)}% · 按广告订单数`}
                   icon="ri-megaphone-line"
                   tone={ad > (config?.adRatioThreshold ?? 10) * 2 ? "danger" : ad > (config?.adRatioThreshold ?? 10) ? "warn" : "accent"}
                   tooltip={estimated ? "基于广告费比推导，非后台真实订单数据" : "来自导入的「广告订单数」真实数据"}

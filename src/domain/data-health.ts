@@ -235,6 +235,28 @@ export function validateImportData(result: ImportResult): ValidationResult {
         action: "mark",
       });
     }
+    // 规则 12：广告订单数为空 → 提示级（自然占比将按费比估算）
+    if (s.dailySales7d > 0 && s.adOrders == null) {
+      tips.push({
+        type: "tip",
+        ruleId: 12,
+        ruleName: "广告订单数为空",
+        sku: s.sku,
+        detail: "未填写广告订单数，该 SKU 自然订单占比将按费比估算（估算值仅供参考）",
+        action: "mark",
+      });
+    }
+    // 规则 13：广告订单数 > 日销 → 警告级（广告单不可能超过总单量）
+    if (s.dailySales7d > 0 && s.adOrders != null && s.adOrders > s.dailySales7d) {
+      warnings.push({
+        type: "warning",
+        ruleId: 13,
+        ruleName: "广告订单数 > 日销",
+        sku: s.sku,
+        detail: `广告订单数 ${s.adOrders} 大于日均销量 ${s.dailySales7d.toFixed(1)}，请核对广告报告口径（应为日均可归因广告订单）`,
+        action: "mark",
+      });
+    }
   }
 
   // 过滤掉被跳过的 SKU（从所有集合中移除）

@@ -147,6 +147,7 @@ export function useOpsData() {
           salesBasis: undefined,
           profitMarginThreshold: siteCfg.profitMarginThreshold,
           adRatioThreshold: siteCfg.adRatioThreshold,
+          targetAdRatio: globalCfg.targetAdRatio ?? 25,
           ratingDropThreshold: siteCfg.ratingDropThreshold,
           returnRateThreshold: siteCfg.returnRateThreshold,
           returnBasis: globalCfg.returnBasis ?? "refund",

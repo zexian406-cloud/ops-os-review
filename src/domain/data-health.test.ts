@@ -85,3 +85,42 @@ describe("validateImportData · 功能4：退款率规则 10/11", () => {
     expect(v.warnings.find((t) => t.ruleId === 11)).toBeUndefined();
   });
 });
+
+describe("validateImportData · 功能：广告订单数规则 12/13", () => {
+  it("广告订单数为空 → 提示级 ruleId 12，文案说明按费比估算", () => {
+    const v = validateImportData(buildResult([snap({ adOrders: undefined })]));
+    const tip = v.tips.find((t) => t.ruleId === 12);
+    expect(tip).toBeTruthy();
+    expect(tip!.detail).toContain("费比估算");
+    expect(v.validRows.dailySnapshot).toHaveLength(1);
+  });
+
+  it("广告订单数 > 日销 → 警告级 ruleId 13", () => {
+    const v = validateImportData(buildResult([snap({ dailySales7d: 24, adOrders: 30 })]));
+    const w = v.warnings.find((t) => t.ruleId === 13);
+    expect(w).toBeTruthy();
+    expect(w!.detail).toContain("30");
+    expect(w!.detail).toContain("24.0");
+    expect(v.validRows.dailySnapshot).toHaveLength(1);
+  });
+
+  it("广告订单数 ≤ 日销（含真实 0）→ 不触发规则 13", () => {
+    const ok = validateImportData(buildResult([snap({ dailySales7d: 24, adOrders: 6 })]));
+    expect(ok.warnings.find((t) => t.ruleId === 13)).toBeUndefined();
+
+    const zero = validateImportData(buildResult([snap({ dailySales7d: 24, adOrders: 0 })]));
+    expect(zero.warnings.find((t) => t.ruleId === 13)).toBeUndefined();
+    expect(zero.tips.find((t) => t.ruleId === 12)).toBeUndefined();
+  });
+
+  it("稀疏上期流量行不触发规则 12/13", () => {
+    const v = validateImportData(
+      buildResult([
+        snap({ dailySales7d: 0, dailySales30d: 0, sessions: 1350, orders: 30, adOrders: undefined }),
+        snap({ dailySales7d: 0, dailySales30d: 0, sessions: 1350, orders: 30, adOrders: 5 }),
+      ]),
+    );
+    expect(v.tips.find((t) => t.ruleId === 12)).toBeUndefined();
+    expect(v.warnings.find((t) => t.ruleId === 13)).toBeUndefined();
+  });
+});

@@ -388,6 +388,7 @@ export interface GlobalConfig {
   salesBasis?: "7d" | "30d";       // 日均销量口径（缺省 7d，可在参数中心切 30d）
   profitMarginThreshold: number;   // 利润率异常阈值 %
   adRatioThreshold: number;        // 费比异常阈值 %
+  targetAdRatio?: number;          // 目标广告费比 %（异常中心「估算日超支」基准，缺省 25）
   ratingDropThreshold: number;     // 评分下降阈值
   returnRateThreshold: number;     // 退款率异常阈值 %
   returnBasis?: RefundBasis;       // 利润计算退款损失口径（缺省 refund）

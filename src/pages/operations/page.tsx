@@ -14,6 +14,7 @@ import AlertList from "@/pages/dashboard/AlertList";
 import type { AlertDiagnostic } from "@/pages/dashboard/AlertList";
 import { resolveAlertDiagType } from "@/domain/types";
 import type { DailySnapshot, DiagnosisType, SkuMaster, InventoryLayer, Shop, AlertSeverity } from "@/domain/types";
+import { computeAdInsight, type AdInsight } from "@/domain/adInsight";
 import DiagnosisView from "./DiagnosisView";
 
 type TabKey = "all" | "traffic" | "profit" | "ad" | "rating" | "review" | "return" | "listing" | "new" | "diag";
@@ -252,6 +253,38 @@ export default function Operations() {
     return out;
   }, [alerts, siteSnapshots, skuMaster, latestInventory, config, currentSiteId, diagRules]);
 
+  /** 广告异常进阶视图：目标费比 / 环比变化 / 广告单占比 / 估算日超支 */
+  const adRows = useMemo(() => {
+    const out: Array<{ sku: SkuMaster; snap: DailySnapshot; insight: AdInsight }> = [];
+    for (const sku of skuMaster) {
+      const latest = latestSnapshot.get(snapKey(sku.sku, currentSiteId));
+      if (!latest || sku.saleStatus === "discontinued") continue;
+      if (latest.adRatio <= config.adRatioThreshold) continue;
+      const history = siteSnapshots
+        .filter((r) => r.sku === sku.sku)
+        .sort((a, b) => a.date.localeCompare(b.date));
+      const cmp = resolveComparison({ rows: history, basis: "7d" });
+      const current = cmp.current ?? latest;
+      out.push({
+        sku,
+        snap: current,
+        insight: computeAdInsight({
+          sku,
+          current,
+          previous: cmp.previous,
+          targetAdRatio: config.targetAdRatio ?? 25,
+        }),
+      });
+    }
+    return out.sort((a, b) => b.insight.overspend - a.insight.overspend);
+  }, [skuMaster, latestSnapshot, siteSnapshots, config, currentSiteId]);
+
+  const adSummary = useMemo(() => {
+    const total = adRows.reduce((s, r) => s + r.insight.overspend, 0);
+    const worst = adRows[0];
+    return { count: adRows.length, total, worst };
+  }, [adRows]);
+
   if (loading) return <div className="text-sm text-foreground-500">加载中...</div>;
 
   // 归因下钻视图：/operations?tab=diag&sku=xxx&type=xxx
@@ -299,7 +332,17 @@ export default function Operations() {
               >
                 <i className={t.icon} aria-hidden />
               </span>
-              <div className="text-[13px] font-semibold leading-tight">{t.label}</div>
+              <div className="flex items-center gap-1.5 text-[13px] font-semibold leading-tight">
+                {t.label}
+                {t.key === "ad" && adSummary.count > 0 && (
+                  <span className={[
+                    "inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold",
+                    active ? "bg-background-50 text-primary-700" : "bg-red-500 text-white",
+                  ].join(" ")}>
+                    {adSummary.count}
+                  </span>
+                )}
+              </div>
               <div
                 className={[
                   "text-[11px] leading-tight",
@@ -382,10 +425,127 @@ export default function Operations() {
       ) : (
       <Section
         title={activeTab.label + " · SKU 清单"}
-        subtitle={`共 ${rows.length} 个 SKU 需要关注`}
+        subtitle={
+          tab === "ad"
+            ? `本类异常共 ${adSummary.count} 个 SKU，合计估算日超支 $${adSummary.total.toFixed(2)}`
+            : `共 ${rows.length} 个 SKU 需要关注`
+        }
         icon={activeTab.icon}
       >
-        {rows.length === 0 ? (
+        {tab === "ad" ? (
+          adRows.length === 0 ? (
+            <EmptyState icon="ri-check-double-line" title="无广告异常" desc="当前没有费比超过阈值的 SKU，继续保持" />
+          ) : (
+          <>
+            {adSummary.count > 0 && (
+              <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-red-200/70 bg-red-50/50 px-3 py-2 text-[12px] text-foreground-700">
+                <span className="flex items-center gap-1.5">
+                  <i className="ri-alarm-warning-line text-red-500" aria-hidden />
+                  本类异常共 <b>{adSummary.count}</b> 个 SKU，合计估算日超支
+                  <b className="text-red-600">${adSummary.total.toFixed(2)}</b>
+                </span>
+                {adSummary.worst && (
+                  <span className="text-foreground-500">
+                    最严重：<b className="text-foreground-800">{adSummary.worst.sku.name}</b>
+                    （费比 {adSummary.worst.insight.adRatio.toFixed(1)}% · 超支 ${adSummary.worst.insight.overspend.toFixed(2)}/天）
+                  </span>
+                )}
+                <span className="ml-auto text-foreground-400">按估算日超支降序</span>
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="text-left text-[11px] font-semibold tracking-[0.06em] text-foreground-500">
+                    <th className="border-b border-background-200 px-2 py-2.5" aria-label="严重度" />
+                    <th className="border-b border-background-200 px-3 py-2.5">SKU / 品名</th>
+                    <th className="border-b border-background-200 px-3 py-2.5">店铺</th>
+                    <th className="border-b border-background-200 px-3 py-2.5 text-right">日销</th>
+                    <th className="border-b border-background-200 px-3 py-2.5 text-right">实际费比</th>
+                    <th className="border-b border-background-200 px-3 py-2.5 text-right">费比变化</th>
+                    <th className="border-b border-background-200 px-3 py-2.5 text-right">目标费比</th>
+                    <th className="border-b border-background-200 px-3 py-2.5 text-right">广告单占比</th>
+                    <th className="border-b border-background-200 px-3 py-2.5 text-right">估算日超支</th>
+                    <th className="border-b border-background-200 px-3 py-2.5">建议</th>
+                    <th className="border-b border-background-200 px-3 py-2.5 text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {adRows.map((r) => {
+                    const ins = r.insight;
+                    const deltaUp = ins.deltaPt != null && ins.deltaPt > 0;
+                    const deltaHot = ins.deltaPt != null && ins.deltaPt >= 10;
+                    return (
+                      <tr key={r.sku.sku} className="hover:bg-background-100/60">
+                        <td className="border-b border-background-200/70 py-2.5 pl-3 pr-0">
+                          <span
+                            className={`inline-block h-2.5 w-2.5 rounded-full ${ins.severity === "danger" ? "bg-red-500" : "bg-amber-400"}`}
+                            title={`实际费比为目标费比的 ${(ins.adRatio / ins.target).toFixed(1)} 倍`}
+                          />
+                        </td>
+                        <td className="border-b border-background-200/70 px-3 py-2.5">
+                          <Link
+                            to={`/sku/${encodeURIComponent(r.sku.sku)}`}
+                            className="block font-medium text-foreground-900 hover:text-primary-700 cursor-pointer"
+                          >
+                            {r.sku.name}
+                          </Link>
+                          <div className="mono-num text-[11px] text-foreground-500">{r.sku.sku}</div>
+                        </td>
+                        <td className="border-b border-background-200/70 px-3 py-2.5 text-[12px] text-foreground-600">
+                          {getShopName(r.sku.store)}
+                        </td>
+                        <td className="mono-num border-b border-background-200/70 px-3 py-2.5 text-right">
+                          {r.snap.dailySales7d.toFixed(1)}
+                        </td>
+                        <td className="border-b border-background-200/70 px-3 py-2.5 text-right">
+                          <Badge tone={ins.severity === "danger" ? "danger" : "warn"}>{ins.adRatio.toFixed(1)}%</Badge>
+                        </td>
+                        <td className="mono-num border-b border-background-200/70 px-3 py-2.5 text-right">
+                          {ins.deltaPt == null ? (
+                            <span className="text-foreground-300">—</span>
+                          ) : (
+                            <span className={deltaHot ? "font-semibold text-red-600" : deltaUp ? "text-red-500" : "text-accent-600"}>
+                              {deltaUp ? "↑" : "↓"}{Math.abs(ins.deltaPt).toFixed(1)}pt
+                              {deltaHot && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-red-500 align-middle" />}
+                            </span>
+                          )}
+                        </td>
+                        <td className="mono-num border-b border-background-200/70 px-3 py-2.5 text-right text-foreground-600">
+                          {ins.target.toFixed(1)}%
+                        </td>
+                        <td className="mono-num border-b border-background-200/70 px-3 py-2.5 text-right">
+                          {ins.adOrderShare == null ? (
+                            <span className="text-foreground-300">—</span>
+                          ) : `${ins.adOrderShare.toFixed(1)}%`}
+                        </td>
+                        <td className="mono-num border-b border-background-200/70 px-3 py-2.5 text-right">
+                          <span className={`font-semibold ${ins.overspend > 0 ? "text-red-600" : "text-foreground-400"}`}>
+                            ${ins.overspend.toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="border-b border-background-200/70 px-3 py-2.5 text-[12px] text-foreground-600">
+                          {ins.suggestion}
+                        </td>
+                        <td className="border-b border-background-200/70 px-3 py-2.5 text-right">
+                          <Link
+                            to={`/operations?tab=diag&sku=${encodeURIComponent(r.sku.sku)}&type=adRatio`}
+                            className="inline-flex items-center gap-1 rounded-full border border-primary-300/70 bg-primary-50 px-2.5 py-1 text-[11px] font-medium text-primary-700 hover:bg-primary-100 cursor-pointer whitespace-nowrap transition-colors"
+                            title={`诊断 ${r.sku.sku} 的费比上升原因`}
+                          >
+                            <i className="ri-search-eye-line text-[12px]" aria-hidden />
+                            诊断
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+          )
+        ) : rows.length === 0 ? (
           <EmptyState
             icon="ri-check-double-line"
             title="该视图暂无异常"

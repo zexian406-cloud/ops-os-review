@@ -2,8 +2,8 @@ import type { DailySnapshot } from "@/domain/types";
 
 // Latest snapshot for today (通用演示数据)
 const mockLatestSnapshotBase: Omit<DailySnapshot, "id" | "date">[] = [
-  { sku: "sku001", siteId: "site_demo", dailySales7d: 10.9, monthlySales: 347, stockOnHand: 685, stockInTransit: 376, daysOfCoverOnHand: 63, daysOfCoverWithTransit: 97.6, adSpend: 12.07, adRatio: 46.46, profit: 4.69, profitMargin: 18.06, totalCost: 21.3, rating: 4.5, returnRate: 8, refundRate: 4.2 },
-  { sku: "sku002", siteId: "site_demo", dailySales7d: 3.0, monthlySales: 153, stockOnHand: 520, stockInTransit: 360, daysOfCoverOnHand: 172.8, daysOfCoverWithTransit: 292.4, adSpend: 7.28, adRatio: 30.35, profit: -0.43, profitMargin: -1.79, totalCost: 24.42, rating: 4.5, returnRate: 0, refundRate: 3.1 },
+  { sku: "sku001", siteId: "site_demo", dailySales7d: 10.9, monthlySales: 347, stockOnHand: 685, stockInTransit: 376, daysOfCoverOnHand: 63, daysOfCoverWithTransit: 97.6, adSpend: 12.07, adRatio: 46.46, profit: 4.69, profitMargin: 18.06, totalCost: 21.3, rating: 4.5, returnRate: 8, refundRate: 4.2, adOrders: 4 },
+  { sku: "sku002", siteId: "site_demo", dailySales7d: 3.0, monthlySales: 153, stockOnHand: 520, stockInTransit: 360, daysOfCoverOnHand: 172.8, daysOfCoverWithTransit: 292.4, adSpend: 7.28, adRatio: 30.35, profit: -0.43, profitMargin: -1.79, totalCost: 24.42, rating: 4.5, returnRate: 0, refundRate: 3.1, adOrders: 1 },
   { sku: "sku003", siteId: "site_demo", dailySales7d: 9.4, monthlySales: 178, stockOnHand: 502, stockInTransit: 245, daysOfCoverOnHand: 53.2, daysOfCoverWithTransit: 79.1, adSpend: 6.42, adRatio: 21.42, profit: -1.87, profitMargin: -6.22, totalCost: 31.86, rating: 4.4, returnRate: 4.55, refundRate: 2.4 },
   { sku: "sku004", siteId: "site_demo", dailySales7d: 5.9, monthlySales: 147, stockOnHand: 1620, stockInTransit: 0, daysOfCoverOnHand: 269.6, daysOfCoverWithTransit: 269.6, adSpend: 8.71, adRatio: 21.78, profit: 0.71, profitMargin: 1.78, totalCost: 39.28, rating: 4.4, returnRate: 0, refundRate: 2.8 },
   { sku: "sku005", siteId: "site_demo", dailySales7d: 2.4, monthlySales: 80, stockOnHand: 1242, stockInTransit: 555, daysOfCoverOnHand: 433.2, daysOfCoverWithTransit: 626.8, adSpend: 14.42, adRatio: 8.69, profit: 10.48, profitMargin: 6.32, totalCost: 155.51, rating: 3.9, returnRate: 0, refundRate: 3.6 },
@@ -79,6 +79,10 @@ export function buildMockHistory(today: string): DailySnapshot[] {
         rating: Math.max(0, Math.min(5, ov.rating ?? s.rating + (Math.random() - 0.5) * 0.1)),
         returnRate: ov.returnRate ?? s.returnRate,
         refundRate: ov.refundRate ?? s.refundRate,
+        // 已导入广告订单数的 SKU：按当天销量比例折算，保持占比稳定
+        adOrders: s.adOrders != null && s.dailySales7d > 0
+          ? Number((s.adOrders * (daily / s.dailySales7d)).toFixed(2))
+          : undefined,
         // 历史期流量/转化：CVR 恒等于基准转化率（今天的偏离即分流案例）
         orders: Number(daily.toFixed(2)),
         sessions: Math.round(daily / ((BASE_CVR[s.sku] ?? 8.5) / 100)),

@@ -317,6 +317,7 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   defaultTargetCoverDays: 60,
   profitMarginThreshold: 5,
   adRatioThreshold: 30,
+  targetAdRatio: 25,
   ratingDropThreshold: 0.2,
   returnRateThreshold: 5,
   returnBasis: "refund",

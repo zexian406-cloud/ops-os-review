@@ -511,6 +511,7 @@ export default function Settings() {
               </div>
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <NumField label="广告费比阈值 (%)" value={cfg.adRatioThreshold} onChange={(v) => setCfg({ ...cfg, adRatioThreshold: v })} />
+                <NumField label="目标广告费比 (%)" value={cfg.targetAdRatio ?? 25} onChange={(v) => setCfg({ ...cfg, targetAdRatio: v })} />
                 <NumField label="退款率阈值 (%)" value={cfg.returnRateThreshold} onChange={(v) => setCfg({ ...cfg, returnRateThreshold: v })} />
                 <NumField label="利润率阈值 (%)" value={cfg.profitMarginThreshold} onChange={(v) => setCfg({ ...cfg, profitMarginThreshold: v })} />
                 <NumField label="评分下降阈值" value={cfg.ratingDropThreshold} step={0.1} onChange={(v) => setCfg({ ...cfg, ratingDropThreshold: v })} />

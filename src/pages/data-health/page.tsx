@@ -107,6 +107,10 @@ export default function DataHealthPage() {
               <RuleRow id={7} name="评分超出 0-5" rule="评分 < 0 或 > 5" action="写入，数值标红" type="警告" />
               <RuleRow id={8} name="FOB 为空" rule="FOB 列无值" action="写入，标记利润估算" type="提示" />
               <RuleRow id={9} name="LeadTime 为空" rule="交期列无值" action="使用默认值 40 天" type="提示" />
+              <RuleRow id={10} name="退款率为空" rule="退款率列无值" action="写入，详情页标记缺失" type="提示" />
+              <RuleRow id={11} name="退款率 > 20%" rule="退款率 > 20%" action="写入，标记异常" type="警告" />
+              <RuleRow id={12} name="广告订单数为空" rule="广告订单数列无值" action="自然占比按费比估算" type="提示" />
+              <RuleRow id={13} name="广告订单数 > 日销" rule="广告订单数 > 日均销量" action="写入，标记异常" type="警告" />
             </tbody>
           </table>
         </div>
