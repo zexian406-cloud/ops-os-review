@@ -95,13 +95,14 @@ export function computeDiagnosis(input: DiagnosisInput): DiagnosisResult {
     }
     case 'profit':
     case 'ad': {
+      // 快照的 adRatio 已是百分数（46.46 = 46.46%），不再 ×100
       const adRatio = latestSnap.adRatio ?? 0;
       const prevAdRatio = previousSnap?.adRatio;
-      pushFactor('adRatio', '广告费比', prevAdRatio, adRatio, adRatio > 0.3 ? 'up_bad' : 'neutral', '%');
+      pushFactor('adRatio', '广告费比', prevAdRatio, adRatio, adRatio > 30 ? 'up_bad' : 'neutral', '%');
       return {
         type,
-        summary: `SKU ${sku.sku} 广告费比 ${(adRatio * 100).toFixed(1)}%，${adRatio > 0.3 ? '偏高需优化' : '正常'}`,
-        suggestion: adRatio > 0.3 ? '优化关键词投放，降低 ACoS' : '维持当前广告策略',
+        summary: `SKU ${sku.sku} 广告费比 ${adRatio.toFixed(1)}%，${adRatio > 30 ? '偏高需优化' : '正常'}`,
+        suggestion: adRatio > 30 ? '优化关键词投放，降低 ACoS' : '维持当前广告策略',
         factors,
       };
     }
@@ -118,13 +119,14 @@ export function computeDiagnosis(input: DiagnosisInput): DiagnosisResult {
     }
     case 'return':
     case 'review': {
+      // returnRate 同样已是百分数（8 = 8%）
       const ret = latestSnap.returnRate ?? 0;
       const prevRet = previousSnap?.returnRate;
-      pushFactor('returnRate', '退货率', prevRet, ret, ret > 0.1 ? 'up_bad' : 'neutral', '%');
+      pushFactor('returnRate', '退货率', prevRet, ret, ret > 10 ? 'up_bad' : 'neutral', '%');
       return {
         type,
-        summary: `SKU ${sku.sku} 退货率 ${(ret * 100).toFixed(1)}%`,
-        suggestion: ret > 0.1 ? '分析退货原因，优化产品描述或质量' : '退货率正常',
+        summary: `SKU ${sku.sku} 退货率 ${ret.toFixed(1)}%`,
+        suggestion: ret > 10 ? '分析退货原因，优化产品描述或质量' : '退货率正常',
         factors,
       };
     }

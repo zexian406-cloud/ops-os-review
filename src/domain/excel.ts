@@ -323,7 +323,7 @@ export function parseOperationExcel(
     // 合并原运营数据导入的独有字段：name(品名)、productUrl(产品链接)、competitorUrls(竞品链接)
     // 极简运营数据表新增：sessions/orders(本期)、cvr(转化率反推订单量)、adSpend(广告花费)
     const c = buildColumnMap(
-      ["sku", "msku", "asin", "store", "sales7d", "sales30d", "rating", "reviewCount", "adRatio", "returnRate", "refundRate", "name", "productUrl", "competitorUrls", "sessions", "orders", "cvr", "adSpend"],
+      ["sku", "msku", "asin", "store", "sales7d", "sales30d", "rating", "reviewCount", "adRatio", "returnRate", "refundRate", "name", "productUrl", "competitorUrls", "sessions", "orders", "cvr", "adSpend", "adOrders"],
       restHeaders,
     );
     noteCols(cP);
@@ -391,6 +391,9 @@ export function parseOperationExcel(
       returnRate: number[]; refundRate: number[];
       sessions: number[]; orders: number[];
       sessionsPrev: number[]; ordersPrev: number[]; adSpend: number[];
+      adOrders: number[];
+      /** 该 SKU 是否出现过非空退款率单元格（区分「真实 0%」与「未导入」） */
+      refundSeen: boolean;
     }>();
     // FIX: 合并原运营数据导入功能：收集品名/店铺/ASIN/链接信息（first-wins）
     const infoAgg = new Map<string, {
@@ -464,9 +467,11 @@ export function parseOperationExcel(
       const ordersPrev = num(pickCell(row, cP.ordersPrev));
       // 广告花费（绝对值）：本期行聚合后按 7天销量×售价 近似折算费比
       const adSpendVal = num(pickCell(row, c.adSpend));
+      // 广告订单数（选填真实数据）：优先于广告费比推导展示
+      const adOrdersVal = num(pickCell(row, c.adOrders));
       // FIX: 收集各 MSKU 的指标值到聚合 Map（而非直接 push 导致同 SKU 多条快照互相覆盖）
       if (!skuAgg.has(sku)) {
-        skuAgg.set(sku, { sales7d: [], sales30d: [], rating: [], reviewCount: [], adRatio: [], returnRate: [], refundRate: [], sessions: [], orders: [], sessionsPrev: [], ordersPrev: [], adSpend: [] });
+        skuAgg.set(sku, { sales7d: [], sales30d: [], rating: [], reviewCount: [], adRatio: [], returnRate: [], refundRate: [], sessions: [], orders: [], sessionsPrev: [], ordersPrev: [], adSpend: [], adOrders: [], refundSeen: false });
       }
       const agg = skuAgg.get(sku)!;
       agg.sales7d.push(daily7d);
@@ -481,6 +486,8 @@ export function parseOperationExcel(
       agg.sessionsPrev.push(sessionsPrev);
       agg.ordersPrev.push(ordersPrev);
       agg.adSpend.push(adSpendVal);
+      agg.adOrders.push(adOrdersVal);
+      if (c.refundRate != null && str(pickCell(row, c.refundRate)) !== "") agg.refundSeen = true;
       // FIX: 按 MSKU 行保留独立指标（不取平均）——这是修复"展开列表显示相同数据"的关键
       // MSKU 列可能是逗号分隔多值（如 "BFRS258,BFRS258-GM"），需拆分后分别记录
       // 当 MSKU 为空时，按优先级查找：SKU+店铺 → ASIN → 不记录
@@ -548,6 +555,7 @@ export function parseOperationExcel(
       const sessionsPrevTotal = sumArr(agg.sessionsPrev);
       const ordersPrevTotal = sumArr(agg.ordersPrev);
       const adSpendTotal = sumArr(agg.adSpend);
+      const adOrdersTotal = sumArr(agg.adOrders);
       // ── 自动计算：毛利率（近似口径）──
       // 毛利率 = (售价 − 佣金估 − 配送费 − FOB − 头程费) / 售价；佣金缺省按佣金率(默认15%)估算。
       // 仅当售价和任一成本项(FOB/配送费)有效时计算，避免只有售价时算出虚高 100%。
@@ -588,9 +596,11 @@ export function parseOperationExcel(
         rating: Math.round(rating * 10) / 10 || 0,
         reviewCount: reviewCount > 0 ? Math.round(reviewCount) : undefined,
         returnRate: Math.round(returnRate * 100) / 100 || 0,
-        refundRate: refundRate > 0 ? Math.round(refundRate * 100) / 100 : undefined,
+        // 退款率：>0 用均值；列存在且填过（含真实 0%）记 0；整列没填 → undefined（详情页显示「缺失」）
+        refundRate: refundRate > 0 ? Math.round(refundRate * 100) / 100 : (agg.refundSeen ? 0 : undefined),
         sessions: sessionsTotal > 0 ? Math.round(sessionsTotal) : undefined,
         orders: ordersTotal > 0 ? Math.round(ordersTotal * 100) / 100 : undefined,
+        adOrders: adOrdersTotal > 0 ? Math.round(adOrdersTotal) : undefined,
       });
       // ── 上期快照（稀疏行）：仅含 Sessions/订单量，写入 today-7 ──
       // 供「销量下滑分流」本期 vs 上期对比；销量字段保持 0（诊断均值会跳过这类稀疏行）

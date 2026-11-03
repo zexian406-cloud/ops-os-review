@@ -173,7 +173,7 @@ export default function ShopManagementPage() {
                     </td>
                     <td className="border-b border-background-200/70 px-3 py-2.5">
                       <Badge tone={shop.dataCount > 0 ? "primary" : "secondary"}>
-                        {shop.dataCount} 条数据
+                        {shop.dataCount} 个 MSKU
                       </Badge>
                     </td>
                     <td className="border-b border-background-200/70 px-3 py-2.5 text-[12px] text-foreground-500">

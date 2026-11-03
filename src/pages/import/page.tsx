@@ -119,11 +119,13 @@ const BASIC_HEADERS = ["SKU", "MSKU", "ASIN", "店铺", "售价", "FOB", "头程
 // 库存物流表（中频发货时填）：SKU/FBA在库/FBM库存/在途件数/目的仓/预计到仓
 const LOGI_HEADERS = ["SKU", "FBA在库", "FBM库存", "在途件数", "目的仓", "预计到仓"];
 // 运营数据表（高频填）：销量 + Sessions/订单量（近7天+上期，供流量/转化分流诊断）
-const OPS_HEADERS = ["SKU", "MSKU", "7天销量", "30天销量", "Sessions(近7天)", "订单量(近7天)", "Sessions(上期)", "订单量(上期)", "CVR%(可选)", "评分", "评论数", "广告花费", "退货率"];
+// 新增：广告订单数(选填，真实值优先于费比推导)、退款率（空→提示 / >20%→警告）
+const OPS_HEADERS = ["SKU", "MSKU", "7天销量", "30天销量", "Sessions(近7天)", "订单量(近7天)", "Sessions(上期)", "订单量(上期)", "CVR%(可选)", "广告订单数(选填)", "评分", "评论数", "广告花费", "退货率", "退款率"];
 
 const tmplBasic = () => downloadTemplate("基础档案表", BASIC_HEADERS, ["BFRS258", "BFRS258-GM", "B0GC3HFWHP", "BIFULISAN Store", 39.99, 28.5, 12.3, 4.56, 30, 25, 20, 1.2, "东莞美联"], undefined, "基础档案");
 const tmplLogistics = () => downloadTemplate("库存物流表", LOGI_HEADERS, ["BFRS258", 186, 180, 80, "美西", "2026-08-05"], undefined, "库存物流");
-const tmplOps = () => downloadTemplate("运营数据表", OPS_HEADERS, ["BFRS258", "BFRS258-GM", 24, 102, 1200, 24, 1350, 30, 2.0, 4.2, 156, 45.6, 3.2], undefined, "运营数据");
+const OPS_EXAMPLE = ["BFRS258", "BFRS258-GM", 24, 102, 1200, 24, 1350, 30, 2.0, 6, 4.2, 156, 45.6, 3.2, 2.1];
+const tmplOps = () => downloadTemplate("运营数据表", OPS_HEADERS, OPS_EXAMPLE, undefined, "运营数据");
 
 const tmplCore3 = () => {
   const wb = XLSX.utils.book_new();
@@ -134,7 +136,7 @@ const tmplCore3 = () => {
   };
   mk("基础档案", BASIC_HEADERS, ["BFRS258", "BFRS258-GM", "B0GC3HFWHP", "BIFULISAN Store", 39.99, 28.5, 12.3, 4.56, 30, 25, 20, 1.2, "东莞美联"]);
   mk("库存物流", LOGI_HEADERS, ["BFRS258", 186, 180, 80, "美西", "2026-08-05"]);
-  mk("运营数据", OPS_HEADERS, ["BFRS258", "BFRS258-GM", 24, 102, 1200, 24, 1350, 30, 2.0, 4.2, 156, 45.6, 3.2]);
+  mk("运营数据", OPS_HEADERS, OPS_EXAMPLE);
   XLSX.writeFile(wb, "【模板】三表合一.xlsx");
 };
 

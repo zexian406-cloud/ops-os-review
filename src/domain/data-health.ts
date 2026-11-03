@@ -213,6 +213,28 @@ export function validateImportData(result: ImportResult): ValidationResult {
         action: "mark",
       });
     }
+    // 规则 10：退款率为空 → 提示级（仅对真实销量行，跳过稀疏上期流量行）
+    if (s.dailySales7d > 0 && s.refundRate == null) {
+      tips.push({
+        type: "tip",
+        ruleId: 10,
+        ruleName: "退款率为空",
+        sku: s.sku,
+        detail: "未填写退款率，SKU 详情页将显示「缺失」。可在运营数据表新增「退款率」列补全",
+        action: "mark",
+      });
+    }
+    // 规则 11：退款率 > 20% → 警告级
+    if (s.dailySales7d > 0 && s.refundRate != null && s.refundRate > 20) {
+      warnings.push({
+        type: "warning",
+        ruleId: 11,
+        ruleName: "退款率 > 20%",
+        sku: s.sku,
+        detail: `退款率 ${s.refundRate.toFixed(1)}% 偏高，建议核查链接健康度（描述/质量/变体错发）`,
+        action: "mark",
+      });
+    }
   }
 
   // 过滤掉被跳过的 SKU（从所有集合中移除）

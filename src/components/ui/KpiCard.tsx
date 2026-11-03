@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 interface KpiCardProps {
-  label: string;
+  label: ReactNode;
   value: ReactNode;
   sub?: ReactNode;
   icon?: string;

@@ -128,6 +128,7 @@ export interface DailySnapshot {
   reviewCount?: number;
   returnRate: number;        // 退货率 %
   refundRate?: number;       // 退款率 % (FBM)
+  adOrders?: number;         // 广告订单数（选填真实数据；缺省时广告订单占比按广告费比推导）
   // ERP 一键拉取附加字段（可选，非索引，不影响 Dexie schema 版本）
   revenue?: number;          // 销售额（近7天，站点币种）
   acos?: number;             // ACoS %（广告花费/广告销售额）

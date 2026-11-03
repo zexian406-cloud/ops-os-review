@@ -965,25 +965,40 @@ export default function SkuDetail() {
       {latest && visibleKeys.includes("kpiOrderRatio") && (
       <CanvasItem key="kpiOrderRatio" itemKey="kpiOrderRatio">
         {(() => {
-            const ad = latest.adRatio ?? 0;
+            // 广告订单占比：有导入的真实「广告订单数」且总订单>0 → 真实值；
+            // 否则回退广告费比推导（花费口径 ≠ 订单口径，数学上不相等，标「估算」）
+            const ordersTotal = latest.orders ?? 0;
+            const realAd = (latest.adOrders ?? 0) > 0 && ordersTotal > 0
+              ? Math.min(100, ((latest.adOrders as number) / ordersTotal) * 100)
+              : null;
+            const estimated = realAd == null;
+            const ad = realAd ?? (latest.adRatio ?? 0);
             const organic = Math.max(0, Math.min(100, 100 - ad));
+            const estBadge = estimated ? (
+              <span
+                className="ml-1 inline-flex cursor-help items-center rounded-full bg-amber-100 px-1.5 py-0.5 align-[1px] text-[9px] font-semibold normal-case tracking-normal text-amber-700"
+                title="基于广告费比推导，非后台真实订单数据"
+              >
+                估算
+              </span>
+            ) : null;
             return (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 <KpiCard
-                  label="自然订单占比"
+                  label={<>自然订单占比{estBadge}</>}
                   value={`${organic.toFixed(1)}%`}
-                  sub={`广告占比 ${ad.toFixed(1)}% · 基于广告费比推导`}
+                  sub={estimated ? `广告占比 ${ad.toFixed(1)}% · 基于广告费比推导` : `广告占比 ${ad.toFixed(1)}% · 真实订单数据`}
                   icon="ri-leaf-line"
                   tone={organic > 70 ? "accent" : organic > 40 ? "primary" : "warn"}
-                  tooltip="近似推导：自然订单占比 ≈ 100% − 广告费比（adRatio）。实际效果受转化归因影响，供趋势参考。"
+                  tooltip={estimated ? "基于广告费比推导，非后台真实订单数据" : "来自导入的「广告订单数」真实数据"}
                 />
                 <KpiCard
-                  label="广告订单占比"
+                  label={<>广告订单占比{estBadge}</>}
                   value={`${ad.toFixed(1)}%`}
-                  sub={`自然占比 ${organic.toFixed(1)}% · 阈值 ${config?.adRatioThreshold ?? 10}%`}
+                  sub={estimated ? `自然占比 ${organic.toFixed(1)}% · 阈值 ${config?.adRatioThreshold ?? 10}%` : `自然占比 ${organic.toFixed(1)}% · 真实订单数据`}
                   icon="ri-megaphone-line"
                   tone={ad > (config?.adRatioThreshold ?? 10) * 2 ? "danger" : ad > (config?.adRatioThreshold ?? 10) ? "warn" : "accent"}
-                  tooltip="近似推导：广告订单占比 ≈ 广告费比（adRatio），即广告投入 / 总营收。"
+                  tooltip={estimated ? "基于广告费比推导，非后台真实订单数据" : "来自导入的「广告订单数」真实数据"}
                 />
                 <div className="rounded-[14px] border border-background-200/70 bg-background-50/60 p-3 flex flex-col justify-center">
                   <div className="flex items-center justify-between mb-2">
@@ -1500,7 +1515,7 @@ export default function SkuDetail() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {skuPromos.length > 0 && (
           <Section title="促销活动" subtitle={`${skuPromos.length} 个`} icon="ri-flashlight-line"
-            action={<Link to="/promotions" className="text-[12px] font-medium text-primary-700 hover:underline cursor-pointer whitespace-nowrap">管理促销 →</Link>}>
+            action={<Link to="/promo-center?tab=activity" className="text-[12px] font-medium text-primary-700 hover:underline cursor-pointer whitespace-nowrap">管理促销 →</Link>}>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead>
@@ -2718,6 +2733,17 @@ function DiagnosisFactorsInline({ result }: { result: DiagnosisResult }) {
   if (result.factors.length === 0) {
     return <div className="mt-3 text-[12px] text-foreground-400">暂无结构化拆解。</div>;
   }
+  // 统一格式化：百分比 1 位小数，其余整数或 1 位小数；禁止裸浮点输出（如 1.3900000000000006）。
+  // 归因项的 before/after/delta 可能是预格式化字符串（直接透传）或数字（格式化）。
+  const fmtFactor = (v: number | string | null | undefined, unit?: string): string => {
+    if (v == null || v === "") return "—";
+    if (typeof v === "string") {
+      return /[^\d.+\-eE]/.test(v) ? v : `${v}${unit ?? ""}`;
+    }
+    if (!Number.isFinite(v)) return "—";
+    if (unit === "%") return `${v.toFixed(1)}%`;
+    return Number.isInteger(v) ? String(v) : v.toFixed(1);
+  };
   const impactMeta = (impact?: string) => {
     if (impact === "up_bad" || impact === "down_bad") return "text-red-600";
     if (impact === "up_good" || impact === "down_good") return "text-accent-600";
@@ -2736,11 +2762,12 @@ function DiagnosisFactorsInline({ result }: { result: DiagnosisResult }) {
         </thead>
         <tbody>
           {result.factors.map((f) => {
+            const deltaNum = f.delta != null ? Number(f.delta) : null;
             const deltaText =
-              f.delta != null
-                ? `${f.delta > 0 ? "↑" : f.delta < 0 ? "↓" : "→"}${Math.abs(f.delta)}${f.unit ?? ""}`
+              deltaNum != null && Number.isFinite(deltaNum)
+                ? `${deltaNum > 0 ? "↑" : deltaNum < 0 ? "↓" : "→"}${fmtFactor(Math.abs(deltaNum), f.unit)}`
                 : f.after != null && f.before == null
-                ? `${f.after}`
+                ? fmtFactor(f.after, f.unit)
                 : "—";
             return (
               <tr key={f.key} className="align-top">
@@ -2748,8 +2775,8 @@ function DiagnosisFactorsInline({ result }: { result: DiagnosisResult }) {
                   {f.label}
                   {f.note && <div className="mt-0.5 text-[10px] font-normal text-foreground-400">{f.note}</div>}
                 </td>
-                <td className="mono-num border-b border-background-200/50 px-2 py-2 text-right text-foreground-500">{f.before ?? "—"}</td>
-                <td className="mono-num border-b border-background-200/50 px-2 py-2 text-right text-foreground-900">{f.after ?? "—"}</td>
+                <td className="mono-num border-b border-background-200/50 px-2 py-2 text-right text-foreground-500">{f.before != null ? fmtFactor(f.before, f.unit) : "—"}</td>
+                <td className="mono-num border-b border-background-200/50 px-2 py-2 text-right text-foreground-900">{f.after != null ? fmtFactor(f.after, f.unit) : "—"}</td>
                 <td className={`mono-num border-b border-background-200/50 px-2 py-2 text-right font-semibold ${impactMeta(f.impact)}`}>{deltaText}</td>
               </tr>
             );

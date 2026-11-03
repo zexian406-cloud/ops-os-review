@@ -92,6 +92,8 @@ export const SYNONYMS: Record<string, string[]> = {
   cvr: ["CVR", "cvr", "转化率", "CVR%(可选)", "CVR%"],
   // 广告花费（绝对值）。注意不含 "广告费"——避免模糊命中 "广告费比" 列
   adSpend: ["广告花费", "广告支出", "广告投入", "广告费用", "adSpend", "Ad Spend"],
+  // 广告订单数（选填真实数据）：有真实值优先于广告费比推导展示
+  adOrders: ["广告订单数", "广告订单", "广告单量", "Ad Orders", "adOrders", "广告订单数(选填)"],
   // FBM 库存（极简库存物流表）
   fbmStock: ["FBM库存", "FBM在库", "fbmStock", "FBM Inventory"],
 
