@@ -1,15 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { getAllSites, getCurrentSiteId, setCurrentSiteId, ensureDefaultSites } from "@/domain/db";
 import type { Site } from "@/domain/types";
 import { useCurrency } from "@/hooks/useCurrency";
-import ExchangeRateManager from "./ExchangeRateManager";
 import SiteManager, { SITES_LIST_EVENT } from "./SiteManager";
 
 export const SITE_CHANGE_EVENT = "ops-site-change";
 
 export default function SiteSwitcher() {
   const [open, setOpen] = useState(false);
-  const [managerOpen, setManagerOpen] = useState(false);
   const [siteManagerOpen, setSiteManagerOpen] = useState(false);
   const [sites, setSites] = useState<Site[]>([]);
   const [currentSiteId, setCurrentSiteIdState] = useState<string>("site_us");
@@ -105,17 +104,14 @@ export default function SiteSwitcher() {
                 <i className="ri-add-circle-line" style={{ fontSize: "13px" }} aria-hidden />
                 站点管理
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  setManagerOpen(true);
-                }}
+              <Link
+                to="/settings?tab=rate"
+                onClick={() => setOpen(false)}
                 className="flex items-center gap-1 text-[11px] text-primary-600 hover:text-primary-700 cursor-pointer"
               >
                 <i className="ri-settings-3-line" style={{ fontSize: "13px" }} aria-hidden />
                 汇率管理
-              </button>
+              </Link>
             </div>
           </div>
 
@@ -141,12 +137,11 @@ export default function SiteSwitcher() {
           ))}
 
           <div className="border-t border-background-200 px-3 py-1.5 text-[11px] text-foreground-400">
-            冷门站点可在「站点管理」中自定义新增；「汇率管理」支持任意货币对（非 USD 中转换算）
+            冷门站点可在「站点管理」中自定义新增；汇率统一在「参数中心 → 汇率」维护（支持任意货币对与中转换算）
           </div>
         </div>
       )}
 
-      <ExchangeRateManager open={managerOpen} onClose={() => setManagerOpen(false)} />
       <SiteManager open={siteManagerOpen} onClose={() => setSiteManagerOpen(false)} />
     </div>
   );

@@ -1,10 +1,14 @@
 import { useEffect, useState, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { db, DEFAULT_GLOBAL_CONFIG, getGlobalConfig, setGlobalConfig, getCurrentSiteId, getProfitFormulaConfig, setProfitFormulaConfig } from "@/domain/db";
 import { setProfitFormulaCache } from "@/domain/calculator";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import InlineEditCell from "@/components/ui/InlineEditCell";
 import { COMMON_CURRENCIES, SYMBOL_MAP } from "@/components/layout/SiteManager";
+import ExchangeRateManager from "@/components/layout/ExchangeRateManager";
+import ShipmentFormulaSettings from "@/components/layout/ShipmentFormulaSettings";
+import WarehouseMappingPanel from "@/components/settings/WarehouseMappingPanel";
 import type { GlobalConfig, SkuMaster, WarehouseProvider, RateTier, ProfitFormulaConfig, ProfitFormulaKey } from "@/domain/types";
 import { DEFAULT_PROFIT_FORMULA, PROFIT_FORMULA_META } from "@/domain/types";
 import { compileFormula, FormulaEvalError } from "@/domain/formulaEval";
@@ -257,11 +261,38 @@ const SEED_PROVIDERS: WarehouseProvider[] = [
   },
 ];
 
+type SettingsTab =
+  | "global" | "sku" | "warehouse" | "profit" | "diagnosis"
+  | "rate" | "formula" | "mapping";
+
+const SETTINGS_TABS: Array<{ key: SettingsTab; label: string; icon: string }> = [
+  { key: "global", label: "全局阈值", icon: "ri-tools-line" },
+  { key: "sku", label: "SKU 参数", icon: "ri-truck-line" },
+  { key: "warehouse", label: "海外仓费率", icon: "ri-building-2-line" },
+  { key: "profit", label: "利润公式", icon: "ri-funds-line" },
+  { key: "rate", label: "汇率", icon: "ri-money-dollar-circle-line" },
+  { key: "formula", label: "补货公式", icon: "ri-calculator-line" },
+  { key: "mapping", label: "仓库映射", icon: "ri-map-2-line" },
+  { key: "diagnosis", label: "诊断规则", icon: "ri-stethoscope-line" },
+];
+
+const isSettingsTab = (v: string | null): v is SettingsTab =>
+  !!v && SETTINGS_TABS.some((t) => t.key === v);
+
 export default function Settings() {
   const [cfg, setCfg] = useState<GlobalConfig>(DEFAULT_GLOBAL_CONFIG);
   const [skus, setSkus] = useState<SkuMaster[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
-  const [tab, setTab] = useState<"global" | "sku" | "warehouse" | "profit" | "diagnosis">("global");
+
+  // Tab 状态由 URL 承载（/settings?tab=rate 可直接深链到某个配置页）
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const tab: SettingsTab = isSettingsTab(tabParam) ? tabParam : "global";
+  const setTab = (key: SettingsTab) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", key);
+    setSearchParams(next, { replace: true });
+  };
 
   // ── 海外仓费率 ──
   const [providers, setProviders] = useState<WarehouseProvider[]>([]);
@@ -418,13 +449,7 @@ export default function Settings() {
     await updateProviderTiers(providerId, newTiers);
   };
 
-  const tabs = [
-    { key: "global" as const, label: "全局阈值", icon: "ri-tools-line" },
-    { key: "sku" as const, label: "SKU 参数", icon: "ri-truck-line" },
-    { key: "warehouse" as const, label: "海外仓费率", icon: "ri-building-2-line" },
-    { key: "profit" as const, label: "利润公式", icon: "ri-funds-line" },
-    { key: "diagnosis" as const, label: "诊断规则", icon: "ri-stethoscope-line" },
-  ];
+  const tabs = SETTINGS_TABS;
 
   return (
     <div className="space-y-6">
@@ -434,12 +459,12 @@ export default function Settings() {
         </div>
         <h1 className="font-heading text-[26px] font-bold text-foreground-950">参数中心</h1>
         <p className="text-[13px] text-foreground-500">
-          全局阈值 · 供应链参数 · 海外仓费率 · 利润公式 · 诊断规则均可自定义
+          全局阈值 · 供应链参数 · 海外仓费率 · 利润公式 · 汇率 · 补货公式 · 仓库映射 · 诊断规则，全站可调参数统一在这里修改
         </p>
       </div>
 
       {/* Tab bar */}
-      <div className="inline-flex rounded-full border border-background-300/70 bg-background-100/70 px-1 py-1">
+      <div className="flex flex-wrap gap-1.5 rounded-full border border-background-300/70 bg-background-100/70 px-1 py-1">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -674,7 +699,7 @@ export default function Settings() {
                           setProviders((prev) => prev.map((p) => (p.id === provider.id ? { ...p, currency: val === "" ? undefined : val } : p)));
                         }}
                         placeholder="跟随站点"
-                        title="费率计价币种：留空 = 按站点币种直接录入；填 CAD/EUR 等 ISO 代码，新品测算仓储费自动换算到站点币种（需在「汇率管理」配置对应汇率）"
+                        title="费率计价币种：留空 = 按站点币种直接录入；填 CAD/EUR 等 ISO 代码，新品测算仓储费自动换算到站点币种（需在「汇率」tab 配置对应汇率）"
                         className="w-[96px] rounded border border-background-200 bg-background-50 px-1.5 py-0.5 text-[11px] cursor-pointer"
                       />
                       <Badge tone="accent">{provider.tiers.length} 个费率档位</Badge>
@@ -978,6 +1003,39 @@ export default function Settings() {
               {profitErr && <span className="text-[12px] font-medium text-danger-600">{profitErr}</span>}
             </div>
           </div>
+        </Section>
+      )}
+
+      {/* 汇率 */}
+      {tab === "rate" && (
+        <Section
+          title="汇率管理"
+          icon="ri-money-dollar-circle-line"
+          subtitle="任意货币对可自定义 · 换算沿最短路径自动中转 · FOB 录入币种也在这里设置"
+        >
+          <ExchangeRateManager />
+        </Section>
+      )}
+
+      {/* 补货公式 */}
+      {tab === "formula" && (
+        <Section
+          title="补货公式"
+          icon="ri-calculator-line"
+          subtitle="发货建议的口径 / 触发阈值 / 系数 / 活动倍率 / 取整方式"
+        >
+          <ShipmentFormulaSettings />
+        </Section>
+      )}
+
+      {/* 仓库映射 */}
+      {tab === "mapping" && (
+        <Section
+          title="仓库区域映射"
+          icon="ri-map-2-line"
+          subtitle="仓库名称 → 美东/美西/东南/中南 · 适用站点 / 别名 / 自定义区域 · 导入仓库明细时自动匹配"
+        >
+          <WarehouseMappingPanel />
         </Section>
       )}
 

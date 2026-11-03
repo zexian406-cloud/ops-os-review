@@ -8,7 +8,6 @@ import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineEditCell from "@/components/ui/InlineEditCell";
-import ShipmentFormulaSettings from "@/components/layout/ShipmentFormulaSettings";
 import { getShipmentFormulaConfig, getWarehouseAliasMap, WAREHOUSE_MAPPING_EVENT, db } from "@/domain/db";
 import { DEFAULT_SHIPMENT_FORMULA } from "@/domain/types";
 import type { ShipmentFormulaConfig } from "@/domain/types";
@@ -42,7 +41,6 @@ export default function Shipment() {
   const [formula, setFormula] = useState<ShipmentFormulaConfig>(DEFAULT_SHIPMENT_FORMULA);
   const [salesBasis, setSalesBasis] = useState<"7d" | "30d">("7d");
   const [sortMode, setSortMode] = useState<SortMode>("priority");
-  const [formulaOpen, setFormulaOpen] = useState(false);
   const [aliasMap, setAliasMap] = useState<Map<string, string>>(new Map());
 
   // 加载补货公式配置：默认口径作为 salesBasis 初始值（页面仍可临时切换）
@@ -346,12 +344,12 @@ export default function Shipment() {
               </button>
             ))}
           </div>
-          <button type="button" onClick={() => setFormulaOpen(true)}
+          <Link to="/settings?tab=formula"
             className="flex items-center gap-1 rounded-full border border-primary-200 bg-primary-50/70 px-3 py-1 text-[11px] font-medium text-primary-700 transition-colors hover:bg-primary-100 cursor-pointer"
-            title="自定义补货公式：口径 / 取整 / 阈值 / 系数 / 活动倍率">
+            title="补货公式已统一到参数中心：口径 / 取整 / 阈值 / 系数 / 活动倍率">
             <i className="ri-calculator-line text-[13px]" aria-hidden />
-            补货公式
-          </button>
+            补货公式（参数中心）
+          </Link>
           <select value={sortMode} onChange={(e) => setSortMode(e.target.value as SortMode)}
             className="rounded-full border border-background-300/70 bg-background-50 px-3 py-1 text-[11px] text-foreground-600 focus:border-primary-500 focus:outline-none cursor-pointer">
             {(Object.keys(SORT_LABELS) as SortMode[]).map((k) => (
@@ -391,14 +389,6 @@ export default function Shipment() {
           )}
         </Section>
 
-      <ShipmentFormulaSettings
-        open={formulaOpen}
-        onClose={() => setFormulaOpen(false)}
-        onSaved={(f) => {
-          setFormula(f);
-          setSalesBasis(f.salesBasis);
-        }}
-      />
     </div>
   );
 }

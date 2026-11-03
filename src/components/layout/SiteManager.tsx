@@ -325,7 +325,7 @@ export default function SiteManager({ open, onClose }: Props) {
             </div>
             {formError && <div className="mt-1 text-[11px] text-red-500">{formError}</div>}
             <div className="mt-1.5 text-[10px] text-foreground-400">
-              新站点自动启用并切换为当前站点；初始汇率为 1=1$，请到「汇率管理」配置真实汇率（冷门币种直接输入即可，不必在列表中）
+              新站点自动启用并切换为当前站点；初始汇率为 1=1$，请到「参数中心 → 汇率」配置真实汇率（冷门币种直接输入即可，不必在列表中）
             </div>
             <datalist id="stm-currency-list">
               {COMMON_CURRENCIES.map((c) => <option key={c} value={c} />)}
