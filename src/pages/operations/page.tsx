@@ -87,132 +87,133 @@ export default function Operations() {
     setParams(next);
   };
 
-  const rows = useMemo(() => {
-    const list: Array<{
+  const rowsByTab = useMemo(() => {
+    type OpsRow = {
       sku: SkuMaster;
       snap?: DailySnapshot;
       metric: number;
       metricLabel: string;
       tone: "danger" | "warn" | "accent" | "primary";
       note?: string;
-    }> = [];
-
-    if (tab === "all" || tab === "diag") return list;
+    };
+    type RowTab = Exclude<TabKey, "all" | "diag">;
+    const map: Record<RowTab, OpsRow[]> = {
+      traffic: [], profit: [], ad: [], rating: [], review: [], return: [], listing: [], new: [],
+    };
 
     for (const sku of skuMaster) {
       const snap = latestSnapshot.get(snapKey(sku.sku, currentSiteId));
-      if (tab === "listing") {
-        if (sku.aPlus === "todo") {
-          list.push({
-            sku,
-            snap,
-            metric: 1,
-            metricLabel: "A+ 未完成",
-            tone: "accent",
-            note: "分配设计任务并完成 A+ 页面",
-          });
-        }
-        continue;
-      }
-      if (tab === "new") {
-        if (!sku.launchDate) continue;
-        const days =
-          (Date.now() - new Date(sku.launchDate).getTime()) / (1000 * 60 * 60 * 24);
-        if (days > config.lifecycleNewDays) continue;
-        list.push({
+
+      if (sku.aPlus === "todo") {
+        map.listing.push({
           sku,
           snap,
-          metric: Math.round(days),
-          metricLabel: `上架 ${Math.round(days)} 天`,
-          tone: "primary",
-          note: snap
-            ? `日销 ${snap.dailySales7d.toFixed(1)} · 月销 ${snap.monthlySales}`
-            : undefined,
+          metric: 1,
+          metricLabel: "A+ 未完成",
+          tone: "accent",
+          note: "分配设计任务并完成 A+ 页面",
         });
-        continue;
       }
+
+      if (sku.launchDate) {
+        const days = (Date.now() - new Date(sku.launchDate).getTime()) / (1000 * 60 * 60 * 24);
+        if (days <= config.lifecycleNewDays) {
+          map.new.push({
+            sku,
+            snap,
+            metric: Math.round(days),
+            metricLabel: `上架 ${Math.round(days)} 天`,
+            tone: "primary",
+            note: snap ? `日销 ${snap.dailySales7d.toFixed(1)} · 月销 ${snap.monthlySales}` : undefined,
+          });
+        }
+      }
+
       if (!snap || sku.saleStatus === "discontinued") continue;
 
-      if (tab === "traffic") {
-        // 流量下滑清单直接复用引擎生成的告警（含两期 Sessions 数值与严重度）
-        const a = alerts.find((x) => x.type === "traffic_drop" && x.sku === sku.sku);
-        if (a) {
-          const drop = Math.abs(a.metric ?? 0);
-          list.push({
-            sku,
-            snap,
-            metric: drop,
-            metricLabel: `${drop.toFixed(1)}%`,
-            tone: a.severity === "critical" ? "danger" : "warn",
-            note: a.detail,
-          });
-        }
-      } else if (tab === "profit") {
-        const inv = latestInventory.get(snapKey(sku.sku, currentSiteId));
-        const calc = computeAll({ sku, snap, inv, defaultCommissionRate: currentSite?.commissionRate });
-        if (calc.grossMargin < config.profitMarginThreshold) {
-          list.push({
-            sku,
-            snap,
-            metric: calc.grossMargin,
-            metricLabel: `${calc.grossMargin.toFixed(1)}%`,
-            tone: calc.grossMargin < 0 ? "danger" : "warn",
-            note: `单件利润 $${calc.grossProfit.toFixed(2)}`,
-          });
-        }
-      } else if (tab === "ad") {
-        if (snap.adRatio > config.adRatioThreshold) {
-          const inv = latestInventory.get(snapKey(sku.sku, currentSiteId));
-          const calc = computeAll({ sku, snap, inv, defaultCommissionRate: currentSite?.commissionRate });
-          list.push({
-            sku,
-            snap,
-            metric: snap.adRatio,
-            metricLabel: `${snap.adRatio.toFixed(1)}%`,
-            tone: snap.adRatio > 40 ? "danger" : "warn",
-            note: `广告花费 $${calc.costAd.toFixed(2)}${calc.isAdInferred ? "（按费比×售价估算）" : ""}`,
-          });
-        }
-      } else if (tab === "rating") {
-        if (snap.rating > 0 && snap.rating < 4.0) {
-          list.push({
-            sku,
-            snap,
-            metric: snap.rating,
-            metricLabel: `${snap.rating.toFixed(1)} ★`,
-            tone: snap.rating < 3.5 ? "danger" : "warn",
-            note: "紧急处理差评并优化 Listing",
-          });
-        }
-      } else if (tab === "review") {
-        // We don't have review count history, list by rating changes
-        if (snap.rating > 0 && snap.rating < 4.5) {
-          list.push({
-            sku,
-            snap,
-            metric: snap.rating,
-            metricLabel: `${snap.rating.toFixed(1)} ★`,
-            tone: "warn",
-            note: "继续维护保持",
-          });
-        }
-      } else if (tab === "return") {
-        // 退款率为主口径；缺失不进入清单（数据健康会提示补数据）
-        const refundMetric = snap.refundRate;
-        if (refundMetric != null && refundMetric > config.returnRateThreshold) {
-          list.push({
-            sku,
-            snap,
-            metric: refundMetric,
-            metricLabel: `${refundMetric.toFixed(1)}%`,
-            tone: refundMetric > 20 ? "danger" : "warn",
-            note: "注意退款率增长",
-          });
-        }
+      // 流量下滑清单直接复用引擎生成的告警（含两期 Sessions 数值与严重度）
+      const trafficAlert = alerts.find((x) => x.type === "traffic_drop" && x.sku === sku.sku);
+      if (trafficAlert) {
+        const drop = Math.abs(trafficAlert.metric ?? 0);
+        map.traffic.push({
+          sku,
+          snap,
+          metric: drop,
+          metricLabel: `${drop.toFixed(1)}%`,
+          tone: trafficAlert.severity === "critical" ? "danger" : "warn",
+          note: trafficAlert.detail,
+        });
+      }
+
+      const inv = latestInventory.get(snapKey(sku.sku, currentSiteId));
+      const calc = computeAll({ sku, snap, inv, defaultCommissionRate: currentSite?.commissionRate });
+
+      if (calc.grossMargin < config.profitMarginThreshold) {
+        map.profit.push({
+          sku,
+          snap,
+          metric: calc.grossMargin,
+          metricLabel: `${calc.grossMargin.toFixed(1)}%`,
+          tone: calc.grossMargin < 0 ? "danger" : "warn",
+          note: `单件利润 $${calc.grossProfit.toFixed(2)}`,
+        });
+      }
+
+      if (snap.adRatio > config.adRatioThreshold) {
+        map.ad.push({
+          sku,
+          snap,
+          metric: snap.adRatio,
+          metricLabel: `${snap.adRatio.toFixed(1)}%`,
+          tone: snap.adRatio > 40 ? "danger" : "warn",
+          note: `广告花费 $${calc.costAd.toFixed(2)}${calc.isAdInferred ? "（按费比×售价估算）" : ""}`,
+        });
+      }
+
+      if (snap.rating > 0 && snap.rating < 4.0) {
+        map.rating.push({
+          sku,
+          snap,
+          metric: snap.rating,
+          metricLabel: `${snap.rating.toFixed(1)} ★`,
+          tone: snap.rating < 3.5 ? "danger" : "warn",
+          note: "紧急处理差评并优化 Listing",
+        });
+      }
+
+      if (snap.rating > 0 && snap.rating < 4.5) {
+        map.review.push({
+          sku,
+          snap,
+          metric: snap.rating,
+          metricLabel: `${snap.rating.toFixed(1)} ★`,
+          tone: "warn",
+          note: "继续维护保持",
+        });
+      }
+
+      // 退款率为主口径；缺失不进入清单（数据健康会提示补数据）
+      const refundMetric = snap.refundRate;
+      if (refundMetric != null && refundMetric > config.returnRateThreshold) {
+        map.return.push({
+          sku,
+          snap,
+          metric: refundMetric,
+          metricLabel: `${refundMetric.toFixed(1)}%`,
+          tone: refundMetric > 20 ? "danger" : "warn",
+          note: "注意退款率增长",
+        });
       }
     }
-    return list.sort((a, b) => (tab === "new" ? a.metric - b.metric : b.metric - a.metric));
-  }, [skuMaster, latestSnapshot, latestInventory, tab, config, currentSite, currentSiteId, alerts]);
+
+    // 新品按上架天数升序，其余按指标降序
+    for (const key of Object.keys(map) as RowTab[]) {
+      map[key].sort((a, b) => (key === "new" ? a.metric - b.metric : b.metric - a.metric));
+    }
+    return map;
+  }, [skuMaster, latestSnapshot, latestInventory, config, currentSite, currentSiteId, alerts]);
+
+  const rows = (tab === "all" || tab === "diag" || tab === "ad") ? [] : rowsByTab[tab];
 
   // 每条告警的诊断摘要：按「本次 vs 上次导入」跑规则库，取命中步骤的对比值 + 归因结论
   const [diagRules, setDiagRules] = useState<DiagnosisRuleSet | null>(null);
@@ -281,6 +282,20 @@ export default function Operations() {
 
   const adSummary = useMemo(() => summarizeAdInsights(adRows), [adRows]);
 
+  /** 顶部类型卡片的命中数量（'全部' 取告警总数，其余取对应清单长度） */
+  const tabCounts = useMemo<Record<TabKey, number>>(() => ({
+    all: alerts.length,
+    traffic: rowsByTab.traffic.length,
+    profit: rowsByTab.profit.length,
+    ad: adSummary.count,
+    rating: rowsByTab.rating.length,
+    review: rowsByTab.review.length,
+    return: rowsByTab.return.length,
+    listing: rowsByTab.listing.length,
+    new: rowsByTab.new.length,
+    diag: 0,
+  }), [alerts.length, rowsByTab, adSummary.count]);
+
   if (loading) return <div className="text-sm text-foreground-500">加载中...</div>;
 
   // 归因下钻视图：/operations?tab=diag&sku=xxx&type=xxx
@@ -330,12 +345,12 @@ export default function Operations() {
               </span>
               <div className="flex items-center gap-1.5 text-[13px] font-semibold leading-tight">
                 {t.label}
-                {t.key === "ad" && adSummary.count > 0 && (
+                {t.key !== "diag" && tabCounts[t.key] > 0 && (
                   <span className={[
                     "inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold",
                     active ? "bg-background-50 text-primary-700" : "bg-red-500 text-white",
                   ].join(" ")}>
-                    {adSummary.count}
+                    {tabCounts[t.key]}
                   </span>
                 )}
               </div>
