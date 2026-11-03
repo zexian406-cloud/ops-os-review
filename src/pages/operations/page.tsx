@@ -3,8 +3,9 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useOpsData } from "@/domain/store";
 import { computeAll } from "@/domain/calculator";
 import { snapKey } from "@/domain/engine";
-import { getAllShops, db } from "@/domain/db";
+import { getAllShops, db, getDiagnosisRules } from "@/domain/db";
 import { resolveComparison } from "@/domain/diagnosis-period";
+import type { DiagnosisRuleSet } from "@/domain/diagnosisRules";
 import { diagnoseProfitDecline, diagnoseSalesDecline, diagnoseRatingDecline, diagnoseAdRatioRise } from "@/domain/diagnose";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
@@ -211,7 +212,10 @@ export default function Operations() {
     return list.sort((a, b) => (tab === "new" ? a.metric - b.metric : b.metric - a.metric));
   }, [skuMaster, latestSnapshot, latestInventory, tab, config, currentSite, currentSiteId, alerts]);
 
-  // 每条告警的诊断摘要：按「本次 vs 上次导入」跑决策树，取命中步骤的对比值 + 归因结论
+  // 每条告警的诊断摘要：按「本次 vs 上次导入」跑规则库，取命中步骤的对比值 + 归因结论
+  const [diagRules, setDiagRules] = useState<DiagnosisRuleSet | null>(null);
+  useEffect(() => { getDiagnosisRules().then(setDiagRules); }, []);
+
   const diagnostics = useMemo(() => {
     const out: Record<string, AlertDiagnostic> = {};
     const bySku = new Map<string, DailySnapshot[]>();
@@ -233,10 +237,10 @@ export default function Operations() {
         latestInv: latestInventory.get(snapKey(a.sku, currentSiteId)),
         config,
       };
-      const result = dt === "profit" ? diagnoseProfitDecline(diagInput)
-        : dt === "sales" ? diagnoseSalesDecline(diagInput)
-          : dt === "rating" ? diagnoseRatingDecline(diagInput)
-            : diagnoseAdRatioRise(diagInput);
+      const result = dt === "profit" ? diagnoseProfitDecline(diagInput, diagRules ?? undefined)
+        : dt === "sales" ? diagnoseSalesDecline(diagInput, diagRules ?? undefined)
+          : dt === "rating" ? diagnoseRatingDecline(diagInput, diagRules ?? undefined)
+            : diagnoseAdRatioRise(diagInput, diagRules ?? undefined);
       if (!result.hasHistory) continue;
       const hit = result.steps.find((s) => s.hit);
       const compare = hit
@@ -245,7 +249,7 @@ export default function Operations() {
       out[a.id] = { compare, reason: result.reason };
     }
     return out;
-  }, [alerts, siteSnapshots, skuMaster, latestInventory, config, currentSiteId]);
+  }, [alerts, siteSnapshots, skuMaster, latestInventory, config, currentSiteId, diagRules]);
 
   if (loading) return <div className="text-sm text-foreground-500">加载中...</div>;
 

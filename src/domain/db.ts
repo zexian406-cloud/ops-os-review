@@ -20,6 +20,7 @@ import type {
 import type { Site, SiteConfig, CrossSiteSummary, CrossSiteReport, ExchangeRate, DiagnosisNote } from "./types";
 import type { ShipmentFormulaConfig, ProfitFormulaConfig } from "./types";
 import { countShopMskus } from "./shopFilter";
+import { normalizeRuleSet, cloneDefaultRules, type DiagnosisRuleSet } from "./diagnosisRules";
 import {
   DEFAULT_WAREHOUSE_REGIONS,
   DEFAULT_SHIPMENT_FORMULA,
@@ -367,6 +368,22 @@ export async function getProfitFormulaConfig(): Promise<ProfitFormulaConfig> {
 
 export async function setProfitFormulaConfig(cfg: ProfitFormulaConfig): Promise<void> {
   await db.config.put({ key: "profitFormula", value: cfg });
+}
+
+// ==================== 诊断规则库（可自定义原因/规则） ====================
+export async function getDiagnosisRules(): Promise<DiagnosisRuleSet> {
+  const row = await db.config.get("diagnosisRules");
+  return normalizeRuleSet(row?.value);
+}
+
+export async function setDiagnosisRules(rules: DiagnosisRuleSet): Promise<void> {
+  await db.config.put({ key: "diagnosisRules", value: normalizeRuleSet(rules) });
+}
+
+export async function resetDiagnosisRules(): Promise<DiagnosisRuleSet> {
+  const defaults = cloneDefaultRules();
+  await setDiagnosisRules(defaults);
+  return defaults;
 }
 
 // ==================== 数据健康报告（最近一次导入） ====================

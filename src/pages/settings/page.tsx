@@ -8,6 +8,171 @@ import { COMMON_CURRENCIES, SYMBOL_MAP } from "@/components/layout/SiteManager";
 import type { GlobalConfig, SkuMaster, WarehouseProvider, RateTier, ProfitFormulaConfig, ProfitFormulaKey } from "@/domain/types";
 import { DEFAULT_PROFIT_FORMULA, PROFIT_FORMULA_META } from "@/domain/types";
 import { compileFormula, FormulaEvalError } from "@/domain/formulaEval";
+import {
+  DIAG_TYPE_LABELS,
+  METRIC_OPTIONS,
+  MODE_LABELS,
+  type DiagnosisRule,
+  type DiagnosisRuleSet,
+  type DiagType,
+} from "@/domain/diagnosisRules";
+import { getDiagnosisRules, setDiagnosisRules, resetDiagnosisRules } from "@/domain/db";
+
+const DIAG_TYPES: DiagType[] = ["profit", "sales", "rating", "adRatio"];
+
+const FIELD_CLS = "rounded border border-background-200 bg-background-50 px-2 py-1 text-[12px] text-foreground-900 focus:border-primary-400 focus:outline-none";
+const SELECT_CLS = `${FIELD_CLS} cursor-pointer`;
+
+const uidRule = () => `rule_${Math.random().toString(36).slice(2, 10)}`;
+
+/** 单条诊断规则编辑器（自定义原因 + 规则条件） */
+function RuleCard({
+  rule,
+  onChange,
+  onDelete,
+  onMove,
+  canUp,
+  canDown,
+}: {
+  rule: DiagnosisRule;
+  onChange: (patch: Partial<DiagnosisRule>) => void;
+  onDelete: () => void;
+  onMove: (dir: -1 | 1) => void;
+  canUp: boolean;
+  canDown: boolean;
+}) {
+  return (
+    <div className={`rounded-xl border p-3 ${rule.enabled ? "border-background-200/70 bg-background-50" : "border-background-200/50 bg-background-100/40 opacity-60"}`}>
+      <div className="mb-2 flex items-center gap-2">
+        <label className="flex items-center gap-1.5 text-[11px] text-foreground-600 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={rule.enabled}
+            onChange={(e) => onChange({ enabled: e.target.checked })}
+            className="h-3.5 w-3.5 cursor-pointer"
+          />
+          启用
+        </label>
+        <input
+          value={rule.label ?? ""}
+          onChange={(e) => onChange({ label: e.target.value })}
+          placeholder="检查项名称（可选）"
+          className={`${FIELD_CLS} w-40`}
+        />
+        <span className="ml-auto flex items-center gap-1">
+          <button type="button" disabled={!canUp} onClick={() => onMove(-1)} className="rounded px-1.5 py-0.5 text-[11px] text-foreground-500 hover:bg-background-200/60 disabled:opacity-30 cursor-pointer" title="上移">↑</button>
+          <button type="button" disabled={!canDown} onClick={() => onMove(1)} className="rounded px-1.5 py-0.5 text-[11px] text-foreground-500 hover:bg-background-200/60 disabled:opacity-30 cursor-pointer" title="下移">↓</button>
+          <button type="button" onClick={onDelete} className="rounded px-1.5 py-0.5 text-[11px] text-red-600 hover:bg-red-50 cursor-pointer" title="删除规则">删除</button>
+        </span>
+      </div>
+
+      {/* 条件行：指标 + 方向 + 阈值 + 口径 */}
+      <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-foreground-600">
+        <select value={rule.metric} onChange={(e) => onChange({ metric: e.target.value as DiagnosisRule["metric"] })} className={SELECT_CLS}>
+          {METRIC_OPTIONS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+        </select>
+        <select value={rule.direction} onChange={(e) => onChange({ direction: e.target.value as "up" | "down" })} className={SELECT_CLS}>
+          <option value="up">上升</option>
+          <option value="down">下降</option>
+        </select>
+        <input
+          type="number"
+          step="0.1"
+          value={rule.threshold}
+          onChange={(e) => onChange({ threshold: Number(e.target.value) })}
+          className={`${FIELD_CLS} w-20`}
+        />
+        <select value={rule.mode} onChange={(e) => onChange({ mode: e.target.value as DiagnosisRule["mode"] })} className={SELECT_CLS}>
+          {(Object.keys(MODE_LABELS) as Array<keyof typeof MODE_LABELS>).map((m) => <option key={m} value={m}>{MODE_LABELS[m]}</option>)}
+        </select>
+        <span className="text-foreground-400">即命中</span>
+      </div>
+
+      {/* 附加条件（可选） */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[12px] text-foreground-600">
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={!!rule.guard}
+            onChange={(e) => onChange({
+              guard: e.target.checked
+                ? { metric: rule.metric, basis: "delta", mode: rule.mode, direction: rule.direction, threshold: 0 }
+                : null,
+            })}
+            className="h-3.5 w-3.5 cursor-pointer"
+          />
+          附加条件
+        </label>
+        {rule.guard && (
+          <>
+            <select
+              value={rule.guard.metric}
+              onChange={(e) => onChange({ guard: { ...rule.guard!, metric: e.target.value as DiagnosisRule["metric"] } })}
+              className={SELECT_CLS}
+            >
+              {METRIC_OPTIONS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+            </select>
+            <select
+              value={rule.guard.basis}
+              onChange={(e) => onChange({ guard: { ...rule.guard!, basis: e.target.value as "delta" | "value" } })}
+              className={SELECT_CLS}
+            >
+              <option value="delta">变化量</option>
+              <option value="value">本期值</option>
+            </select>
+            <select
+              value={rule.guard.direction}
+              onChange={(e) => onChange({ guard: { ...rule.guard!, direction: e.target.value as "up" | "down" } })}
+              className={SELECT_CLS}
+            >
+              <option value="up">大于</option>
+              <option value="down">小于</option>
+            </select>
+            <input
+              type="number"
+              step="0.1"
+              value={rule.guard.threshold}
+              onChange={(e) => onChange({ guard: { ...rule.guard!, threshold: Number(e.target.value) } })}
+              className={`${FIELD_CLS} w-20`}
+            />
+            {rule.guard.basis === "delta" && (
+              <select
+                value={rule.guard.mode}
+                onChange={(e) => onChange({ guard: { ...rule.guard!, mode: e.target.value as DiagnosisRule["mode"] } })}
+                className={SELECT_CLS}
+              >
+                {(Object.keys(MODE_LABELS) as Array<keyof typeof MODE_LABELS>).map((m) => <option key={m} value={m}>{MODE_LABELS[m]}</option>)}
+              </select>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* 原因与建议动作 */}
+      <div className="mt-2 grid gap-2 md:grid-cols-2">
+        <div>
+          <div className="mb-1 text-[11px] text-foreground-500">归因结论（原因）</div>
+          <input
+            value={rule.reason}
+            onChange={(e) => onChange({ reason: e.target.value })}
+            placeholder="例如：产品出现负面评价"
+            className={`${FIELD_CLS} w-full`}
+          />
+        </div>
+        <div>
+          <div className="mb-1 text-[11px] text-foreground-500">建议动作（每行一条）</div>
+          <textarea
+            value={rule.suggestions.join("\n")}
+            onChange={(e) => onChange({ suggestions: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) })}
+            rows={2}
+            placeholder="检查主图与差评&#10;补充 A+ 内容"
+            className={`${FIELD_CLS} w-full resize-y`}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -96,7 +261,7 @@ export default function Settings() {
   const [cfg, setCfg] = useState<GlobalConfig>(DEFAULT_GLOBAL_CONFIG);
   const [skus, setSkus] = useState<SkuMaster[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
-  const [tab, setTab] = useState<"global" | "sku" | "warehouse" | "profit">("global");
+  const [tab, setTab] = useState<"global" | "sku" | "warehouse" | "profit" | "diagnosis">("global");
 
   // ── 海外仓费率 ──
   const [providers, setProviders] = useState<WarehouseProvider[]>([]);
@@ -109,6 +274,32 @@ export default function Settings() {
   const [showAdvancedFormulas, setShowAdvancedFormulas] = useState(false);
 
   useEffect(() => { getProfitFormulaConfig().then(setProfitFormula); }, []);
+
+  // ── 诊断规则库 ──
+  const [diagRules, setDiagRules] = useState<DiagnosisRuleSet | null>(null);
+  const [diagMsg, setDiagMsg] = useState<string | null>(null);
+  const [diagType, setDiagType] = useState<DiagType>("profit");
+
+  useEffect(() => { getDiagnosisRules().then(setDiagRules); }, []);
+
+  const patchRuleSet = (type: DiagType, updater: (rules: DiagnosisRule[]) => DiagnosisRule[]) => {
+    setDiagRules((prev) => (prev ? { ...prev, [type]: { ...prev[type], rules: updater(prev[type].rules) } } : prev));
+  };
+
+  const saveDiagRules = async () => {
+    if (!diagRules) return;
+    await setDiagnosisRules(diagRules);
+    setDiagRules(await getDiagnosisRules()); // 回读清洗后的结果，避免脏配置
+    setDiagMsg("诊断规则已保存，诊断页即时生效");
+    setTimeout(() => setDiagMsg(null), 3000);
+  };
+
+  const resetDiagRules = async () => {
+    const defaults = await resetDiagnosisRules();
+    setDiagRules(defaults);
+    setDiagMsg("已恢复内置默认规则");
+    setTimeout(() => setDiagMsg(null), 3000);
+  };
 
   const saveProfitFormula = async () => {
     // 非法表达式不允许入库（引擎虽有默认公式兜底，但不留脏配置）
@@ -232,6 +423,7 @@ export default function Settings() {
     { key: "sku" as const, label: "SKU 参数", icon: "ri-truck-line" },
     { key: "warehouse" as const, label: "海外仓费率", icon: "ri-building-2-line" },
     { key: "profit" as const, label: "利润公式", icon: "ri-funds-line" },
+    { key: "diagnosis" as const, label: "诊断规则", icon: "ri-stethoscope-line" },
   ];
 
   return (
@@ -242,7 +434,7 @@ export default function Settings() {
         </div>
         <h1 className="font-heading text-[26px] font-bold text-foreground-950">参数中心</h1>
         <p className="text-[13px] text-foreground-500">
-          全局阈值 · 供应链参数 · 海外仓费率 · 费比与退货率提醒阈值可自定义
+          全局阈值 · 供应链参数 · 海外仓费率 · 利润公式 · 诊断规则均可自定义
         </p>
       </div>
 
@@ -786,6 +978,156 @@ export default function Settings() {
               {profitErr && <span className="text-[12px] font-medium text-danger-600">{profitErr}</span>}
             </div>
           </div>
+        </Section>
+      )}
+
+      {/* 诊断规则库 */}
+      {tab === "diagnosis" && (
+        <Section
+          title="诊断规则库"
+          icon="ri-stethoscope-line"
+          subtitle="自定义归因原因与判定规则 · 规则按从上到下顺序匹配，命中第一条即作为结论 · 全部未命中走兜底结论"
+        >
+          {!diagRules ? (
+            <div className="py-8 text-center text-[13px] text-foreground-500">加载中…</div>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-background-100/70 px-3 py-2 text-[12px] leading-relaxed text-foreground-500">
+                阈值口径：<span className="font-medium text-foreground-700">百分点差 (pp)</span> 适用于百分比指标（3% → 8% = +5pp）；
+                <span className="font-medium text-foreground-700">相对变化 (%)</span> 适用于金额/件数等绝对值指标；
+                <span className="font-medium text-foreground-700">绝对值差</span> 直接比较数值（如评分 4.5 → 4.2 = -0.3 分）。
+                诊断页「归因结论」「建议动作」直接使用此处填写的内容。
+              </div>
+
+              {/* 诊断类型切换 */}
+              <div className="inline-flex flex-wrap rounded-full border border-background-300/70 bg-background-100/70 px-1 py-1">
+                {DIAG_TYPES.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setDiagType(t)}
+                    className={[
+                      "rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-colors cursor-pointer whitespace-nowrap",
+                      diagType === t ? "bg-primary-500 text-background-50" : "text-foreground-600 hover:text-foreground-900",
+                    ].join(" ")}
+                  >
+                    {DIAG_TYPE_LABELS[t]}
+                    <span className="ml-1.5 text-[10px] opacity-70">{diagRules[t].rules.length}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-3">
+                {diagRules[diagType].rules.map((r, i, arr) => (
+                  <RuleCard
+                    key={r.id}
+                    rule={r}
+                    onChange={(patch) =>
+                      patchRuleSet(diagType, (rules) => rules.map((x) => (x.id === r.id ? { ...x, ...patch } : x)))
+                    }
+                    onDelete={() => patchRuleSet(diagType, (rules) => rules.filter((x) => x.id !== r.id))}
+                    onMove={(dir) => {
+                      const next = [...arr];
+                      const j = i + dir;
+                      if (j < 0 || j >= next.length) return;
+                      [next[i], next[j]] = [next[j], next[i]];
+                      patchRuleSet(diagType, () => next);
+                    }}
+                    canUp={i > 0}
+                    canDown={i < arr.length - 1}
+                  />
+                ))}
+                {diagRules[diagType].rules.length === 0 && (
+                  <div className="rounded-lg border border-dashed border-background-300/70 py-5 text-center text-[12px] text-foreground-500">
+                    当前诊断类型没有规则，所有异常都会走兜底结论
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    patchRuleSet(diagType, (rules) => [
+                      ...rules,
+                      {
+                        id: uidRule(),
+                        enabled: true,
+                        metric: "dailySales7d",
+                        direction: "down",
+                        threshold: 20,
+                        mode: "pct",
+                        guard: null,
+                        reason: "自定义原因",
+                        suggestions: [],
+                      },
+                    ])
+                  }
+                  className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-primary-300 bg-primary-50/50 px-3 py-2 text-[12px] font-medium text-primary-700 hover:bg-primary-100/60 cursor-pointer"
+                >
+                  <i className="ri-add-line" aria-hidden /> 新增规则
+                </button>
+              </div>
+
+              {/* 兜底结论 */}
+              <div className="rounded-xl border border-background-200/70 bg-background-50 p-3">
+                <div className="mb-1.5 text-[12px] font-semibold text-foreground-800">兜底结论（所有规则未命中时）</div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <div>
+                    <div className="mb-1 text-[11px] text-foreground-500">归因结论（原因）</div>
+                    <input
+                      value={diagRules[diagType].fallback.reason}
+                      onChange={(e) =>
+                        setDiagRules((prev) =>
+                          prev ? { ...prev, [diagType]: { ...prev[diagType], fallback: { ...prev[diagType].fallback, reason: e.target.value } } } : prev,
+                        )
+                      }
+                      className={`${FIELD_CLS} w-full`}
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-[11px] text-foreground-500">建议动作（每行一条）</div>
+                    <textarea
+                      value={diagRules[diagType].fallback.suggestions.join("\n")}
+                      onChange={(e) =>
+                        setDiagRules((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                [diagType]: {
+                                  ...prev[diagType],
+                                  fallback: {
+                                    ...prev[diagType].fallback,
+                                    suggestions: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean),
+                                  },
+                                },
+                              }
+                            : prev,
+                        )
+                      }
+                      rows={2}
+                      className={`${FIELD_CLS} w-full resize-y`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={resetDiagRules}
+                  className="rounded-md px-3 py-2 text-[13px] text-foreground-500 hover:text-foreground-800 cursor-pointer"
+                >
+                  恢复默认规则
+                </button>
+                <button
+                  type="button"
+                  onClick={saveDiagRules}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-primary-500 px-4 py-2 text-[13px] font-semibold text-background-50 hover:bg-primary-600 cursor-pointer whitespace-nowrap"
+                >
+                  <i className="ri-save-line" aria-hidden /> 保存诊断规则
+                </button>
+                {diagMsg && <span className="text-[12px] text-accent-700">{diagMsg}</span>}
+              </div>
+            </div>
+          )}
         </Section>
       )}
     </div>

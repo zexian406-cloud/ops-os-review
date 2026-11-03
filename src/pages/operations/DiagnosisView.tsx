@@ -24,6 +24,8 @@ import {
   type CompareBasis,
 } from "@/domain/diagnosis-period";
 import type { DailySnapshot, DiagnosisNote, DiagnosisType } from "@/domain/types";
+import { getDiagnosisRules } from "@/domain/db";
+import type { DiagnosisRuleSet } from "@/domain/diagnosisRules";
 
 const DIAG_TYPES: DiagnosisType[] = ["profit", "sales", "rating", "adRatio"];
 
@@ -181,7 +183,11 @@ export default function DiagnosisView() {
     });
   }, [currentSku, skuHistory, basis, customDays, rangeFrom, rangeTo]);
 
-  // 执行诊断（决策树逻辑在 domain/diagnose.ts，保持不动）
+  // 自定义诊断规则（参数中心可配置；未配置时使用内置默认规则）
+  const [diagRules, setDiagRules] = useState<DiagnosisRuleSet | null>(null);
+  useEffect(() => { getDiagnosisRules().then(setDiagRules); }, []);
+
+  // 执行诊断（决策树逻辑在 domain/diagnose.ts，规则来自诊断规则库）
   const diagnosis: DiagnosisOutput | null = useMemo(() => {
     if (!currentSku) return null;
     const key = snapKey(currentSku.sku, currentSiteId);
@@ -192,14 +198,15 @@ export default function DiagnosisView() {
       latestInv: latestInventory.get(key),
       config,
     };
+    const rules = diagRules ?? undefined;
     switch (diagType) {
-      case "profit": return diagnoseProfitDecline(params);
-      case "sales": return diagnoseSalesDecline(params);
-      case "rating": return diagnoseRatingDecline(params);
-      case "adRatio": return diagnoseAdRatioRise(params);
+      case "profit": return diagnoseProfitDecline(params, rules);
+      case "sales": return diagnoseSalesDecline(params, rules);
+      case "rating": return diagnoseRatingDecline(params, rules);
+      case "adRatio": return diagnoseAdRatioRise(params, rules);
       default: return null;
     }
-  }, [currentSku, comparison, latestInventory, config, diagType, currentSiteId]);
+  }, [currentSku, comparison, latestInventory, config, diagType, currentSiteId, diagRules]);
 
   const periodLabel = comparison
     ? `${comparison.currentLabel} vs ${comparison.previousLabel}`
