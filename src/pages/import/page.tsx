@@ -312,6 +312,10 @@ export default function ImportPage() {
   const [cloud, setCloud] = useState<CloudConfig | null>(null);
   const [cloudSaving, setCloudSaving] = useState(false);
   const [cloudMsg, setCloudMsg] = useState<{ tone: "ok" | "err"; msg: string } | null>(null);
+  // 云端配置置顶独立区块：未配置时默认展开，已配置时收起成一行，避免被导入内容淹没
+  const [cloudOpen, setCloudOpen] = useState(false);
+  const [cloudFlash, setCloudFlash] = useState(false);
+  const cloudRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("ops");
   const [legacyOpen, setLegacyOpen] = useState(false);
 
@@ -348,6 +352,9 @@ export default function ImportPage() {
       if (c) {
         setCloud(c);
         setForm(c);
+      } else {
+        // 尚未配置：直接展开，引导用户填写
+        setCloudOpen(true);
       }
     });
     db.dailySnapshot.count().then((n) => setImportCounts((prev) => ({ ...prev, snapshots: n })));
@@ -359,6 +366,22 @@ export default function ImportPage() {
       }
     });
     loadExistingDates();
+  }, []);
+
+  /* 从顶栏「配置云端」跳转过来：展开云端区块并滚动高亮 */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("cloud") !== "1") return;
+    setCloudOpen(true);
+    setCloudFlash(true);
+    const scrollTimer = setTimeout(() => {
+      cloudRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+    const flashTimer = setTimeout(() => setCloudFlash(false), 1800);
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(flashTimer);
+    };
   }, []);
 
   /* 日期变更时检查冲突：直接查询数据库，不依赖 existingDates 状态（避免空 Set 导致无限循环） */
@@ -1425,6 +1448,137 @@ export default function ImportPage() {
         </p>
       </div>
 
+      {/* ── 云端备份与恢复（置顶独立区块，避免看漏） ── */}
+      <div
+        id="cloud-config"
+        ref={cloudRef}
+        className={[
+          "scroll-mt-20 rounded-[16px] transition-all",
+          cloudFlash ? "ring-2 ring-primary-400/70 ring-offset-2 ring-offset-background-50" : "",
+        ].join(" ")}
+      >
+        <Section
+          title="云端备份与恢复（GitHub）"
+          icon="ri-cloud-line"
+          subtitle={cloud
+            ? `已配置 ${cloud.owner}/${cloud.repo} · 分支 ${cloud.branch}${cloud.lastSyncAt ? ` · 上次同步 ${new Date(cloud.lastSyncAt).toLocaleString()}` : ""}`
+            : "尚未配置 · 填入 Personal Access Token 后即可备份到 GitHub 仓库"}
+          padded={cloudOpen}
+          action={
+            <button
+              type="button"
+              onClick={() => setCloudOpen((v) => !v)}
+              className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-background-300/70 bg-background-50 px-2.5 py-1.5 text-[12px] font-medium text-foreground-700 hover:bg-background-200 whitespace-nowrap"
+            >
+              <i className={cloudOpen ? "ri-arrow-up-s-line" : "ri-settings-3-line"} aria-hidden />
+              {cloudOpen ? "收起" : "展开配置"}
+            </button>
+          }
+        >
+          {cloudOpen && (<>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field label="Personal Access Token" hint="仓库读写权限，仅存本地">
+                <input
+                  type="password"
+                  value={form.token}
+                  onChange={(e) => setForm({ ...form, token: e.target.value })}
+                  placeholder="ghp_xxxx"
+                  autoComplete="off"
+                  className="w-full rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-sm text-foreground-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
+                />
+              </Field>
+              <Field label="仓库路径 (owner / repo)">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={form.owner}
+                    onChange={(e) => setForm({ ...form, owner: e.target.value })}
+                    placeholder="your-github"
+                    className="w-1/2 rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-sm text-foreground-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
+                  />
+                  <input
+                    type="text"
+                    value={form.repo}
+                    onChange={(e) => setForm({ ...form, repo: e.target.value })}
+                    placeholder="repo-name"
+                    className="w-1/2 rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-sm text-foreground-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
+                  />
+                </div>
+              </Field>
+              <Field label="分支">
+                <input
+                  type="text"
+                  value={form.branch}
+                  onChange={(e) => setForm({ ...form, branch: e.target.value })}
+                  className="w-full rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-sm text-foreground-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
+                />
+              </Field>
+              <Field label="文件路径">
+                <input
+                  type="text"
+                  value={form.path}
+                  onChange={(e) => setForm({ ...form, path: e.target.value })}
+                  className="w-full rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-sm text-foreground-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
+                />
+              </Field>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSaveCloudConfig}
+                disabled={cloudSaving}
+                className="inline-flex items-center gap-1.5 rounded-md border border-background-300/70 bg-background-100 px-3 py-2 text-[12px] font-medium text-foreground-700 hover:bg-background-200 disabled:opacity-60 cursor-pointer whitespace-nowrap"
+              >
+                <i className="ri-save-line" aria-hidden />
+                保存并校验配置
+              </button>
+              <button
+                type="button"
+                onClick={handlePush}
+                disabled={!cloud || cloudSaving}
+                className="inline-flex items-center gap-1.5 rounded-[9px] bg-primary-500 px-3 py-2 text-[12px] font-medium text-background-50 hover:bg-primary-600 disabled:opacity-60 cursor-pointer whitespace-nowrap"
+              >
+                <i className={cloudSaving ? "ri-loader-4-line animate-spin" : "ri-cloud-line"} aria-hidden />
+                保存到 GitHub 云端
+              </button>
+              <button
+                type="button"
+                onClick={handlePull}
+                disabled={!cloud || cloudSaving}
+                className="inline-flex items-center gap-1.5 rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-[12px] font-medium text-foreground-700 hover:bg-background-200 disabled:opacity-60 cursor-pointer whitespace-nowrap"
+              >
+                <i className="ri-download-cloud-2-line" aria-hidden />
+                从 GitHub 拉取
+              </button>
+              {cloud?.lastSyncAt && (
+                <span className="text-[11px] text-foreground-500">
+                  上次同步：{new Date(cloud.lastSyncAt).toLocaleString()}
+                </span>
+              )}
+            </div>
+
+            {cloudMsg && (
+              <div
+                className={[
+                  "mt-3 rounded-md border px-3 py-2 text-[12px]",
+                  cloudMsg.tone === "ok"
+                    ? "border-accent-200 bg-accent-100/60 text-accent-900"
+                    : "border-red-200 bg-red-50 text-red-800",
+                ].join(" ")}
+              >
+                {cloudMsg.msg}
+              </div>
+            )}
+
+            <div className="mt-4 rounded-lg bg-background-100/60 p-3 text-[12px] text-foreground-600">
+              <i className="ri-shield-check-line mr-1 text-accent-600" aria-hidden />
+              Token 只保存在本地 IndexedDB，不会通过任何服务器中转
+            </div>
+          </>)}
+        </Section>
+      </div>
+
       {/* ── 数据来源 Tab：Excel 上传 / MCP 一键拉取 / REST API 拉取 ── */}
       <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-background-300/70 bg-background-100/70 px-1 py-1">
         {([
@@ -1694,7 +1848,7 @@ export default function ImportPage() {
               {
                 icon: "ri-github-line",
                 title: "13. GitHub 云端同步",
-                body: "本地数据默认存储在 IndexedDB（浏览器本地）。在下方 GitHub 配置区填入 Personal Access Token（需仓库读写权限）、仓库路径、分支和文件路径，点「保存并校验配置」后即可「保存到 GitHub 云端」或「从 GitHub 拉取」。Token 仅存本地，不通过任何服务器中转。建议每周备份一次。",
+                body: "本地数据默认存储在 IndexedDB（浏览器本地）。页面顶部「云端备份与恢复」区块填入 Personal Access Token（需仓库读写权限）、仓库路径、分支和文件路径，点「保存并校验配置」后即可「保存到 GitHub 云端」或「从 GitHub 拉取」。Token 仅存本地，不通过任何服务器中转。建议每周备份一次。",
               },
               {
                 icon: "ri-download-cloud-line",
@@ -1731,7 +1885,7 @@ export default function ImportPage() {
               <li><strong>仓库映射：</strong>首次导入仓库明细前，在「仓库映射」Tab 检查仓库名称→区域映射是否正确，未映射的仓库会自动猜测</li>
               <li><strong>促销报名后：</strong>去「促销运营中心」添加促销活动并录入成本，促销时间线自动生成</li>
               <li><strong>日常：</strong>打开 Dashboard 看今天需要处理的事，异常中心看异常并下钻归因，发货决策中心看补货建议</li>
-              <li><strong>每周备份：</strong>在下方 GitHub 配置里点「保存到 GitHub 云端」，防止本地数据丢失</li>
+              <li><strong>每周备份：</strong>在页面顶部「云端备份与恢复」里点「保存到 GitHub 云端」，防止本地数据丢失</li>
               <li><strong>模板下载：</strong>每个导入 Tab 下方可下载 Excel/CSV 模板，含表头示例和数据验证</li>
             </ul>
           </div>
@@ -1940,112 +2094,6 @@ export default function ImportPage() {
         </Section>
       )}
 
-      {/* ── GitHub 云端同步 ── */}
-      <Section
-        title="GitHub 云端同步（手动保存）"
-        icon="ri-github-line"
-        subtitle="本地默认 IndexedDB 存储；点击「保存到云端」把数据写入你的 GitHub 仓库"
-      >
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Field label="Personal Access Token" hint="仓库读写权限，仅存本地">
-            <input
-              type="password"
-              value={form.token}
-              onChange={(e) => setForm({ ...form, token: e.target.value })}
-              placeholder="ghp_xxxx"
-              autoComplete="off"
-              className="w-full rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-sm text-foreground-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
-            />
-          </Field>
-          <Field label="仓库路径 (owner / repo)">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={form.owner}
-                onChange={(e) => setForm({ ...form, owner: e.target.value })}
-                placeholder="your-github"
-                className="w-1/2 rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-sm text-foreground-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
-              />
-              <input
-                type="text"
-                value={form.repo}
-                onChange={(e) => setForm({ ...form, repo: e.target.value })}
-                placeholder="repo-name"
-                className="w-1/2 rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-sm text-foreground-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
-              />
-            </div>
-          </Field>
-          <Field label="分支">
-            <input
-              type="text"
-              value={form.branch}
-              onChange={(e) => setForm({ ...form, branch: e.target.value })}
-              className="w-full rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-sm text-foreground-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
-            />
-          </Field>
-          <Field label="文件路径">
-            <input
-              type="text"
-              value={form.path}
-              onChange={(e) => setForm({ ...form, path: e.target.value })}
-              className="w-full rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-sm text-foreground-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
-            />
-          </Field>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handleSaveCloudConfig}
-            disabled={cloudSaving}
-            className="inline-flex items-center gap-1.5 rounded-md border border-background-300/70 bg-background-100 px-3 py-2 text-[12px] font-medium text-foreground-700 hover:bg-background-200 disabled:opacity-60 cursor-pointer whitespace-nowrap"
-          >
-            <i className="ri-save-line" aria-hidden />
-            保存并校验配置
-          </button>
-          <button
-            type="button"
-            onClick={handlePush}
-            disabled={!cloud || cloudSaving}
-            className="inline-flex items-center gap-1.5 rounded-[9px] bg-primary-500 px-3 py-2 text-[12px] font-medium text-background-50 hover:bg-primary-600 disabled:opacity-60 cursor-pointer whitespace-nowrap"
-          >
-            <i className={cloudSaving ? "ri-loader-4-line animate-spin" : "ri-cloud-line"} aria-hidden />
-            保存到 GitHub 云端
-          </button>
-          <button
-            type="button"
-            onClick={handlePull}
-            disabled={!cloud || cloudSaving}
-            className="inline-flex items-center gap-1.5 rounded-md border border-background-300/70 bg-background-50 px-3 py-2 text-[12px] font-medium text-foreground-700 hover:bg-background-200 disabled:opacity-60 cursor-pointer whitespace-nowrap"
-          >
-            <i className="ri-download-cloud-2-line" aria-hidden />
-            从 GitHub 拉取
-          </button>
-          {cloud?.lastSyncAt && (
-            <span className="text-[11px] text-foreground-500">
-              上次同步：{new Date(cloud.lastSyncAt).toLocaleString()}
-            </span>
-          )}
-        </div>
-
-        {cloudMsg && (
-          <div
-            className={[
-              "mt-3 rounded-md border px-3 py-2 text-[12px]",
-              cloudMsg.tone === "ok"
-                ? "border-accent-200 bg-accent-100/60 text-accent-900"
-                : "border-red-200 bg-red-50 text-red-800",
-            ].join(" ")}
-          >
-            {cloudMsg.msg}
-          </div>
-        )}
-
-        <div className="mt-4 rounded-lg bg-background-100/60 p-3 text-[12px] text-foreground-600">
-          <i className="ri-shield-check-line mr-1 text-accent-600" aria-hidden />
-          Token 只保存在本地 IndexedDB，不会通过任何服务器中转
-        </div>
-      </Section>
       </>)}
 
       {/* ── 清空数据确认弹窗（confirm）→ 是否加载演示站点（choice）── */}

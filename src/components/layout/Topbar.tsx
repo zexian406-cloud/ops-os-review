@@ -54,7 +54,8 @@ export default function Topbar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => 
   }, [showExportMenu]);
 
   const handleCloudSave = async () => {
-    if (!cloud) { navigate("/import"); return; }
+    // 未配置云端：跳到数据导入页顶部的云端配置区块并高亮展开
+    if (!cloud) { navigate("/import?cloud=1"); return; }
     setSaving(true);
     try {
       await pushToGitHub(cloud);
