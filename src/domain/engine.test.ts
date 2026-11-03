@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { computeAlerts, snapKey } from "./engine";
 import type { Alert, DailySnapshot, GlobalConfig, InventoryLayer, SkuMaster } from "./types";
+import { ALERT_TYPE_LABELS } from "./types";
 
 /** 最小可用配置：阈值取宽松值，确保除 traffic_drop 外不触发其他告警干扰断言 */
 const config = {
@@ -108,6 +109,46 @@ describe("computeAlerts · 流量下滑告警（traffic_drop）", () => {
 
   it("Sessions 上升 → 不告警", () => {
     expect(traffic(run(1200, 900))).toHaveLength(0);
+  });
+});
+
+describe("computeAlerts · 退款率异常（主口径）", () => {
+  const runRefund = (patch: Partial<DailySnapshot>): Alert[] => {
+    const cur = { ...snap(), ...patch } as unknown as DailySnapshot;
+    return computeAlerts({
+      skuMaster: [sku],
+      latestSnapshot: new Map([[snapKey("TSKU-1", "site_us"), cur]]),
+      latestInventory: new Map([[snapKey("TSKU-1", "site_us"), inv]]),
+      previousSnapshot: new Map([[snapKey("TSKU-1", "site_us"), prevSnap()]]),
+      config,
+      today: "2026-11-01",
+    }).filter((a) => a.type === "return");
+  };
+
+  it("退款率 15% > 阈值 10% → warning，标题与 metric 用退款率", () => {
+    const alerts = runRefund({ refundRate: 15, returnRate: 0 });
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].severity).toBe("warning");
+    expect(alerts[0].title).toBe("退款率高 · 15.0%");
+    expect(alerts[0].metric).toBeCloseTo(15);
+    expect(alerts[0].detail).toContain("退款率");
+  });
+
+  it("退款率 = 8%（未超阈值）→ 不告警", () => {
+    expect(runRefund({ refundRate: 8 })).toHaveLength(0);
+  });
+
+  it("退款率 > 20% → 升级 critical", () => {
+    const alerts = runRefund({ refundRate: 25 });
+    expect(alerts[0].severity).toBe("critical");
+  });
+
+  it("退款率缺失而退货率 30% → 不告警（交给数据健康提示补数）", () => {
+    expect(runRefund({ refundRate: undefined, returnRate: 30 })).toHaveLength(0);
+  });
+
+  it("告警类型文案统一为「退款异常」", () => {
+    expect(ALERT_TYPE_LABELS.return).toBe("退款异常");
   });
 });
 

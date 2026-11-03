@@ -256,6 +256,20 @@ describe("parseOperationExcel · 功能4/5：广告订单数（选填）与退�
     expect(cur.refundRate).toBeCloseTo(2.1);
   });
 
+  it("退款率与退货率同时导入（新模板顺序：退款率在前）→ 两个字段各归其位", () => {
+    const buf = buildXlsx([
+      {
+        name: "运营数据",
+        headers: ["SKU", "7天销量", "广告花费", "退款率", "退货率"],
+        rows: [["BOTH", 14, 30, 2.1, 3.2]],
+      },
+    ]);
+    const r = parseOperationExcel(buf, FIXED_DATE);
+    const cur = r.dailySnapshot.find((s) => s.sku === "BOTH" && s.date === FIXED_DATE && s.dailySales7d > 0)!;
+    expect(cur.refundRate).toBeCloseTo(2.1);
+    expect(cur.returnRate).toBeCloseTo(3.2);
+  });
+
   it("上期稀疏快照不带 adOrders/refundRate（仅 Sessions/订单量）", () => {
     const buf = buildXlsx([
       {
