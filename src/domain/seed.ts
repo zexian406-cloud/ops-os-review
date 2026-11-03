@@ -3,11 +3,11 @@ import { mockSkuMaster } from "@/mocks/skuMaster";
 import { mockLatestSnapshot, buildMockHistory } from "@/mocks/dailySnapshot";
 import { mockInventoryLatest } from "@/mocks/inventory";
 import { mockCampaigns } from "@/mocks/campaigns";
-import { mockPromotions } from "@/mocks/promotions";
+import { buildMockPromotions } from "@/mocks/promotions";
 import { MOCK_MANUAL_PROMOTIONS } from "@/mocks/manualPromotions";
 import type { DailySnapshot, InventoryLayer, OpsLog, Shop, Site, TodoItem } from "./types";
 
-export const SEED_FLAG = "seeded_v13";
+export const SEED_FLAG = "seeded_v14";
 
 export const DEMO_SITE_ID = "site_demo";
 
@@ -143,6 +143,9 @@ async function refreshDemoContent(today: string): Promise<void> {
   const demoLogIds = buildDemoOpsLogs(today).map((l) => l.id!);
   await db.opsLogs.bulkDelete(demoLogIds);
   await db.opsLogs.bulkPut(buildDemoOpsLogs(today));
+
+  // 演示促销活动：日期随 today 滚动（保证月度复盘「促销 ROI」板块有已结束活动可算）
+  await db.promotions.bulkPut(buildMockPromotions(today));
 }
 
 /**
@@ -199,7 +202,7 @@ export async function ensureSeedData(): Promise<void> {
   await db.inventoryLayer.bulkAdd(invRows);
 
   await db.campaigns.bulkPut(mockCampaigns);
-  await db.promotions.bulkPut(mockPromotions);
+  await db.promotions.bulkPut(buildMockPromotions(today));
   await db.manualPromotions.bulkPut(MOCK_MANUAL_PROMOTIONS);
   await db.todos.bulkPut(buildDemoTodos(today));
   await db.opsLogs.bulkPut(buildDemoOpsLogs(today));

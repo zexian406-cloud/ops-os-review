@@ -5,6 +5,7 @@ import {
 } from "recharts";
 import { useOpsData } from "@/domain/store";
 import { computeAll, computeWarehouseTotals } from "@/domain/calculator";
+import MonthlyReview from "./MonthlyReview";
 import type { DailySnapshot, SkuMaster, InventoryLayer } from "@/domain/types";
 
 /* ────────── 工具函数 ────────── */
@@ -210,6 +211,8 @@ export default function HistoryPage() {
 
   // 时间维度：单日 / 按周 / 按月
   const [dimension, setDimension] = useState<Dimension>("date");
+  // 顶部周期 tab：周 = 现有环比对比；月 = 月度复盘（促销ROI/动作闭环/月度盈亏/费用趋势）
+  const [mode, setMode] = useState<"week" | "month">("week");
 
   // 获取所有唯一日期（降序）
   const allDates = useMemo(() => {
@@ -394,13 +397,37 @@ export default function HistoryPage() {
         </div>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-foreground-950">历史对比</h1>
-          <p className="text-sm text-foreground-500">选择时间维度和周期，对比全站运营指标变化</p>
+          <p className="text-sm text-foreground-500">{mode === "week" ? "选择时间维度和周期，对比全站运营指标变化" : "促销 ROI · 动作闭环 · 月度盈亏 · 费用趋势"}</p>
+        </div>
+        {/* 周期切换：周 / 月 */}
+        <div className="flex rounded-lg border border-background-200 bg-white p-0.5">
+          <button
+            type="button"
+            onClick={() => setMode("week")}
+            className={`rounded-md px-4 py-1.5 text-[13px] font-medium transition-colors ${
+              mode === "week" ? "bg-primary-500 text-white" : "text-foreground-600 hover:bg-background-100"
+            }`}
+          >
+            <i className="ri-calendar-line mr-1" />周
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("month")}
+            className={`rounded-md px-4 py-1.5 text-[13px] font-medium transition-colors ${
+              mode === "month" ? "bg-primary-500 text-white" : "text-foreground-600 hover:bg-background-100"
+            }`}
+          >
+            <i className="ri-calendar-2-line mr-1" />月
+          </button>
         </div>
         <Link to="/operations" className="rounded-lg border border-background-300 bg-background-50 px-3 py-1.5 text-[13px] font-medium text-foreground-700 hover:bg-background-100">
           <i className="ri-arrow-left-line mr-1" />返回
         </Link>
       </div>
 
+      {mode === "month" && <MonthlyReview />}
+
+      {mode === "week" && (<>
       {/* 维度切换 + 周期选择器 */}
       <div className="mb-6 rounded-2xl border border-background-200/70 bg-background-50 p-4">
         <div className="flex flex-wrap items-end gap-4">
@@ -598,6 +625,7 @@ export default function HistoryPage() {
           </div>
         )}
       </div>
+      </>)}
     </div>
   );
 }
