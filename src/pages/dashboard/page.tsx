@@ -1,8 +1,5 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
-import {
-  Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from "recharts";
 import { type LayoutItem } from "react-grid-layout";
 import { useOpsData } from "@/domain/store";
 import { computeAll, computeWarehouseTotals } from "@/domain/calculator";
@@ -13,8 +10,7 @@ import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import CanvasLayout, { CanvasItem } from "@/components/layout/CanvasLayout";
-import { filterSkuMasterByShop } from "@/domain/shopFilter";
-import type { AlertType, DailySnapshot, TodoItem, OpsLog, SkuMaster } from "@/domain/types";
+import type { AlertType, TodoItem, OpsLog, SkuMaster } from "@/domain/types";
 import AlertList from "./AlertList";
 import LayoutCustomizer from "@/components/layout/LayoutCustomizer";
 import { useDashboardLayout, type DashboardSectionKey, type KpiMetricKey, KPI_METRIC_LABELS, KPI_METRIC_ICONS, KPI_METRIC_TONES, type GridItemLayout } from "@/hooks/useLayoutPrefs";
@@ -26,21 +22,6 @@ const deltaArrow = (v: number, inverse = false) => {
   const arrow = v > 0 ? "↑" : "↓";
   return <span className={color}>{arrow} {Math.abs(v).toFixed(1)}</span>;
 };
-
-/* ── 近 14 天分日走势：可切换指标 ── */
-const WEEK_METRICS = [
-  { key: "sales", label: "销量", unit: " 件", color: "#3b82f6", goodWhenUp: true },
-  { key: "adRatio", label: "广告费比", unit: "%", color: "#f59e0b", goodWhenUp: false },
-  { key: "returnRate", label: "退货率", unit: "%", color: "#ef4444", goodWhenUp: false },
-  { key: "rating", label: "评分", unit: "", color: "#10b981", goodWhenUp: true },
-] as const;
-type WeekMetricKey = (typeof WEEK_METRICS)[number]["key"];
-
-/** 指标走势查看范围：跟随顶栏 / 全部店铺 / 指定店铺 / 指定 SKU·MSKU */
-type TrendScope = "current" | "all" | "shop" | "sku";
-
-const selectCls =
-  "rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] text-foreground-700 focus:border-primary-500 focus:outline-none cursor-pointer";
 
 /** ISO 日期 → 相对今天的人话：今天 / 明天 / 后天 / N 天后 / 已过 N 天 */
 const relativeDayLabel = (date: string, today: string) => {
@@ -58,7 +39,7 @@ export default function Dashboard() {
     loading, skuMaster, alerts, promotions,
     shipmentSuggestions, wowDeltas, latestSnapshot,
     latestInventory, today, currentSite,
-    currentShopId, currentSiteId, shops, snapshots,
+    currentShopId, shops,
   } = useOpsData();
 
   const [todos, setTodos] = useState<TodoItem[]>([]);
@@ -66,11 +47,6 @@ export default function Dashboard() {
   const [promosExpanded, setPromosExpanded] = useState(false);
   const [alertsExpanded, setAlertsExpanded] = useState(false);
   const [shipmentExpanded, setShipmentExpanded] = useState(false);
-  const [weekMetric, setWeekMetric] = useState<WeekMetricKey>("sales");
-  // 指标走势的查看范围（独立于顶栏店铺筛选，可下钻到单店铺 / 单 SKU）
-  const [trendScope, setTrendScope] = useState<TrendScope>("current");
-  const [trendShop, setTrendShop] = useState("");
-  const [trendSkuQuery, setTrendSkuQuery] = useState("");
   // 展开/收起会改变卡片内容高度，递增此版本号让 CanvasLayout 重新测高，
   // 否则卡片停留在收起时的高度，展开后的表格会被 overflow:hidden 裁切
   const [contentVersion, setContentVersion] = useState(0);
@@ -87,25 +63,6 @@ export default function Dashboard() {
       setOpsLogs(data.slice(0, 10));
     }).catch(() => setOpsLogs([]));
   }, [loading]);
-
-  // 指标走势下钻用：站点全量快照 + 全量 SKU 主档（不受顶栏店铺筛选影响）
-  const [siteSnapsRaw, setSiteSnapsRaw] = useState<DailySnapshot[]>([]);
-  const [siteSkusRaw, setSiteSkusRaw] = useState<SkuMaster[]>([]);
-  useEffect(() => {
-    let alive = true;
-    Promise.all([db.dailySnapshot.toArray(), db.skuMaster.toArray()])
-      .then(([snaps, skus]) => {
-        if (!alive) return;
-        setSiteSnapsRaw(snaps.filter((r) => (r.siteId ?? "site_us") === currentSiteId));
-        setSiteSkusRaw(skus.filter((s) => (s.siteId ?? "site_us") === currentSiteId));
-      })
-      .catch(() => {
-        if (!alive) return;
-        setSiteSnapsRaw([]);
-        setSiteSkusRaw([]);
-      });
-    return () => { alive = false; };
-  }, [currentSiteId, loading]);
 
   const shopsMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -140,94 +97,6 @@ export default function Dashboard() {
   const handleLayoutChange = useCallback((layout: LayoutItem[]) => {
     setGridLayout(layout.map((l) => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
   }, [setGridLayout]);
-
-  // ── 指标走势查看范围解析 ──
-  const trendSkus = useMemo((): SkuMaster[] => {
-    if (trendScope === "current") return skuMaster; // 顶栏已过滤
-    if (trendScope === "all") return siteSkusRaw;
-    if (trendScope === "shop") {
-      const shopId = trendShop || (currentShopId !== "all" ? currentShopId : "");
-      if (!shopId) return [];
-      return filterSkuMasterByShop(siteSkusRaw, shopId, shops);
-    }
-    const q = trendSkuQuery.trim().toLowerCase();
-    if (!q) return [];
-    return siteSkusRaw.filter(
-      (s) => s.sku.toLowerCase().includes(q) || (s.msku ?? "").toLowerCase().includes(q),
-    );
-  }, [trendScope, trendShop, trendSkuQuery, skuMaster, siteSkusRaw, currentShopId, shops]);
-
-  const trendSnapshots = useMemo(() => {
-    if (trendScope === "current") return snapshots;
-    const skuSet = new Set(trendSkus.map((s) => s.sku));
-    return siteSnapsRaw.filter((s) => skuSet.has(s.sku));
-  }, [trendScope, snapshots, trendSkus, siteSnapsRaw]);
-
-  const trendScopeLabel = useMemo(() => {
-    if (trendScope === "current") {
-      return currentShopId === "all"
-        ? "全部店铺（跟随顶栏）"
-        : `${shopsMap.get(currentShopId) ?? currentShopId}（跟随顶栏）`;
-    }
-    if (trendScope === "all") return "全部店铺";
-    if (trendScope === "shop") {
-      const shopId = trendShop || (currentShopId !== "all" ? currentShopId : "");
-      if (!shopId) return "未选择店铺";
-      return `店铺：${shopsMap.get(shopId) ?? shopId}`;
-    }
-    if (!trendSkuQuery.trim()) return "未输入 SKU";
-    if (!trendSkus.length) return "未匹配到 SKU";
-    const s = trendSkus[0];
-    return `SKU：${s.sku}${s.msku && s.msku !== s.sku ? ` / ${s.msku}` : ""}`;
-  }, [trendScope, currentShopId, shopsMap, trendShop, trendSkuQuery, trendSkus]);
-
-  // ── 近 14 天分日聚合（按指标走势的查看范围取数）──
-  const dailySeries = useMemo(() => {
-    const byDate = new Map<string, { sales: number; adSum: number; adN: number; retSum: number; retN: number; ratSum: number; ratN: number }>();
-    for (const s of trendSnapshots) {
-      let d = byDate.get(s.date);
-      if (!d) {
-        d = { sales: 0, adSum: 0, adN: 0, retSum: 0, retN: 0, ratSum: 0, ratN: 0 };
-        byDate.set(s.date, d);
-      }
-      d.sales += s.dailySales7d;
-      if (s.adRatio > 0) { d.adSum += s.adRatio; d.adN += 1; }
-      if (s.returnRate > 0) { d.retSum += s.returnRate; d.retN += 1; }
-      if (s.rating > 0) { d.ratSum += s.rating; d.ratN += 1; }
-    }
-    return [...byDate.keys()].sort().slice(-14).map((date) => {
-      const d = byDate.get(date)!;
-      return {
-        date,
-        label: date.slice(5),
-        sales: Number(d.sales.toFixed(1)),
-        adRatio: d.adN > 0 ? Number((d.adSum / d.adN).toFixed(1)) : 0,
-        returnRate: d.retN > 0 ? Number((d.retSum / d.retN).toFixed(1)) : 0,
-        rating: d.ratN > 0 ? Number((d.ratSum / d.ratN).toFixed(2)) : 0,
-      };
-    });
-  }, [trendSnapshots]);
-
-  // 本期（近 7 天）vs 上期（再前 7 天）均值，用于卡片与参考线
-  const weekCompare = useMemo((): {
-    current: Record<WeekMetricKey, number>;
-    previous: Record<WeekMetricKey, number> | null;
-  } => {
-    const s = dailySeries;
-    const calc = (rows: typeof s): Record<WeekMetricKey, number> => {
-      const avg = (f: (d: (typeof s)[number]) => number) =>
-        rows.length > 0 ? rows.reduce((sum, d) => sum + f(d), 0) / rows.length : 0;
-      return {
-        sales: avg((d) => d.sales),
-        adRatio: avg((d) => d.adRatio),
-        returnRate: avg((d) => d.returnRate),
-        rating: avg((d) => d.rating),
-      };
-    };
-    const cur = s.slice(-7);
-    const prev = s.length >= 8 ? s.slice(Math.max(0, s.length - 14), s.length - 7) : [];
-    return { current: calc(cur), previous: prev.length > 0 ? calc(prev) : null };
-  }, [dailySeries]);
 
   const activeProductGroups = useMemo(() => {
     const groups = new Set<string>();
@@ -422,175 +291,6 @@ export default function Dashboard() {
             })}
           </div>
         )}
-      </Section>
-    ),
-
-    weekCompare: (
-      <Section title="指标走势 · 本期 vs 上期" icon="ri-bar-chart-grouped-line" subtitle="近 14 天分日走势 · 虚线为上期均值 · 可切换指标与查看范围">
-        <div className="space-y-3">
-          {/* 查看范围：全部店铺 / 单店铺 / 指定 SKU·MSKU */}
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-background-200/70 bg-background-100/50 px-3 py-2">
-            <span className="text-[11px] font-medium text-foreground-600">查看范围</span>
-            <select
-              value={trendScope}
-              onChange={(e) => setTrendScope(e.target.value as TrendScope)}
-              className={selectCls}
-              aria-label="指标走势查看范围"
-            >
-              <option value="current">跟随顶栏筛选</option>
-              <option value="all">全部店铺</option>
-              <option value="shop">指定店铺</option>
-              <option value="sku">指定 SKU / MSKU</option>
-            </select>
-            {trendScope === "shop" && (
-              <select
-                value={trendShop || (currentShopId !== "all" ? currentShopId : "")}
-                onChange={(e) => setTrendShop(e.target.value)}
-                className={selectCls}
-                aria-label="选择店铺"
-              >
-                <option value="">选择店铺</option>
-                {shops.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            )}
-            {trendScope === "sku" && (
-              <input
-                value={trendSkuQuery}
-                onChange={(e) => setTrendSkuQuery(e.target.value)}
-                placeholder="输入 SKU 或 MSKU"
-                list="trend-sku-list"
-                className="w-40 rounded-md border border-background-300/70 bg-background-50 px-2 py-1.5 text-[12px] text-foreground-800 focus:border-primary-500 focus:outline-none"
-              />
-            )}
-            <span className={`ml-auto text-[11px] ${trendScope === "sku" && trendSkuQuery.trim() && !trendSkus.length ? "text-amber-600" : "text-foreground-500"}`}>
-              {trendScopeLabel}
-            </span>
-          </div>
-          <datalist id="trend-sku-list">
-            {siteSkusRaw.slice(0, 200).flatMap((s) => {
-              const opts = [<option key={s.sku} value={s.sku}>{s.name}</option>];
-              if (s.msku && s.msku !== s.sku) {
-                opts.push(<option key={`${s.sku}-msku`} value={s.msku}>{s.name}（MSKU）</option>);
-              }
-              return opts;
-            })}
-          </datalist>
-
-        {dailySeries.length === 0 ? (
-          <div className="glass-card px-4 py-8 text-center">
-            <i className="ri-bar-chart-grouped-line mb-3 block text-[32px] text-foreground-300" aria-hidden />
-            <p className="text-[13px] text-foreground-400">
-              {trendScope === "sku" && !trendSkuQuery.trim()
-                ? "在上方输入 SKU 或 MSKU，查看该单品的分日走势"
-                : trendScope === "shop" && !(trendShop || (currentShopId !== "all" ? currentShopId : ""))
-                  ? "先在上方选择一个店铺"
-                  : trendScope === "sku"
-                    ? "该 SKU / MSKU 暂无快照数据，换一个试试"
-                    : "当前范围内暂无快照数据，上传后可查看走势"}
-            </p>
-            {(trendScope === "current" || trendScope === "all") && (
-              <Link to="/import" className="apple-btn mt-5 inline-flex items-center gap-1.5 px-5 py-2.5 text-[13px] font-medium cursor-pointer">
-                <i className="ri-upload-cloud-2-line" aria-hidden />
-                去导入数据
-              </Link>
-            )}
-          </div>
-        ) : (
-          <div>
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              {WEEK_METRICS.map((m) => (
-                <button
-                  key={m.key}
-                  type="button"
-                  onClick={() => setWeekMetric(m.key)}
-                  className={["rounded-full border px-3 py-1 text-[12px] font-medium transition-all cursor-pointer",
-                    weekMetric === m.key ? "border-transparent text-white shadow-sm" : "border-background-300/70 bg-background-50 text-foreground-600 hover:bg-background-100"].join(" ")}
-                  style={weekMetric === m.key ? { backgroundColor: m.color } : undefined}
-                >
-                  {m.label}
-                </button>
-              ))}
-              <span className="ml-auto text-[11px] text-foreground-400">每天一个点，哪天掉量 / 飙费比一眼定位</span>
-            </div>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={dailySeries} margin={{ top: 12, right: 16, bottom: 0, left: -8 }}>
-                  <defs>
-                    <linearGradient id={`grad-${weekMetric}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={WEEK_METRICS.find((m) => m.key === weekMetric)!.color} stopOpacity={0.22} />
-                      <stop offset="100%" stopColor={WEEK_METRICS.find((m) => m.key === weekMetric)!.color} stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(var(--background-300))" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "oklch(var(--foreground-500))" }} axisLine={false} tickLine={false} />
-                  <YAxis
-                    tick={{ fontSize: 11, fill: "oklch(var(--foreground-500))" }}
-                    axisLine={false} tickLine={false}
-                    domain={weekMetric === "rating" ? ["dataMin - 0.5", 5] : ["auto", "auto"]}
-                  />
-                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 14, border: "1px solid oklch(var(--background-300))", background: "#fff", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }} />
-                  {weekCompare.previous && (
-                    <ReferenceLine
-                      y={Number(weekCompare.previous[weekMetric].toFixed(2))}
-                      stroke="#94a3b8" strokeDasharray="5 5"
-                      label={{ value: `上期均值 ${weekCompare.previous[weekMetric].toFixed(1)}${WEEK_METRICS.find((m) => m.key === weekMetric)!.unit}`, position: "insideTopRight", fontSize: 11, fill: "#64748b" }}
-                    />
-                  )}
-                  <Area
-                    type="monotone"
-                    dataKey={weekMetric}
-                    name={WEEK_METRICS.find((m) => m.key === weekMetric)!.label}
-                    stroke={WEEK_METRICS.find((m) => m.key === weekMetric)!.color}
-                    strokeWidth={2}
-                    fill={`url(#grad-${weekMetric})`}
-                    dot={{ r: 2.5, strokeWidth: 0, fill: WEEK_METRICS.find((m) => m.key === weekMetric)!.color }}
-                    activeDot={{ r: 4.5 }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="mt-5 grid grid-cols-4 gap-3">
-              {WEEK_METRICS.map((m) => {
-                const cur = weekCompare.current[m.key];
-                const prev = weekCompare.previous?.[m.key];
-                const delta = prev != null && prev > 0 ? ((cur - prev) / prev) * 100 : null;
-                const isUp = (delta ?? 0) >= 0;
-                const isGood = m.goodWhenUp ? isUp : !isUp;
-                return (
-                  <button
-                    key={m.key}
-                    type="button"
-                    onClick={() => setWeekMetric(m.key)}
-                    className="glass-card p-4 text-center cursor-pointer transition-shadow hover:shadow-md"
-                    style={weekMetric === m.key ? { boxShadow: `0 0 0 2px ${m.color}66` } : undefined}
-                  >
-                    <div className="text-[11px] font-medium text-foreground-400">{m.label}</div>
-                    <div className="text-[10px] text-foreground-400/80">近 7 天均值</div>
-                    <div className="mt-1 flex items-center justify-center gap-1.5">
-                      <span className="mono-num text-[15px] font-bold">{cur.toFixed(m.key === "rating" ? 2 : 1)}{m.unit}</span>
-                      {delta != null ? (
-                        <span className={`text-[11px] font-medium ${isGood ? "text-accent-600" : "text-red-500"}`}>
-                          {isUp ? "↑" : "↓"}{Math.abs(delta).toFixed(1)}%
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-foreground-400">暂无上期</span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="mt-3 rounded-lg border border-background-200/70 bg-background-100/40 px-3 py-2 text-[11px] leading-relaxed text-foreground-500">
-              <i className="ri-information-line mr-1" aria-hidden />
-              <b>口径</b>：本期 = 最近 7 个有快照的自然日均值；上期 = 再往前 7 个自然日均值（虚线）。
-              销量为近 7 天日均汇总，费比 / 退货率 / 评分为各 SKU 当日值的均值；库存类指标不参与走势。
-              查看范围可下钻到单店铺或单 SKU / MSKU，与顶栏筛选互不影响。
-            </div>
-          </div>
-        )}
-        </div>
       </Section>
     ),
 

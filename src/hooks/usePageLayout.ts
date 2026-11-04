@@ -76,7 +76,7 @@ const STORAGE_KEY = "aos-page-layout-v8";
 /* ────────── 各页面默认区块 ────────── */
 export const DEFAULT_SECTIONS: Record<PageId, string[]> = {
   dashboard: [
-    "kpi", "todo", "weekCompare", "promotions", "riskBuckets",
+    "kpi", "todo", "promotions", "riskBuckets",
     "alerts", "shipment", "wowBar",
   ],
   skuDetail: [
@@ -162,7 +162,6 @@ export const SECTION_LABELS: Record<string, Record<string, string>> = {
   dashboard: {
     kpi: "核心指标",
     todo: "我的待办",
-    weekCompare: "本周 vs 上周",
     promotions: "促销活动",
     riskBuckets: "今日待处理",
     alerts: "紧急告警",

@@ -5,7 +5,6 @@ export type DashboardSectionKey =
   | "kpi"
   | "todo"
   | "opsLogs"
-  | "weekCompare"
   | "promotions"
   | "riskBuckets"
   | "alerts"
@@ -284,13 +283,24 @@ const DEFAULT_DASHBOARD_GRID_LAYOUT: Record<DashboardSectionKey, GridItemLayout>
   todo:        { x: 0, y: 5,  w: 4,  h: 9 },
   opsLogs:     { x: 4, y: 5,  w: 4,  h: 9 },
   riskBuckets: { x: 8, y: 5,  w: 4,  h: 9 },
-  weekCompare: { x: 0, y: 14, w: 8,  h: 9 },
-  alerts:      { x: 8, y: 14, w: 4,  h: 9 },
-  promotions:  { x: 0, y: 23, w: 6,  h: 8 },
-  shipment:    { x: 6, y: 23, w: 6,  h: 8 },
+  alerts:      { x: 0, y: 14, w: 6,  h: 9 },
+  promotions:  { x: 6, y: 14, w: 6,  h: 9 },
+  shipment:    { x: 0, y: 23, w: 12, h: 8 },
   wowBar:      { x: 0, y: 31, w: 12, h: 4 },
   mskuDemo:    { x: 0, y: 35, w: 12, h: 6 },
 };
+
+const DEFAULT_DASHBOARD_VISIBLE: DashboardSectionKey[] = [
+  "kpi",
+  "todo",
+  "opsLogs",
+  "promotions",
+  "riskBuckets",
+  "alerts",
+  "shipment",
+  "wowBar",
+  "mskuDemo",
+];
 
 interface LayoutPrefs {
   dashboard: {
@@ -309,19 +319,6 @@ interface LayoutPrefs {
     kpiSlots: ShipmentKpiMetricKey[];
   };
 }
-
-const DEFAULT_DASHBOARD_VISIBLE: DashboardSectionKey[] = [
-  "kpi",
-  "todo",
-  "opsLogs",
-  "weekCompare",
-  "promotions",
-  "riskBuckets",
-  "alerts",
-  "shipment",
-  "wowBar",
-  "mskuDemo",
-];
 
 const DEFAULT_SKU_VISIBLE: SkuDetailSectionKey[] = [
   "header",
@@ -396,12 +393,20 @@ function loadPrefs(): LayoutPrefs {
         parsed.skuDetail?.gridLayout as Record<string, Partial<GridItemLayout>> | undefined,
         DEFAULT_SKU_GRID_LAYOUT,
       );
+      // 旧版布局含已删除的「指标走势」卡片：首页布局整体回落到新默认值，
+      // 让其余卡片自动重排补位，不残留空档；SKU 详情的自定义布局保持不变
+      const legacyDashboard = Array.isArray(parsed.dashboard?.visible)
+        && (parsed.dashboard.visible as unknown[]).includes("weekCompare");
       return {
         dashboard: {
-          visible: sanitizeVisible(parsed.dashboard?.visible, DEFAULT_DASHBOARD_VISIBLE),
+          visible: legacyDashboard
+            ? [...DEFAULT_DASHBOARD_VISIBLE]
+            : sanitizeVisible(parsed.dashboard?.visible, DEFAULT_DASHBOARD_VISIBLE),
           kpiSlots: parsed.dashboard?.kpiSlots ?? [...DEFAULT_KPI_SLOTS],
-          gridLayout: dashboardGrid,
-          manuallyResized: sanitizeManualKeys(parsed.dashboard?.manuallyResized, DEFAULT_DASHBOARD_GRID_LAYOUT),
+          gridLayout: legacyDashboard ? { ...DEFAULT_DASHBOARD_GRID_LAYOUT } : dashboardGrid,
+          manuallyResized: legacyDashboard
+            ? []
+            : sanitizeManualKeys(parsed.dashboard?.manuallyResized, DEFAULT_DASHBOARD_GRID_LAYOUT),
         },
         skuDetail: {
           visible: sanitizeVisible(parsed.skuDetail?.visible, DEFAULT_SKU_VISIBLE),
@@ -665,7 +670,6 @@ export const DASHBOARD_LABELS: Record<DashboardSectionKey, string> = {
   kpi: "核心指标",
   todo: "我的待办",
   opsLogs: "操作记录",
-  weekCompare: "本周 vs 上周",
   promotions: "促销活动",
   riskBuckets: "今日待处理",
   alerts: "紧急告警",
