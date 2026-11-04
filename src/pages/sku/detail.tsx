@@ -60,12 +60,12 @@ const DIAGNOSIS_GROUP: Record<string, string> = {
   listing: "sales",
 };
 
-const deltaArrow = (v: number, inverse = false) => {
-  if (Math.abs(v) < 0.01) return <span className="text-foreground-500">→ 0</span>;
+const deltaArrow = (v: number, inverse = false, unit = "") => {
+  if (Math.abs(v) < 0.01) return <span className="text-foreground-500">→ 0{unit}</span>;
   const good = inverse ? v < 0 : v > 0;
   const color = good ? "text-accent-600" : "text-red-500";
   const arrow = v > 0 ? "↑" : "↓";
-  return <span className={color}>{arrow} {Math.abs(v).toFixed(1)}</span>;
+  return <span className={color}>{arrow} {Math.abs(v).toFixed(1)}{unit}</span>;
 };
 
 const inputCls = "w-full rounded-md border border-background-200 bg-background-50 px-2.5 py-1.5 text-[13px] text-foreground-800 placeholder:text-foreground-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-200/50";
@@ -178,6 +178,7 @@ export default function SkuDetail() {
 
   const skuShipment = useMemo(() => shipmentSuggestions.find((s) => s.sku === skuId), [shipmentSuggestions, skuId]);
   const skuWow: WowDelta | undefined = useMemo(() => wowDeltas.find((d) => d.sku === skuId), [wowDeltas, skuId]);
+  const activeOrUpcomingPromo = skuPromos.find((p) => p.status === "active" || p.status === "upcoming");
 
   // ── 该 SKU 的活跃告警诊断（复用诊断引擎）──
   const skuDiagnoses = useMemo(() => {
@@ -209,15 +210,25 @@ export default function SkuDetail() {
     const defaultLeadTime = config?.defaultLeadTime ?? 40;
     const defaultSafetyStockDays = config?.defaultSafetyStockDays ?? 30;
     try {
-      const prevCalc = computeAll({ sku, snap: prev, inv, defaultLeadTime, defaultSafetyStockDays, defaultCommissionRate: currentSite?.commissionRate });
-      const latestCalc = computeAll({ sku, snap: latestSnap, inv, defaultLeadTime, defaultSafetyStockDays, defaultCommissionRate: currentSite?.commissionRate });
+      const prevCalc = computeAll({
+        sku, snap: prev, inv, defaultLeadTime, defaultSafetyStockDays,
+        defaultCommissionRate: currentSite?.commissionRate,
+        activePromo: activeOrUpcomingPromo,
+        promoCost: weekPromoCost.total,
+        returnBasis: effectiveBasis,
+      });
+      const latestCalc = computeAll({
+        sku, snap: latestSnap, inv, defaultLeadTime, defaultSafetyStockDays,
+        defaultCommissionRate: currentSite?.commissionRate,
+        activePromo: activeOrUpcomingPromo,
+        promoCost: weekPromoCost.total,
+        returnBasis: effectiveBasis,
+      });
       return { prev, latest: latestSnap, prevCalc, latestCalc };
     } catch {
       return { prev, latest: latestSnap, prevCalc: null, latestCalc: null };
     }
-  }, [history, sku, inv, config]);
-
-  const activeOrUpcomingPromo = skuPromos.find((p) => p.status === "active" || p.status === "upcoming");
+  }, [history, sku, inv, config, activeOrUpcomingPromo, weekPromoCost, effectiveBasis, currentSite?.commissionRate]);
 
   // ── Layout customizer ──
   const {
@@ -590,6 +601,27 @@ export default function SkuDetail() {
     }
   }, [sku, focusedSnap, inv, activeOrUpcomingPromo, config, weekPromoCost, effectiveBasis]);
 
+  // ── 上周利润：与「盈利分析」使用完全相同的成本口径（广告费 / 退款损失取当前口径）──
+  const prevWeekCalc = useMemo(() => {
+    if (!sku || !prevSnap) return null;
+    try {
+      return computeAll({
+        sku,
+        snap: prevSnap,
+        inv,
+        activePromo: activeOrUpcomingPromo,
+        defaultLeadTime: config?.defaultLeadTime ?? 40,
+        defaultSafetyStockDays: config?.defaultSafetyStockDays ?? 30,
+        defaultCommissionRate: currentSite?.commissionRate,
+        promoCost: weekPromoCost.total,
+        returnBasis: effectiveBasis,
+      });
+    } catch (err) {
+      console.error("[SkuDetail] prev week computeAll threw:", err);
+      return null;
+    }
+  }, [sku, prevSnap, inv, activeOrUpcomingPromo, config, weekPromoCost, effectiveBasis, currentSite?.commissionRate]);
+
   // ── 计算实际渲染的 section keys ──
   // 必须在所有 early return 之前调用 hooks（React hooks 规则）
   // 使用 calc?.fbaReplenish 避免引用 calc 解构前的变量（TDZ）
@@ -957,7 +989,7 @@ export default function SkuDetail() {
       {/* 广告费比 */}
       {latest && visibleKeys.includes("kpiAdRatio") && (
       <CanvasItem key="kpiAdRatio" itemKey="kpiAdRatio">
-        <KpiCard label="广告费比" value={`${(latest.adRatio ?? 0).toFixed(1)}%`} sub={skuWow ? deltaArrow(skuWow.adRatioDelta, true) : `阈值 ${config?.adRatioThreshold ?? 10}%`} icon="ri-megaphone-line" tone={(latest.adRatio ?? 0) > (config?.adRatioThreshold ?? 10) * 2 ? "danger" : (latest.adRatio ?? 0) > (config?.adRatioThreshold ?? 10) ? "warn" : "accent"} />
+        <KpiCard label="广告费比" value={`${(latest.adRatio ?? 0).toFixed(1)}%`} sub={skuWow ? deltaArrow(skuWow.adRatioDelta, true, "pp") : `阈值 ${config?.adRatioThreshold ?? 10}%`} icon="ri-megaphone-line" tone={(latest.adRatio ?? 0) > (config?.adRatioThreshold ?? 10) * 2 ? "danger" : (latest.adRatio ?? 0) > (config?.adRatioThreshold ?? 10) ? "warn" : "accent"} />
       </CanvasItem>
       )}
 
@@ -2243,9 +2275,9 @@ export default function SkuDetail() {
           <span className="text-foreground-300">·</span>
           <div className="flex items-center gap-1.5 text-[12px] text-foreground-600"><span>库存</span>{deltaArrow(skuWow.stockDelta, true)}</div>
           <span className="text-foreground-300">·</span>
-          <div className="flex items-center gap-1.5 text-[12px] text-foreground-600"><span>利润率</span>{deltaArrow(skuWow.profitMarginDelta)}</div>
+          <div className="flex items-center gap-1.5 text-[12px] text-foreground-600"><span>利润率</span>{deltaArrow(prevWeekCalc ? grossMargin - prevWeekCalc.grossMargin : skuWow.profitMarginDelta, false, "pp")}</div>
           <span className="text-foreground-300">·</span>
-          <div className="flex items-center gap-1.5 text-[12px] text-foreground-600"><span>费比</span>{deltaArrow(skuWow.adRatioDelta, true)}</div>
+          <div className="flex items-center gap-1.5 text-[12px] text-foreground-600"><span>费比</span>{deltaArrow(skuWow.adRatioDelta, true, "pp")}</div>
           <span className="text-foreground-300">·</span>
           <div className="flex items-center gap-1.5 text-[12px] text-foreground-600"><span>评分</span>{deltaArrow(skuWow.ratingDelta)}</div>
         </div>
@@ -2257,10 +2289,11 @@ export default function SkuDetail() {
       latest && prevSnap ? (() => {
         const lSales = latest.dailySales7d ?? 0;
         const pSales = prevSnap.dailySales7d ?? 0;
-        const lProfit = latest.profit ?? 0;
-        const pProfit = prevSnap.profit ?? 0;
-        const lMargin = latest.profitMargin ?? 0;
-        const pMargin = prevSnap.profitMargin ?? 0;
+        // 利润/净利率一律走计算引擎，与上方「盈利分析」同一成本口径
+        const lProfit = grossProfit;
+        const pProfit = prevWeekCalc?.grossProfit ?? 0;
+        const lMargin = grossMargin;
+        const pMargin = prevWeekCalc?.grossMargin ?? 0;
         const lAd = latest.adRatio ?? 0;
         const pAd = prevSnap.adRatio ?? 0;
         const salesDelta = lSales - pSales;
@@ -2357,7 +2390,7 @@ export default function SkuDetail() {
                 <div className="flex items-center gap-2 text-[12px]">
                   <span className="text-foreground-500">净利率变化</span>
                   <span className={`mono-num font-semibold ${marginDelta >= 0 ? 'text-accent-600' : 'text-red-500'}`}>
-                    {marginDelta >= 0 ? '↑' : '↓'} {Math.abs(marginDelta).toFixed(1)}%
+                    {marginDelta >= 0 ? '↑' : '↓'} {Math.abs(marginDelta).toFixed(1)}pp
                   </span>
                 </div>
               </div>

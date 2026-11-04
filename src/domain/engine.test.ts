@@ -147,8 +147,8 @@ describe("computeAlerts · 退款率异常（主口径）", () => {
     expect(runRefund({ refundRate: undefined, returnRate: 30 })).toHaveLength(0);
   });
 
-  it("告警类型文案统一为「退款异常」", () => {
-    expect(ALERT_TYPE_LABELS.return).toBe("退款异常");
+  it("告警类型文案统一为「退款率异常」", () => {
+    expect(ALERT_TYPE_LABELS.return).toBe("退款率异常");
   });
 });
 

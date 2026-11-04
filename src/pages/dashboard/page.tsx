@@ -310,7 +310,7 @@ export default function Dashboard() {
     { key: "traffic", title: "流量下滑", icon: "ri-line-chart-line", tone: "danger", types: ["traffic_drop"], href: "/operations?tab=all" },
     { key: "ad", title: "广告异常", icon: "ri-megaphone-line", tone: "primary", types: ["ad"], href: "/operations?tab=ad" },
     { key: "rating", title: "评分下降", icon: "ri-star-line", tone: "warn", types: ["rating"], href: "/operations?tab=rating" },
-    { key: "return", title: "退款异常", icon: "ri-refund-2-line", tone: "secondary", types: ["return", "review"], href: "/operations?tab=return" },
+    { key: "return", title: "退款率异常", icon: "ri-refund-2-line", tone: "secondary", types: ["return", "review"], href: "/operations?tab=return" },
     { key: "listing", title: "Listing 待优化", icon: "ri-article-line", tone: "accent", types: ["listing"], href: "/operations?tab=listing" },
   ];
 

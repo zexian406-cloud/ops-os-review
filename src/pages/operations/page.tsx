@@ -7,6 +7,7 @@ import { getAllShops, db, getDiagnosisRules } from "@/domain/db";
 import { resolveComparison } from "@/domain/diagnosis-period";
 import type { DiagnosisRuleSet } from "@/domain/diagnosisRules";
 import { diagnoseProfitDecline, diagnoseSalesDecline, diagnoseRatingDecline, diagnoseAdRatioRise } from "@/domain/diagnose";
+import { computeDiagnosis } from "@/domain/diagnosis";
 import Section from "@/components/ui/Section";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
@@ -42,7 +43,6 @@ const DIAG_TYPE_BY_TAB: Partial<Record<TabKey, DiagnosisType>> = {
   ad: "adRatio",
   rating: "rating",
   review: "rating",
-  return: "rating",
 };
 
 export default function Operations() {
@@ -95,6 +95,8 @@ export default function Operations() {
       metricLabel: string;
       tone: "danger" | "warn" | "accent" | "primary";
       note?: string;
+      /** 退款率异常专用：本期 vs 上期退款率 + 退款损失归因 */
+      attr?: string;
     };
     type RowTab = Exclude<TabKey, "all" | "diag">;
     const map: Record<RowTab, OpsRow[]> = {
@@ -195,6 +197,16 @@ export default function Operations() {
       // 退款率为主口径；缺失不进入清单（数据健康会提示补数据）
       const refundMetric = snap.refundRate;
       if (refundMetric != null && refundMetric > config.returnRateThreshold) {
+        const refundCmp = resolveComparison({
+          rows: siteSnapshots.filter((r) => r.sku === sku.sku).sort((a, b) => a.date.localeCompare(b.date)),
+          basis: "import",
+        });
+        const refundDiag = computeDiagnosis({
+          type: "return",
+          sku,
+          latestSnap: refundCmp.current ?? snap,
+          previousSnap: refundCmp.previous,
+        });
         map.return.push({
           sku,
           snap,
@@ -202,6 +214,7 @@ export default function Operations() {
           metricLabel: `${refundMetric.toFixed(1)}%`,
           tone: refundMetric > 20 ? "danger" : "warn",
           note: "注意退款率增长",
+          attr: refundDiag.summary,
         });
       }
     }
@@ -211,7 +224,7 @@ export default function Operations() {
       map[key].sort((a, b) => (key === "new" ? a.metric - b.metric : b.metric - a.metric));
     }
     return map;
-  }, [skuMaster, latestSnapshot, latestInventory, config, currentSite, currentSiteId, alerts]);
+  }, [skuMaster, latestSnapshot, latestInventory, config, currentSite, currentSiteId, alerts, siteSnapshots]);
 
   const rows = (tab === "all" || tab === "diag" || tab === "ad") ? [] : rowsByTab[tab];
 
@@ -230,9 +243,36 @@ export default function Operations() {
     const skuMap = new Map(skuMaster.map((s) => [s.sku, s]));
     for (const a of alerts) {
       const sku = skuMap.get(a.sku);
-      const dt = resolveAlertDiagType(a);
-      if (!sku || !dt) continue;
+      if (!sku) continue;
       const cmp = resolveComparison({ rows: bySku.get(a.sku) ?? [], basis: "import" });
+      // 退款异常单独归因：本期 vs 上期退款率 + 退款损失，不套用评分诊断
+      if (a.type === "return") {
+        if (!cmp.current) continue;
+        const result = computeDiagnosis({
+          type: "return",
+          sku,
+          latestSnap: cmp.current,
+          previousSnap: cmp.previous,
+        });
+        const rate = result.factors.find((f) => f.key === "refundRate");
+        const fee = result.factors.find((f) => f.key === "refundFee");
+        const parts: string[] = [];
+        if (rate) {
+          const delta = typeof rate.before === "number" && typeof rate.after === "number"
+            ? `（${rate.after - rate.before >= 0 ? "+" : ""}${(rate.after - rate.before).toFixed(1)}pt）`
+            : "";
+          parts.push(`退款率 ${rate.before ?? "—"}${rate.unit ?? ""} → ${rate.after}${rate.unit ?? ""}${delta}`);
+        }
+        if (fee) {
+          const before = typeof fee.before === "number" ? `$${fee.before.toFixed(2)}` : "—";
+          const after = typeof fee.after === "number" ? `$${fee.after.toFixed(2)}` : "—";
+          parts.push(`单件退款损失 ${before} → ${after}`);
+        }
+        out[a.id] = { compare: parts.join("；") || result.summary, reason: result.summary };
+        continue;
+      }
+      const dt = resolveAlertDiagType(a);
+      if (!dt) continue;
       const diagInput = {
         sku,
         latestSnap: cmp.current,
@@ -573,6 +613,9 @@ export default function Operations() {
                   <th className="border-b border-background-200 px-3 py-2.5 text-right">
                     {activeTab.label.replace("异常", "")}
                   </th>
+                  {tab === "return" && (
+                    <th className="border-b border-background-200 px-3 py-2.5">归因（本期 vs 上期）</th>
+                  )}
                   <th className="border-b border-background-200 px-3 py-2.5">建议</th>
                   <th className="border-b border-background-200 px-3 py-2.5 text-right">操作</th>
                 </tr>
@@ -600,6 +643,11 @@ export default function Operations() {
                     <td className="border-b border-background-200/70 px-3 py-2.5 text-right">
                       <Badge tone={r.tone}>{r.metricLabel}</Badge>
                     </td>
+                    {tab === "return" && (
+                      <td className="border-b border-background-200/70 px-3 py-2.5 text-[12px] text-foreground-600">
+                        {r.attr ?? "—"}
+                      </td>
+                    )}
                     <td className="border-b border-background-200/70 px-3 py-2.5 text-[12px] text-foreground-600">
                       {r.note ?? "-"}
                     </td>

@@ -42,9 +42,40 @@ describe("computeDiagnosis · Bug1 回归：百分数不再双重缩放", () => 
 
   it("return 诊断：800% 拼接 bug 不复现", () => {
     const r = computeDiagnosis({ type: "return", sku: { sku: "X" }, latestSnap: { refundRate: 8 } });
-    expect(r.factors[0].after).toBe(8);
     expect(r.summary).not.toContain("800");
+    expect(r.factors[0].after).toBe(8);
     expect(r.summary).not.toContain("4646");
+  });
+
+  it("return 归因：退款率上升 + 单件退款损失变化，不再挂评分", () => {
+    const r = computeDiagnosis({
+      type: "return",
+      sku: { sku: "sku001", price: 35 },
+      latestSnap: { refundRate: 8 },
+      previousSnap: { refundRate: 4 },
+    });
+    expect(r.summary).toContain("退款率上升 4.0% → 8.0%");
+    expect(r.summary).toContain("$1.40 → $2.80");
+    expect(r.summary).not.toContain("评分");
+    expect(r.factors.some((f) => f.key === "refundFee")).toBe(true);
+  });
+
+  it("return 归因：±0.5pt 内为持平、下降为改善", () => {
+    const flat = computeDiagnosis({
+      type: "return",
+      sku: { sku: "X", price: 35 },
+      latestSnap: { refundRate: 8 },
+      previousSnap: { refundRate: 7.8 },
+    });
+    expect(flat.summary).toContain("退款率持平 8.0%");
+    const down = computeDiagnosis({
+      type: "return",
+      sku: { sku: "X", price: 35 },
+      latestSnap: { refundRate: 4 },
+      previousSnap: { refundRate: 8 },
+    });
+    expect(down.summary).toContain("退款率改善 8.0% → 4.0%");
+    expect(down.suggestion).toContain("改善");
   });
 });
 

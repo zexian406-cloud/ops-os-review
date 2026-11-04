@@ -18,7 +18,7 @@ export interface DiagnosisResult {
 
 interface DiagnosisInput {
   type: string;
-  sku: { sku: string; msku?: string; store?: string };
+  sku: { sku: string; msku?: string; store?: string; price?: number };
   latestSnap: {
     dailySales7d?: number;
     dailySales30d?: number;
@@ -129,13 +129,35 @@ export function computeDiagnosis(input: DiagnosisInput): DiagnosisResult {
         };
       }
       const prevRet = previousSnap?.refundRate;
-      pushFactor('refundRate', '退款率', prevRet, ret, ret > 10 ? 'up_bad' : 'neutral', '%');
-      return {
-        type,
-        summary: `SKU ${sku.sku} 退款率 ${ret.toFixed(1)}%`,
-        suggestion: ret > 10 ? '分析退款原因，优化产品描述或质量' : '退款率正常',
-        factors,
-      };
+      const price = sku.price ?? 0;
+      const feeOf = (rate?: number) => (price > 0 && rate != null ? (rate / 100) * price : undefined);
+      const curFee = feeOf(ret);
+      const prevFee = feeOf(prevRet);
+      const diff = prevRet == null ? null : ret - prevRet;
+      // 三档归因：上升 / 持平（±0.5pt 内）/ 改善
+      const tier = diff == null ? "single" : diff > 0.5 ? "up" : diff < -0.5 ? "down" : "flat";
+      pushFactor('refundRate', '退款率', prevRet, ret, ret > 10 || tier === "up" ? 'up_bad' : tier === "down" ? 'down_bad' : 'neutral', '%');
+      if (curFee != null) {
+        pushFactor('refundFee', '单件退款损失', prevFee, curFee, (prevFee ?? 0) < curFee ? 'up_bad' : 'neutral', '$');
+      }
+      const feeText = curFee != null && prevFee != null
+        ? `，单件退款损失 $${prevFee.toFixed(2)} → $${curFee.toFixed(2)}`
+        : curFee != null ? `，单件退款损失 $${curFee.toFixed(2)}` : "";
+      const summary = tier === "up"
+        ? `SKU ${sku.sku} 退款率上升 ${prevRet!.toFixed(1)}% → ${ret.toFixed(1)}%${feeText}`
+        : tier === "down"
+          ? `SKU ${sku.sku} 退款率改善 ${prevRet!.toFixed(1)}% → ${ret.toFixed(1)}%${feeText}`
+          : tier === "flat"
+            ? `SKU ${sku.sku} 退款率持平 ${ret.toFixed(1)}%${feeText}`
+            : `SKU ${sku.sku} 退款率 ${ret.toFixed(1)}%${feeText}`;
+      const suggestion = tier === "up"
+        ? ret > 10 ? '退款率上升，分析退款原因，核查产品质量与描述一致性' : '退款率上升，持续观察并排查近期变更'
+        : tier === "down"
+          ? '退款率改善，保持当前优化动作'
+          : tier === "flat"
+            ? '退款率持平，维持当前售后策略'
+            : ret > 10 ? '分析退款原因，优化产品描述或质量' : '退款率正常';
+      return { type, summary, suggestion, factors };
     }
     case 'review': {
       // returnRate 同样已是百分数（8 = 8%）
