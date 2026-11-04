@@ -307,7 +307,7 @@ export default function ImportPage() {
   const [cloud, setCloud] = useState<CloudConfig | null>(null);
   const [cloudSaving, setCloudSaving] = useState(false);
   const [cloudMsg, setCloudMsg] = useState<{ tone: "ok" | "err"; msg: string } | null>(null);
-  // 云端配置置顶独立区块：未配置时默认展开，已配置时收起成一行，避免被导入内容淹没
+  // 云端配置置顶独立区块：默认收起，点「展开配置」或顶栏「配置云端」跳转时展开
   const [cloudOpen, setCloudOpen] = useState(false);
   const [cloudFlash, setCloudFlash] = useState(false);
   const cloudRef = useRef<HTMLDivElement>(null);
@@ -347,9 +347,6 @@ export default function ImportPage() {
       if (c) {
         setCloud(c);
         setForm(c);
-      } else {
-        // 尚未配置：直接展开，引导用户填写
-        setCloudOpen(true);
       }
     });
     db.dailySnapshot.count().then((n) => setImportCounts((prev) => ({ ...prev, snapshots: n })));
